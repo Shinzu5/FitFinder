@@ -216,12 +216,15 @@ export default function LandingPage() {
             </a>
           </div>
           <div className="flex items-center gap-4">
-            <button className="hidden text-sm text-zinc-400 transition hover:text-white sm:block">
+            <Link href="/login" className="hidden text-sm text-zinc-400 transition hover:text-white sm:block">
               Log in
-            </button>
-            <button className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#e6c200]">
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
+            >
               Get Started
-            </button>
+            </Link>
           </div>
         </nav>
       </header>
@@ -246,12 +249,15 @@ export default function LandingPage() {
             your fitness business.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <button className="flex items-center gap-2 rounded-lg bg-[#FFD700] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[#e6c200]">
+            <Link
+              href="/register"
+              className="flex items-center gap-2 rounded-lg bg-[#FFD700] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
+            >
               Start Your Gym
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
-            </button>
+            </Link>
             <button className="rounded-lg border border-zinc-700 px-6 py-3 text-sm font-medium text-white transition hover:border-zinc-500 hover:bg-zinc-900">
               Find a Gym
             </button>
