@@ -8,7 +8,7 @@ import { z } from "zod";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { AuthShell } from "@/components/features/auth/auth-shell";
+import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,8 +102,6 @@ export default function RegisterPage() {
             </button>
           </div>
         </div>
-
-        {/* role selection removed for simplified signup; new users default to USER */}
 
         <motion.button whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.01 }} type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-2xl bg-[#FACC15] px-4 py-3 font-semibold text-black transition hover:bg-[#EAB308] disabled:cursor-not-allowed disabled:opacity-70">
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
