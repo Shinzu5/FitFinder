@@ -9,7 +9,7 @@ import { z } from "zod";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { AuthShell } from "@/components/features/auth/auth-shell";
+import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ export default function LoginPage() {
       title="Welcome back"
       subtitle="Sign in to manage your fitness workspace with a secure, polished experience."
       footerText="New here?"
-      footerLink="/register"
+      footerLink="/signup"
       footerLinkText="Create an account"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">

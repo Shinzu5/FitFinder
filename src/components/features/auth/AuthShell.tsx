@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { ReactNode } from "react";
@@ -17,7 +16,7 @@ interface AuthShellProps {
 
 export function AuthShell({ title, subtitle, children, footerText, footerLink, footerLinkText }: AuthShellProps) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.22),_transparent_35%),_#050505] px-4 py-10 text-white sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-black px-4 py-10 text-white sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <Link href="/" className="flex items-center gap-3 text-sm text-zinc-300 transition hover:text-white">
           <ArrowLeft className="h-4 w-4" />
