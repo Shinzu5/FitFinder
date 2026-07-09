@@ -7,7 +7,7 @@ import { z } from "zod";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { AuthShell } from "@/components/features/auth/auth-shell";
+import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
