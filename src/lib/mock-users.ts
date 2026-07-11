@@ -6,6 +6,7 @@ export interface MockUser {
   email: string;
   password: string;
   role: UserRole;
+  avatarUrl?: string;
 }
 
 export const mockUsers: MockUser[] = [
