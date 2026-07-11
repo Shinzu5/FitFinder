@@ -1,4 +1,1 @@
-﻿import LandingPage from "@/components/features/landing/LandingPage";
-
-export default LandingPage;
-
+export { default } from "@/components/features/landing/LandingPage";
