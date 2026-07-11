@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Clock,
-  Globe,
-  MapPin,
-  Plus,
-  Users,
-} from "lucide-react";
+import { useMemo } from "react";
+import { Clock, Globe, MapPin, Plus, Users } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import { mockGyms } from "@/lib/mock-gyms";
+import { registeredGymToListItem } from "./_lib/gym-profile";
 
 function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || fullName;
@@ -18,8 +15,17 @@ function getFirstName(fullName: string) {
 
 export default function UserDashboardPage() {
   const { user } = useAuthStore();
-  const { joinedGymId, joinGym } = useMembershipStore();
+  const registeredGym = useCreateGymStore((state) => state.registeredGym);
+  const { joinedGymId } = useMembershipStore();
   const firstName = getFirstName(user?.fullName ?? "Member");
+
+  const availableGyms = useMemo(() => {
+    const gyms = [...mockGyms];
+    if (registeredGym && !gyms.some((gym) => gym.id === registeredGym.id)) {
+      gyms.unshift(registeredGymToListItem(registeredGym));
+    }
+    return gyms;
+  }, [registeredGym]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -33,7 +39,7 @@ export default function UserDashboardPage() {
           </p>
         </div>
         <Link
-          href="/signup?role=OWNER"
+          href="/dashboard/user/create-gym"
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FFD700] px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
         >
           <Plus className="h-4 w-4" />
@@ -44,7 +50,7 @@ export default function UserDashboardPage() {
       <section>
         <h2 className="mb-4 text-lg font-semibold text-white">Available Gyms</h2>
         <div className="grid gap-6 md:grid-cols-2">
-          {mockGyms.map((gym) => {
+          {availableGyms.map((gym) => {
             const isJoined = joinedGymId === gym.id;
 
             return (
@@ -89,7 +95,7 @@ export default function UserDashboardPage() {
 
                   <div className="flex items-center justify-between gap-3 pt-1">
                     <p className="text-lg font-bold text-[#FFD700]">
-                      {gym.pricePerMonth}
+                      ₱{gym.pricePerMonth.toLocaleString()}
                       <span className="text-sm font-medium text-zinc-400">/mo</span>
                     </p>
                     <div className="flex items-center gap-2">
@@ -102,18 +108,16 @@ export default function UserDashboardPage() {
                         <Globe className="h-3.5 w-3.5" />
                         Visit Website
                       </a>
-                      <button
-                        type="button"
-                        onClick={() => joinGym(gym.id)}
-                        disabled={isJoined}
+                      <Link
+                        href={`/dashboard/user/gym/${gym.id}`}
                         className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${
                           isJoined
                             ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                            : "border border-[#FFD700] bg-transparent text-[#FFD700] hover:bg-[#FFD700] hover:text-black"
+                            : "border border-[#FFD700] text-[#FFD700] hover:bg-[#FFD700] hover:text-black"
                         }`}
                       >
                         {isJoined ? "Joined" : "Join Gym"}
-                      </button>
+                      </Link>
                     </div>
                   </div>
                 </div>

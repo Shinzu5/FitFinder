@@ -91,3 +91,18 @@ export function mockRegister(payload: RegisterPayload): AuthSession | null {
 export function mockForgotPassword(email: string) {
   return mockUsers.some((user) => user.email.toLowerCase() === email.toLowerCase());
 }
+
+export function mockChangePassword(
+  email: string,
+  currentPassword: string,
+  newPassword: string,
+): boolean {
+  const matchingUser = mockUsers.find(
+    (user) => user.email.toLowerCase() === email.toLowerCase(),
+  );
+  if (!matchingUser || matchingUser.password !== currentPassword) {
+    return false;
+  }
+  matchingUser.password = newPassword;
+  return true;
+}

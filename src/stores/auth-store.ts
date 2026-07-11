@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  mockChangePassword,
   mockForgotPassword,
   mockLogin,
   mockRegister,
@@ -25,12 +26,16 @@ interface AuthState {
   register: (payload: RegisterPayload) => Promise<boolean>;
   forgotPassword: (email: string) => Promise<boolean>;
   logout: () => void;
+  promoteToOwner: () => void;
+  demoteToUser: () => void;
   setHasHydrated: (value: boolean) => void;
+  updateProfileAvatar: (avatarUrl: string) => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       role: null,
       accessToken: null,
@@ -98,6 +103,53 @@ export const useAuthStore = create<AuthState>()(
           error: null,
           success:
             "If an account exists for this email, a password reset link has been sent.",
+        });
+        return true;
+      },
+
+      promoteToOwner: () => {
+        const user = get().user;
+        if (!user) return;
+        set({
+          user: { ...user, role: "OWNER" },
+          role: "OWNER",
+        });
+      },
+
+      demoteToUser: () => {
+        const user = get().user;
+        if (!user) return;
+        set({
+          user: { ...user, role: "USER" },
+          role: "USER",
+        });
+      },
+
+      updateProfileAvatar: (avatarUrl) => {
+        const user = get().user;
+        if (!user) return;
+        set({ user: { ...user, avatarUrl } });
+      },
+
+      changePassword: async (currentPassword, newPassword) => {
+        const user = get().user;
+        if (!user) return false;
+
+        if (newPassword.length < 8) {
+          set({ error: "New password must be at least 8 characters.", success: null });
+          return false;
+        }
+
+        const ok = mockChangePassword(user.email, currentPassword, newPassword);
+        if (!ok) {
+          set({ error: "Current password is incorrect.", success: null });
+          return false;
+        }
+
+        set({
+          user: { ...user, password: newPassword },
+          error: null,
+          success: "Password updated successfully.",
         });
         return true;
       },
