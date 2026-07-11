@@ -6,6 +6,7 @@ export interface MockUser {
   email: string;
   password: string;
   role: UserRole;
+  avatarUrl?: string;
 }
 
 export const mockUsers: MockUser[] = [
@@ -32,7 +33,7 @@ export const mockUsers: MockUser[] = [
   },
   {
     id: "user-1",
-    fullName: "Member User",
+    fullName: "Alex Rivera",
     email: "user@fitfinder.com",
     password: "Password123!",
     role: "USER",
