@@ -6,6 +6,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 
+import { UserDashboardShell } from "@/components/features/dashboard/UserDashboardShell";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -17,7 +19,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
 
-    if (role && pathname !== `/dashboard/${role.toLowerCase()}`) {
+    if (role && !pathname.startsWith(`/dashboard/${role.toLowerCase()}`)) {
       router.replace(`/dashboard/${role.toLowerCase()}`);
     }
   }, [isAuthenticated, pathname, role, router]);
@@ -36,6 +38,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated || !user || !role) {
     return null;
+  }
+
+  if (role === "USER" && pathname.startsWith("/dashboard/user")) {
+    return <UserDashboardShell user={user}>{children}</UserDashboardShell>;
   }
 
   return (

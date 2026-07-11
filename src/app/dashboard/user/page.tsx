@@ -1,22 +1,66 @@
 "use client";
 
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { Plus } from "lucide-react";
+
+import { EmptyGymState } from "@/components/features/dashboard/EmptyGymState";
+import { GymCard } from "@/components/features/dashboard/GymCard";
 import { useAuthStore } from "@/stores/auth-store";
+import { useDashboardStore } from "@/stores/dashboard-store";
 
 export default function UserDashboardPage() {
-  const { user, role } = useAuthStore();
+  const { user } = useAuthStore();
+  const { gyms, refreshGyms } = useDashboardStore();
+
+  if (!user) {
+    return null;
+  }
+
+  const firstName = user.fullName.split(" ")[0];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-      <section className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-        <p className="text-sm uppercase tracking-[0.3em] text-[#FACC15]">Member workspace</p>
-        <h2 className="mt-3 text-2xl font-semibold">Your fitness activities</h2>
-        <p className="mt-3 text-sm text-zinc-400">Manage member plans, discover new classes, and stay on top of your goals from a single elegant dashboard.</p>
-      </section>
-      <section className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-        <p className="text-sm font-medium text-white">Signed in as</p>
-        <p className="mt-2 text-lg font-semibold">{user?.fullName}</p>
-        <p className="text-sm text-zinc-400">{user?.email}</p>
-        <div className="mt-4 inline-flex rounded-full border border-[#FACC15]/20 bg-[#FACC15]/10 px-3 py-1 text-sm text-[#FACC15]">{role}</div>
+    <div className="space-y-8">
+      {/* Welcome Header Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            Welcome back, {firstName}
+          </h1>
+          <p className="mt-1 text-zinc-400 text-sm">
+            Browse gyms below, or create your own.
+          </p>
+        </div>
+
+        <Link
+          href="/dashboard/user/create-gym"
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#FACC15] px-4 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+        >
+          <Plus className="h-4.5 w-4.5 stroke-[2.5px]" />
+          Create a Gym
+        </Link>
+      </div>
+
+      {/* Available Gyms Section */}
+      <section className="space-y-5">
+        <h2 className="text-lg font-bold text-white tracking-wide">
+          Available Gyms
+        </h2>
+
+        {gyms.length === 0 ? (
+          <EmptyGymState onRefresh={refreshGyms} />
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35 }}
+            className="grid gap-6 md:grid-cols-2"
+          >
+            {gyms.map((gym) => (
+              <GymCard key={gym.id} gym={gym} />
+            ))}
+          </motion.div>
+        )}
       </section>
     </div>
   );

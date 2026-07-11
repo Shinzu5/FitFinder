@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { getDashboardPathForRole } from "@/stores/auth-store";
 
 const registerSchema = z.object({
-  fullName: z.string().trim().min(2, "Full name is required"),
+  firstName: z.string().trim().min(1, "First name is required"),
+  lastName: z.string().trim().min(1, "Last name is required"),
   email: z.string().trim().min(1, "Email is required").email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string().min(1, "Please confirm your password"),
@@ -32,9 +33,10 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm<RegisterFormValues>({
+
+  const { register, handleSubmit, formState: { errors } } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
   });
 
   useEffect(() => {
@@ -46,7 +48,7 @@ export default function RegisterPage() {
   async function onSubmit(values: RegisterFormValues) {
     setFormError(null);
     const ok = await registerUser({
-      fullName: values.fullName,
+      fullName: `${values.firstName} ${values.lastName}`.trim(),
       email: values.email,
       password: values.password,
       confirmPassword: values.confirmPassword,
@@ -59,53 +61,103 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      title="Create your account"
-      subtitle="Join FitFinder as a member or a gym owner and manage your experience from one modern dashboard."
+      title="Create an account"
+      subtitle="Join the modern fitness platform"
       footerText="Already have an account?"
       footerLink="/login"
       footerLinkText="Sign in"
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {(error || formError) ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
 
-        <div className="space-y-2">
-          <Label htmlFor="fullName">Full Name</Label>
-          <Input id="fullName" placeholder="Jordan Blake" {...register("fullName")} />
-          {errors.fullName ? <p className="text-sm text-red-300">{errors.fullName.message}</p> : null}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="registerEmail">Email</Label>
-          <Input id="registerEmail" type="email" placeholder="you@fitfinder.com" {...register("email")} />
-          {errors.email ? <p className="text-sm text-red-300">{errors.email.message}</p> : null}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="registerPassword">Password</Label>
-          <div className="relative">
-            <Input id="registerPassword" type={showPassword ? "text" : "password"} placeholder="Create a password" {...register("password")} />
-            {errors.password ? <p className="text-sm text-red-300">{errors.password.message}</p> : null}
-            <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+        {/* First & Last Name row */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="firstName" className="text-sm font-medium text-zinc-300">First name</Label>
+            <Input 
+              id="firstName" 
+              placeholder="John" 
+              className="h-11 px-4 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+              {...register("firstName")} 
+            />
+            {errors.firstName ? <p className="text-xs text-red-400 mt-1">{errors.firstName.message}</p> : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lastName" className="text-sm font-medium text-zinc-300">Last name</Label>
+            <Input 
+              id="lastName" 
+              placeholder="Doe" 
+              className="h-11 px-4 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+              {...register("lastName")} 
+            />
+            {errors.lastName ? <p className="text-xs text-red-400 mt-1">{errors.lastName.message}</p> : null}
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
-          <div className="relative">
-            <Input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="Re-enter your password" {...register("confirmPassword")} />
-            {errors.confirmPassword ? <p className="text-sm text-red-300">{errors.confirmPassword.message}</p> : null}
-            <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <Label htmlFor="registerEmail" className="text-sm font-medium text-zinc-300">Email address</Label>
+          <Input 
+            id="registerEmail" 
+            type="email" 
+            placeholder="name@example.com" 
+            className="h-11 px-4 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+            {...register("email")} 
+          />
+          {errors.email ? <p className="text-xs text-red-400 mt-1">{errors.email.message}</p> : null}
         </div>
 
-        <motion.button whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.01 }} type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-2xl bg-[#FACC15] px-4 py-3 font-semibold text-black transition hover:bg-[#EAB308] disabled:cursor-not-allowed disabled:opacity-70">
+        <div className="space-y-2">
+          <Label htmlFor="registerPassword" className="text-sm font-medium text-zinc-300">Password</Label>
+          <div className="relative">
+            <Input 
+              id="registerPassword" 
+              type={showPassword ? "text" : "password"} 
+              placeholder="••••••••" 
+              className="h-11 pl-4 pr-10 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+              {...register("password")} 
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowPassword((prev) => !prev)} 
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+            >
+              {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+            </button>
+          </div>
+          {errors.password ? <p className="text-xs text-red-400 mt-1">{errors.password.message}</p> : null}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="confirmPassword" className="text-sm font-medium text-zinc-300">Confirm Password</Label>
+          <div className="relative">
+            <Input 
+              id="confirmPassword" 
+              type={showConfirmPassword ? "text" : "password"} 
+              placeholder="••••••••" 
+              className="h-11 pl-4 pr-10 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+              {...register("confirmPassword")} 
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowConfirmPassword((prev) => !prev)} 
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+            >
+              {showConfirmPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+            </button>
+          </div>
+          {errors.confirmPassword ? <p className="text-xs text-red-400 mt-1">{errors.confirmPassword.message}</p> : null}
+        </div>
+
+        <motion.button 
+          whileTap={{ scale: 0.98 }} 
+          whileHover={{ scale: 1.01 }} 
+          type="submit" 
+          disabled={loading} 
+          className="flex w-full items-center justify-center rounded-xl bg-[#FACC15] px-4 py-3.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:cursor-not-allowed disabled:opacity-70 mt-6 cursor-pointer tracking-wider"
+        >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {loading ? "Creating account..." : "Create account"}
+          {loading ? "Creating Account..." : "Create Account"}
         </motion.button>
       </form>
     </AuthShell>
