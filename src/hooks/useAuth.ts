@@ -1,12 +1,16 @@
+"use client";
+
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 
 export function useAuth() {
-  const { hydrate, ...rest } = useAuthStore();
+  const store = useAuthStore();
 
   useEffect(() => {
-    hydrate();
-  }, [hydrate]);
+    if (useAuthStore.persist.hasHydrated()) {
+      useAuthStore.getState().setHasHydrated(true);
+    }
+  }, []);
 
-  return rest;
+  return store;
 }

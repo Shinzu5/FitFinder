@@ -24,7 +24,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loading, error, success, isAuthenticated, role } = useAuthStore();
+  const { login, loading, error, success, isAuthenticated, role, hasHydrated } = useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register,
@@ -39,10 +39,17 @@ export default function LoginPage() {
   const rememberMe = watch("rememberMe");
 
   useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      useAuthStore.getState().setHasHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
     if (isAuthenticated && role) {
       router.replace(getDashboardPathForRole(role));
     }
-  }, [isAuthenticated, role, router]);
+  }, [hasHydrated, isAuthenticated, role, router]);
 
   async function onSubmit(values: LoginFormValues) {
     setFormError(null);
@@ -51,12 +58,11 @@ export default function LoginPage() {
       password: values.password,
       rememberMe: values.rememberMe ?? false,
     });
-    if (ok) {
-      const currentRole = useAuthStore.getState().role;
-      if (currentRole) {
-        router.replace(getDashboardPathForRole(currentRole));
-      }
-    }
+
+    if (!ok) return;
+
+    const currentRole = useAuthStore.getState().role;
+    router.push(getDashboardPathForRole(currentRole));
   }
 
   return (

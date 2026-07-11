@@ -1,31 +1,45 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut, ShieldCheck, UserCircle2 } from "lucide-react";
-import { useAuthStore } from "@/stores/auth-store";
-import { useEffect } from "react";
 import { motion } from "framer-motion";
+import { useAuthStore } from "@/stores/auth-store";
+import { UserDashboardShell } from "@/components/features/dashboard/UserDashboardShell";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, role, logout, isAuthenticated, loading } = useAuthStore();
+  const { user, role, logout, isAuthenticated, hasHydrated } = useAuthStore();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (useAuthStore.persist.hasHydrated()) {
+      useAuthStore.getState().setHasHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    if (!isAuthenticated || !role) {
       router.replace("/login");
       return;
     }
 
-    if (role && pathname !== `/dashboard/${role.toLowerCase()}`) {
-      router.replace(`/dashboard/${role.toLowerCase()}`);
+    const rolePath = `/dashboard/${role.toLowerCase()}`;
+    if (pathname !== rolePath && !pathname.startsWith(`${rolePath}/`)) {
+      router.replace(rolePath);
+      return;
     }
-  }, [isAuthenticated, pathname, role, router]);
 
-  if (loading && !user) {
+    setReady(true);
+  }, [hasHydrated, isAuthenticated, pathname, role, router]);
+
+  if (!hasHydrated || !ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white">
-        <div className="w-full max-w-sm space-y-3 rounded-[1.75rem] border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
+      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+        <div className="w-full max-w-sm space-y-3 rounded-2xl border border-white/10 bg-white/5 p-8">
           <div className="h-3 w-24 animate-pulse rounded-full bg-white/10" />
           <div className="h-10 animate-pulse rounded-2xl bg-white/10" />
           <div className="h-10 animate-pulse rounded-2xl bg-white/10" />
@@ -36,6 +50,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated || !user || !role) {
     return null;
+  }
+
+  if (role === "USER") {
+    return <UserDashboardShell>{children}</UserDashboardShell>;
   }
 
   return (
@@ -63,8 +81,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <p className="text-xs text-zinc-400">{user.email}</p>
               </div>
             </div>
-            <button onClick={logout} className="rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/20">
-              <span className="mr-2 inline-flex items-center"><LogOut className="mr-1 h-4 w-4" /></span>
+            <button
+              onClick={() => {
+                logout();
+                router.replace("/login");
+              }}
+              className="rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/20"
+            >
+              <span className="mr-2 inline-flex items-center">
+                <LogOut className="mr-1 h-4 w-4" />
+              </span>
               Logout
             </button>
           </div>
@@ -72,12 +98,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
+        >
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-[#FACC15]">Role-based dashboard</p>
-            <h1 className="mt-2 text-2xl font-semibold text-white">Welcome back, {user.fullName}</h1>
+            <h1 className="mt-2 text-2xl font-semibold text-white">
+              Welcome back, {user.fullName}
+            </h1>
           </div>
-          <div className="rounded-full border border-[#FACC15]/20 bg-[#FACC15]/10 px-4 py-2 text-sm font-medium text-[#FACC15]">{role}</div>
+          <div className="rounded-full border border-[#FACC15]/20 bg-[#FACC15]/10 px-4 py-2 text-sm font-medium text-[#FACC15]">
+            {role}
+          </div>
         </motion.div>
         {children}
       </main>
