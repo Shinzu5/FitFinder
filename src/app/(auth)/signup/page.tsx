@@ -1,41 +1,69 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { motion } from "framer-motion";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { useAuthStore } from "@/stores/auth-store";
+import { Loader2 } from "lucide-react";
+import { useAuthStore, getDashboardPathForRole } from "@/stores/auth-store";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getDashboardPathForRole } from "@/stores/auth-store";
 
-const registerSchema = z.object({
-  fullName: z.string().trim().min(2, "Full name is required"),
-  email: z.string().trim().min(1, "Email is required").email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string().min(1, "Please confirm your password"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
+const registerSchema = z
+  .object({
+    firstName: z.string().trim().min(1, "First name is required"),
+    lastName: z.string().trim().min(1, "Last name is required"),
+    email: z
+      .string()
+      .trim()
+      .min(1, "Email is required")
+      .email("Please enter a valid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+    role: z.enum(["USER", "OWNER"]),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
-export default function RegisterPage() {
+function parseSignupRole(value: string | null): "USER" | "OWNER" {
+  return value === "OWNER" ? "OWNER" : "USER";
+}
+
+function SignupForm() {
   const router = useRouter();
-  const { register: registerUser, loading, error, success, isAuthenticated, role: authRole } = useAuthStore();
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const searchParams = useSearchParams();
+  const { register: registerUser, loading, error, success, isAuthenticated, role: authRole } =
+    useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm<RegisterFormValues>({
+  const initialRole = parseSignupRole(searchParams.get("role"));
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    setValue,
+  } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      role: initialRole,
+    },
   });
+
+  useEffect(() => {
+    setValue("role", initialRole);
+  }, [initialRole, setValue]);
 
   useEffect(() => {
     if (isAuthenticated && authRole) {
@@ -46,11 +74,11 @@ export default function RegisterPage() {
   async function onSubmit(values: RegisterFormValues) {
     setFormError(null);
     const ok = await registerUser({
-      fullName: values.fullName,
+      fullName: `${values.firstName} ${values.lastName}`.trim(),
       email: values.email,
       password: values.password,
       confirmPassword: values.confirmPassword,
-      role: "USER",
+      role: values.role,
     });
     if (ok) {
       router.replace("/login");
@@ -59,55 +87,108 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      title="Create your account"
-      subtitle="Join FitFinder as a member or a gym owner and manage your experience from one modern dashboard."
+      title="Create an account"
+      subtitle="Join the modern fitness platform"
       footerText="Already have an account?"
       footerLink="/login"
       footerLinkText="Sign in"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {(error || formError) ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
+        {error || formError ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
 
-        <div className="space-y-2">
-          <Label htmlFor="fullName">Full Name</Label>
-          <Input id="fullName" placeholder="Jordan Blake" {...register("fullName")} />
-          {errors.fullName ? <p className="text-sm text-red-300">{errors.fullName.message}</p> : null}
+        <input type="hidden" {...register("role")} />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="firstName">First name</Label>
+            <Input
+              id="firstName"
+              placeholder="John"
+              autoComplete="given-name"
+              {...register("firstName")}
+            />
+            {errors.firstName ? (
+              <p className="text-sm text-red-300">{errors.firstName.message}</p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lastName">Last name</Label>
+            <Input
+              id="lastName"
+              placeholder="Doe"
+              autoComplete="family-name"
+              {...register("lastName")}
+            />
+            {errors.lastName ? (
+              <p className="text-sm text-red-300">{errors.lastName.message}</p>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="registerEmail">Email</Label>
-          <Input id="registerEmail" type="email" placeholder="you@fitfinder.com" {...register("email")} />
+          <Label htmlFor="registerEmail">Email address</Label>
+          <Input
+            id="registerEmail"
+            type="email"
+            placeholder="name@example.com"
+            autoComplete="email"
+            {...register("email")}
+          />
           {errors.email ? <p className="text-sm text-red-300">{errors.email.message}</p> : null}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="registerPassword">Password</Label>
-          <div className="relative">
-            <Input id="registerPassword" type={showPassword ? "text" : "password"} placeholder="Create a password" {...register("password")} />
-            {errors.password ? <p className="text-sm text-red-300">{errors.password.message}</p> : null}
-            <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <Input
+            id="registerPassword"
+            type="password"
+            placeholder="••••••••"
+            autoComplete="new-password"
+            {...register("password")}
+          />
+          {errors.password ? (
+            <p className="text-sm text-red-300">{errors.password.message}</p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>
-          <div className="relative">
-            <Input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="Re-enter your password" {...register("confirmPassword")} />
-            {errors.confirmPassword ? <p className="text-sm text-red-300">{errors.confirmPassword.message}</p> : null}
-            <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <Input
+            id="confirmPassword"
+            type="password"
+            placeholder="••••••••"
+            autoComplete="new-password"
+            {...register("confirmPassword")}
+          />
+          {errors.confirmPassword ? (
+            <p className="text-sm text-red-300">{errors.confirmPassword.message}</p>
+          ) : null}
         </div>
 
-        <motion.button whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.01 }} type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-2xl bg-[#FACC15] px-4 py-3 font-semibold text-black transition hover:bg-[#EAB308] disabled:cursor-not-allowed disabled:opacity-70">
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-2 flex w-full items-center justify-center rounded-lg bg-[#FFD700] px-4 py-3 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:cursor-not-allowed disabled:opacity-70"
+        >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {loading ? "Creating account..." : "Create account"}
-        </motion.button>
+          {loading ? "Creating account..." : "Create Account"}
+        </button>
       </form>
     </AuthShell>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-black text-zinc-400">
+          Loading...
+        </div>
+      }
+    >
+      <SignupForm />
+    </Suspense>
   );
 }

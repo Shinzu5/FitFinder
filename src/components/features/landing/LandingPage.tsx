@@ -224,7 +224,7 @@ export default function LandingPage() {
               href="/signup"
               className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
             >
-              Get Started
+              Sign up
             </Link>
           </div>
         </nav>
@@ -250,7 +250,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              href="/signup"
+              href="/signup?role=OWNER"
               className="flex items-center gap-2 rounded-lg bg-[#FFD700] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
             >
               Start Your Gym
@@ -259,7 +259,7 @@ export default function LandingPage() {
               </svg>
             </Link>
             <Link
-              href="/signup"
+              href="/signup?role=USER"
               className="rounded-lg border border-zinc-700 px-6 py-3 text-sm font-medium text-white transition hover:border-zinc-500 hover:bg-zinc-900"
             >
               Find a Gym
@@ -470,9 +470,10 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
-              <h4 className="mb-4 text-sm font-semibold">Contact Support</h4>
+              <h4 className="mb-4 text-sm font-semibold">Account</h4>
               <ul className="space-y-2 text-sm text-zinc-500">
-                <li><a href="#" className="transition hover:text-white">Help Center</a></li>
+                <li><Link href="/login" className="transition hover:text-white">Log in</Link></li>
+                <li><Link href="/signup" className="transition hover:text-white">Sign up</Link></li>
                 <li><a href="mailto:support@fitfinder.com" className="transition hover:text-white">Contact</a></li>
               </ul>
             </div>
