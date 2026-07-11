@@ -29,10 +29,12 @@ export default function LoginPage() {
   const { login, loading, error, success, isAuthenticated, role } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "", rememberMe: false },
   });
+  
   const rememberMe = watch("rememberMe");
 
   useEffect(() => {
@@ -52,45 +54,71 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to manage your fitness workspace with a secure, polished experience."
-      footerText="New here?"
+      subtitle="Sign in to your account to continue"
+      footerText="Don't have an account?"
       footerLink="/signup"
-      footerLinkText="Create an account"
+      footerLinkText="Sign up"
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {error || formError ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="you@fitfinder.com" {...register("email")} />
-          {errors.email ? <p className="text-sm text-red-300">{errors.email.message}</p> : null}
+          <Label htmlFor="email" className="text-sm font-medium text-zinc-300">Email address</Label>
+          <Input 
+            id="email" 
+            type="email" 
+            placeholder="name@example.com" 
+            className="h-11 px-4 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+            {...register("email")} 
+          />
+          {errors.email ? <p className="text-xs text-red-400 mt-1">{errors.email.message}</p> : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password" className="text-sm font-medium text-zinc-300">Password</Label>
           <div className="relative">
-            <Input id="password" type={showPassword ? "text" : "password"} placeholder="Enter password" {...register("password")} />
-            {errors.password ? <p className="text-sm text-red-300">{errors.password.message}</p> : null}
-            <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            <Input 
+              id="password" 
+              type={showPassword ? "text" : "password"} 
+              placeholder="••••••••" 
+              className="h-11 pl-4 pr-10 border-zinc-800/80 bg-[#121214] text-white placeholder-zinc-600 focus:border-[#FACC15] focus:ring-[#FACC15]/10 rounded-xl transition-all duration-200"
+              {...register("password")} 
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowPassword((prev) => !prev)} 
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+            >
+              {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
             </button>
           </div>
+          {errors.password ? <p className="text-xs text-red-400 mt-1">{errors.password.message}</p> : null}
         </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <label className="flex items-center gap-2 text-zinc-400">
-            <Checkbox checked={rememberMe ?? false} onChange={() => setValue("rememberMe", !(rememberMe ?? false), { shouldDirty: true })} />
+        <div className="flex items-center justify-between text-xs font-semibold">
+          <label className="flex items-center gap-2 text-zinc-400 cursor-pointer select-none">
+            <Checkbox 
+              checked={rememberMe ?? false} 
+              onChange={(e) => setValue("rememberMe", e.target.checked, { shouldDirty: true })}
+              className="border-zinc-800 data-[state=checked]:bg-[#FACC15] data-[state=checked]:text-black rounded"
+            />
             <span>Remember me</span>
           </label>
-          <Link href="/forgot-password" className="text-[#FACC15] hover:text-[#fde68a]">
+          <Link href="/forgot-password" className="text-[#FACC15] hover:text-[#e6c200] transition">
             Forgot password?
           </Link>
         </div>
 
-        <motion.button whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.01 }} type="submit" disabled={loading} className="flex w-full items-center justify-center rounded-2xl bg-[#FACC15] px-4 py-3 font-semibold text-black transition hover:bg-[#EAB308] disabled:cursor-not-allowed disabled:opacity-70">
+        <motion.button 
+          whileTap={{ scale: 0.98 }} 
+          whileHover={{ scale: 1.01 }} 
+          type="submit" 
+          disabled={loading} 
+          className="flex w-full items-center justify-center rounded-xl bg-[#FACC15] px-4 py-3.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:cursor-not-allowed disabled:opacity-70 mt-6 cursor-pointer tracking-wider"
+        >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {loading ? "Signing in..." : "Sign In"}
+          {loading ? "LOGGING IN..." : "LOGIN"}
         </motion.button>
       </form>
     </AuthShell>
