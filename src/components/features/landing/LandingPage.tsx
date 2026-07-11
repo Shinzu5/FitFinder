@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
-const HERO_WORDS = ["Gym Owners", "Coaches", "Members", "Fitness"];
+const HERO_WORDS = ["Gyms", "Gym Owners", "Coaches", "Members"];
 
 const STATS = [
   { value: "1,200+", label: "Active Gyms" },
@@ -35,9 +34,9 @@ const FEATURES = [
     ),
   },
   {
-    title: "Built-in Online Payments",
+    title: "Walk-in & Online Payments",
     description:
-      "Process memberships, class bookings, and store sales securely.",
+      "Process walk-in, membership, class bookings, and store sales securely.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -65,9 +64,9 @@ const FEATURES = [
     ),
   },
   {
-    title: "Combo Plan",
+    title: "Exercise Plan",
     description:
-      "Offer bundled services with custom pricing and promotional discounts.",
+      "Build and deliver personalized workout programs for every member.",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -75,6 +74,96 @@ const FEATURES = [
     ),
   },
 ];
+
+const ROLES = [
+  {
+    title: "Gym Owner",
+    description: "Manage memberships, staff, revenue and gym settings",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Coach",
+    description: "Schedule sessions, track clients, and grow your coaching business",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Gym Goer",
+    description: "Browse gyms, join plans, book coaches and track progress",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Admin",
+    description: "Oversee the entire ecosystem with powerful analytics",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+      </svg>
+    ),
+  },
+];
+
+const PRICING = [
+  {
+    name: "Starter",
+    price: "Free",
+    period: "",
+    popular: false,
+    features: [
+      "Up to 50 members",
+      "Basic gym management",
+      "Member check-ins",
+      "Email support",
+    ],
+  },
+  {
+    name: "Pro",
+    price: "$49",
+    period: "/mo",
+    popular: true,
+    features: [
+      "Unlimited members",
+      "AI fitness assistant",
+      "Online payments",
+      "Coach booking",
+      "Priority support",
+    ],
+  },
+  {
+    name: "Elite",
+    price: "$149",
+    period: "/mo",
+    popular: false,
+    features: [
+      "Everything in Pro",
+      "Multi-location support",
+      "Advanced analytics",
+      "Custom integrations",
+      "Dedicated account manager",
+    ],
+  },
+];
+
+function LogoIcon() {
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#FFD700]">
+      <svg className="h-5 w-5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+    </div>
+  );
+}
 
 function CheckIcon({ highlight = false }: { highlight?: boolean }) {
   return (
@@ -108,16 +197,9 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-black text-white">
       <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-black/80 backdrop-blur-md">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/LOGO.png"
-              alt="Fit Finder logo"
-              width={36}
-              height={36}
-              className="h-9 w-9 rounded-md object-cover"
-              priority
-            />
+        <nav className="relative mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-6 py-4">
+          <Link href="/" className="flex items-center gap-2.5 justify-self-start">
+            <LogoIcon />
             <span className="text-lg font-bold tracking-wider">
               <span className="text-white">FIT</span>
               <span className="text-[#FFD700]"> FINDER</span>
@@ -134,7 +216,7 @@ export default function LandingPage() {
               Pricing
             </a>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 justify-self-end">
             <Link href="/login" className="hidden text-sm text-zinc-400 transition hover:text-white sm:block">
               Log in
             </Link>
@@ -150,78 +232,264 @@ export default function LandingPage() {
 
       <section className="relative px-6 pb-16 pt-20">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[#FFD700]/5 blur-3xl" />
+          <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[#FFD700]/10 blur-3xl" />
         </div>
         <div className="relative mx-auto max-w-4xl text-center">
           <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
             The Operating System for
             <span
-              className={`mt-2 block text-[#FFD700] transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`}
+              className={`mx-auto mt-4 inline-block bg-[#FFD700] px-6 py-2 text-black transition-opacity duration-300 ${fade ? "opacity-100" : "opacity-0"}`}
             >
               {HERO_WORDS[wordIndex]}
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-zinc-400 sm:text-lg">
-            A complete SaaS platform for gym owners, coaches, and members — manage
-            memberships, payouts with AI-powered insights, and leverage AI to grow
-            your fitness business.
+            A complete multi-tenant SaaS platform for gym owners, coaches, and members.
+            Manage memberships, process walk-in payments, and leverage AI to grow your
+            fitness business.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
               href="/signup"
               className="flex items-center gap-2 rounded-lg bg-[#FFD700] px-6 py-3 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
             >
-                Start Your Gym
+              Start Your Gym
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </Link>
             <Link
-              href="/login"
-              className="text-sm font-semibold text-zinc-200 transition hover:text-white"
+              href="/signup"
+              className="rounded-lg border border-zinc-700 px-6 py-3 text-sm font-medium text-white transition hover:border-zinc-500 hover:bg-zinc-900"
             >
-              Explore demo login
+              Find a Gym
             </Link>
           </div>
         </div>
+
+        <div className="mx-auto mt-20 grid max-w-4xl grid-cols-2 gap-8 md:grid-cols-4">
+          {STATS.map((stat) => (
+            <div key={stat.label} className="text-center">
+              <p className="text-2xl font-bold text-white sm:text-3xl">{stat.value}</p>
+              <p className="mt-1 text-sm text-zinc-500">{stat.label}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
-      <section id="features" className="mx-auto max-w-6xl px-6 pb-20 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-[0.9fr_0.6fr]">
-          <div className="space-y-8">
-            <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-              <p className="text-sm uppercase tracking-[0.3em] text-[#FFD700]">Featured benefits</p>
-              <h2 className="mt-4 text-3xl font-semibold text-white">Everything your fitness team needs under one roof.</h2>
-              <p className="mt-3 text-sm leading-6 text-zinc-400">
-                FitFinder combines membership management, billing, coaching, and front desk operations into a beautiful, easy-to-use platform.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {FEATURES.map((feature) => (
-                <div key={feature.title} className="rounded-[1.5rem] border border-white/10 bg-white/5 p-6 transition hover:-translate-y-1 hover:bg-white/10">
-                  <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-3xl bg-[#FACC15]/10 text-[#FACC15]">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-xl font-semibold text-white">{feature.title}</h3>
-                  <p className="mt-2 text-sm text-zinc-400">{feature.description}</p>
-                </div>
-              ))}
-            </div>
+      <section id="features" className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <h2 className="text-3xl font-bold sm:text-4xl">Everything you need to scale</h2>
+            <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+              Powerful tools designed to help gym owners, coaches, and members thrive
+              in the modern fitness industry.
+            </p>
           </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-            <h3 className="text-xl font-semibold text-white">Why FitFinder?</h3>
-            <div className="mt-6 space-y-4">
-              {STATS.map((stat) => (
-                <div key={stat.label} className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                  <p className="text-3xl font-semibold text-white">{stat.value}</p>
-                  <p className="mt-1 text-sm text-zinc-400">{stat.label}</p>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map((feature) => (
+              <div
+                key={feature.title}
+                className="group rounded-xl border border-zinc-800/80 bg-zinc-950 p-6 transition hover:border-[#FFD700]/30 hover:bg-zinc-900/50"
+              >
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-[#FFD700]/10 text-[#FFD700]">
+                  {feature.icon}
                 </div>
-              ))}
+                <h3 className="mb-2 text-lg font-semibold">{feature.title}</h3>
+                <p className="text-sm leading-relaxed text-zinc-400">{feature.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="solutions" className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="relative overflow-hidden rounded-2xl border border-[#FFD700]/20 bg-zinc-950 p-8 shadow-[0_0_60px_rgba(255,215,0,0.08)] md:p-12">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#FFD700]/10 blur-3xl" />
+            <div className="relative grid items-center gap-12 md:grid-cols-2">
+              <div>
+                <span className="mb-4 inline-block rounded-full border border-[#FFD700]/30 bg-[#FFD700]/10 px-3 py-1 text-xs font-semibold tracking-wider text-[#FFD700]">
+                  AI POWERED
+                </span>
+                <h2 className="text-3xl font-bold sm:text-4xl">
+                  Smarter fitness,
+                  <br />
+                  better results.
+                </h2>
+                <p className="mt-4 text-zinc-400">
+                  Leverage AI-powered insights to personalize workouts, reduce churn,
+                  and grow your gym with data-driven decisions.
+                </p>
+                <ul className="mt-8 space-y-4">
+                  {[
+                    "Personalized AI Workout Plans",
+                    "Smart Coach Recommendations",
+                    "Churn Prediction for Owners",
+                  ].map((item) => (
+                    <li key={item} className="flex items-center gap-3 text-sm">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#FFD700]/20 text-[#FFD700]">
+                        <CheckIcon highlight />
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="flex justify-center">
+                <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFD700]/20">
+                      <svg className="h-5 w-5 text-[#FFD700]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Fit Finder AI Assistant</p>
+                      <p className="text-xs text-zinc-500">Coach Recommendation</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="h-3 w-full rounded bg-zinc-800" />
+                    <div className="h-3 w-4/5 rounded bg-zinc-800" />
+                    <div className="h-3 w-3/5 rounded bg-zinc-800" />
+                  </div>
+                  <div className="mt-6 rounded-lg border border-[#FFD700]/30 bg-[#FFD700]/5 p-4">
+                    <p className="text-xs text-[#FFD700]">Coach Recommendation</p>
+                    <p className="mt-1 text-sm font-medium">Upper Body Strength</p>
+                    <div className="mt-3 flex gap-2">
+                      <span className="rounded bg-[#FFD700]/10 px-2 py-0.5 text-xs text-[#FFD700]">45 min</span>
+                      <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">6 exercises</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
+
+      <section className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <h2 className="text-3xl font-bold sm:text-4xl">Built for everyone</h2>
+            <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+              Whether you run a gym, coach clients, or manage operations ΓÇö Fit Finder
+              has the tools you need.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {ROLES.map((role) => (
+              <div
+                key={role.title}
+                className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-6 text-center transition hover:border-zinc-700"
+              >
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400">
+                  {role.icon}
+                </div>
+                <h3 className="mb-2 font-semibold">{role.title}</h3>
+                <p className="text-sm text-zinc-500">{role.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="px-6 py-24">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-16 text-center">
+            <h2 className="text-3xl font-bold sm:text-4xl">Simple, transparent pricing</h2>
+            <p className="mx-auto mt-4 max-w-xl text-zinc-400">
+              Start free and scale as you grow. No hidden fees, no surprises.
+            </p>
+          </div>
+          <div className="grid gap-8 md:grid-cols-3">
+            {PRICING.map((plan) => (
+              <div
+                key={plan.name}
+                className={`relative flex flex-col rounded-2xl border p-8 ${
+                  plan.popular
+                    ? "border-[#FFD700]/50 bg-zinc-950 shadow-[0_0_40px_rgba(255,215,0,0.08)]"
+                    : "border-zinc-800 bg-zinc-950"
+                }`}
+              >
+                {plan.popular && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#FFD700] px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-black">
+                    Most Popular
+                  </span>
+                )}
+                <h3 className="text-lg font-semibold text-zinc-300">{plan.name}</h3>
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-4xl font-bold">{plan.price}</span>
+                  {plan.period && (
+                    <span className="text-zinc-500">{plan.period}</span>
+                  )}
+                </div>
+                <ul className="mt-8 flex-1 space-y-3">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-3 text-sm text-zinc-400">
+                      <CheckIcon highlight={plan.popular} />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/signup"
+                  className={`mt-8 block w-full rounded-lg py-3 text-center text-sm font-semibold transition ${
+                    plan.popular
+                      ? "bg-[#FFD700] text-black hover:bg-[#e6c200]"
+                      : "border border-zinc-700 text-white hover:border-zinc-500 hover:bg-zinc-900"
+                  }`}
+                >
+                  Get Started
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-zinc-800 px-6 py-16">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-12 md:grid-cols-4">
+            <div>
+              <p className="text-lg font-bold tracking-wider">
+                <span className="text-white">FIT</span>
+                <span className="text-[#FFD700]"> FINDER</span>
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+                The complete operating system for modern fitness businesses.
+              </p>
+            </div>
+            <div>
+              <h4 className="mb-4 text-sm font-semibold">Product</h4>
+              <ul className="space-y-2 text-sm text-zinc-500">
+                <li><a href="#features" className="transition hover:text-white">Features</a></li>
+                <li><a href="#pricing" className="transition hover:text-white">Pricing</a></li>
+                <li><a href="#solutions" className="transition hover:text-white">API</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-4 text-sm font-semibold">Contact Support</h4>
+              <ul className="space-y-2 text-sm text-zinc-500">
+                <li><a href="#" className="transition hover:text-white">Help Center</a></li>
+                <li><a href="mailto:support@fitfinder.com" className="transition hover:text-white">Contact</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="mb-4 text-sm font-semibold">Legal</h4>
+              <ul className="space-y-2 text-sm text-zinc-500">
+                <li><a href="#" className="transition hover:text-white">Privacy Policy</a></li>
+                <li><a href="#" className="transition hover:text-white">Terms of Service</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-zinc-800 pt-8 text-sm text-zinc-600 sm:flex-row">
+            <p>&copy; 2026 Fit Finder. All rights reserved.</p>
+            <p>Built by the team of Fit Finder</p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
