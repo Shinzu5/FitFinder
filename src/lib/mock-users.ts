@@ -12,7 +12,7 @@ export interface MockUser {
 export const mockUsers: MockUser[] = [
   {
     id: "admin-1",
-    fullName: "Admin User",
+    fullName: "Admin Super",
     email: "admin@test.com",
     password: "Password123!",
     role: "ADMIN",
@@ -26,7 +26,7 @@ export const mockUsers: MockUser[] = [
   },
   {
     id: "clerk-1",
-    fullName: "Clerk User",
+    fullName: "Ana Reyes",
     email: "clerk@test.com",
     password: "Password123!",
     role: "CLERK",

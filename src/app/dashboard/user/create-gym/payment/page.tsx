@@ -11,10 +11,14 @@ import {
   getAccessUntilDate,
   getOwnerPlan,
 } from "@/lib/owner-plans";
+import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
+import { useOwnerPlanTransactionsStore } from "@/stores/owner-plan-transactions-store";
 
 export default function CreateGymPaymentPage() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
+  const recordPlanPurchase = useOwnerPlanTransactionsStore((state) => state.recordPlanPurchase);
   const {
     selectedPlanId,
     gcashNumber,
@@ -40,6 +44,16 @@ export default function CreateGymPaymentPage() {
     setError(null);
     setPaymentDetails(number.trim(), name.trim());
     completePayment();
+    const { referenceNo, selectedPlanId: planId } = useCreateGymStore.getState();
+    if (user && referenceNo) {
+      recordPlanPurchase({
+        ownerId: user.id,
+        ownerName: name.trim() || user.fullName,
+        ownerEmail: user.email,
+        planId,
+        referenceNo,
+      });
+    }
     router.push("/dashboard/user/create-gym/done");
   }
 
