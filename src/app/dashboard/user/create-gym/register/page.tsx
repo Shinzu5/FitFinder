@@ -7,11 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
+import { useOwnerPlanTransactionsStore } from "@/stores/owner-plan-transactions-store";
 
 export default function RegisterGymPage() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const promoteToOwner = useAuthStore((state) => state.promoteToOwner);
-  const { paymentComplete, registerGym } = useCreateGymStore();
+  const attachGymToLatestPurchase = useOwnerPlanTransactionsStore(
+    (state) => state.attachGymToLatestPurchase,
+  );
+  const { paymentComplete, referenceNo, registerGym } = useCreateGymStore();
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -41,6 +46,13 @@ export default function RegisterGymPage() {
       websiteOrSlug: websiteOrSlug.trim(),
       coverPhotoName,
     });
+    if (user && referenceNo) {
+      attachGymToLatestPurchase({
+        ownerId: user.id,
+        referenceNo,
+        gymName: name.trim(),
+      });
+    }
     promoteToOwner();
     router.push("/dashboard/owner");
   }

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
+import { useWalkInApprovalSync } from "@/hooks/useWalkInApprovalSync";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
 
 const NAV_ITEMS = [
@@ -88,6 +89,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <>{children}</>;
   }
 
+  if (role === "CLERK") {
+    return <>{children}</>;
+  }
+
+  if (role === "ADMIN") {
+    return <>{children}</>;
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
       <header className="border-b border-white/10 px-6 py-4">
@@ -119,6 +128,8 @@ function UserDashboardFrame({
 }) {
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const unlocked = Boolean(joinedGymId);
+
+  useWalkInApprovalSync();
 
   return (
     <div className="flex min-h-screen bg-black text-white">
