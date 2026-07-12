@@ -30,6 +30,22 @@ const DEFAULT_PRODUCTS: ShopProduct[] = [
       "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=600&q=80",
     imageName: null,
   },
+  {
+    id: "product-3",
+    name: "Pre-Workout Energy",
+    price: 1200,
+    imageUrl:
+      "https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=600&q=80",
+    imageName: null,
+  },
+  {
+    id: "product-4",
+    name: "Lifting Belt",
+    price: 800,
+    imageUrl:
+      "https://images.unsplash.com/photo-1517964608845-3459937cc327?auto=format&fit=crop&w=600&q=80",
+    imageName: null,
+  },
 ];
 
 interface OwnerShopState {

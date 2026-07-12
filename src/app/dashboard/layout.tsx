@@ -6,13 +6,13 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Bell,
+  Brain,
   CreditCard,
   Dumbbell,
   Home,
   Lock,
   MessageSquare,
   ShoppingBag,
-  Sparkles,
   Wrench,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { label: "Equipment", href: "/dashboard/user/equipment", icon: Wrench, unlockRequired: true },
   { label: "Shop", href: "/dashboard/user/shop", icon: ShoppingBag, unlockRequired: true },
   { label: "Messages", href: "/dashboard/user/messages", icon: MessageSquare, unlockRequired: true },
-  { label: "AI Assistant", href: "/dashboard/user/ai", icon: Sparkles, unlockRequired: true },
+  { label: "AI Assistant", href: "/dashboard/user/ai", icon: Brain, unlockRequired: true },
 ] as const;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -165,7 +165,7 @@ function UserDashboardFrame({
                 href={item.href}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
                   active
-                    ? "bg-[#FFD700]/10 font-medium text-[#FFD700]"
+                    ? "border-l-2 border-[#FACC15] bg-[#FACC15]/10 font-medium text-[#FACC15]"
                     : "text-zinc-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
@@ -178,11 +178,7 @@ function UserDashboardFrame({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-3">
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <Home className="h-4 w-4" />
-            Home
-          </div>
+        <header className="flex items-center justify-end gap-4 border-b border-white/10 px-6 py-3">
           <div className="flex items-center gap-3">
             {!unlocked ? (
               <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">

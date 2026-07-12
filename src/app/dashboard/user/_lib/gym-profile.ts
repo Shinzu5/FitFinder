@@ -127,69 +127,117 @@ const GYM_1_PROFILE: Omit<PublicGymProfile, "id"> = {
 };
 
 const GYM_2_PROFILE: Omit<PublicGymProfile, "id"> = {
-  name: "Iron House Fitness",
-  location: "Lapu-Lapu City, Cebu",
-  description: "Strength-focused training space with coaching support.",
-  hours: "Mon-Sat: 5AM - 11PM",
-  openTime: "5:00 AM",
-  closeTime: "11:00 PM",
-  website: "ironhouse.fit",
-  phone: "+63 917 555 1234",
-  socialHandle: "@ironhousefit",
-  members: 218,
-  rating: 4.5,
-  reviewCount: 96,
+  name: "Flex Fitness Studio",
+  location: "Mandaue City, Cebu",
+  description: "Boutique studio with group classes and open gym access.",
+  hours: "Mon-Fri: 6AM - 9PM",
+  openTime: "6:00 AM",
+  closeTime: "9:00 PM",
+  website: "flexfit.studio",
+  phone: "+63 917 555 4321",
+  socialHandle: "@flexfitstudio",
+  members: 0,
+  rating: 4.3,
+  reviewCount: 0,
   image:
-    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?auto=format&fit=crop&w=1200&q=80",
   owner: {
-    name: "Carla Mendoza",
-    bio: "Former competitive lifter building a serious training environment for Cebu athletes.",
+    name: "Diana Cruz",
+    bio: "Group fitness instructor building a welcoming studio for all fitness levels.",
     avatarUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80",
+      "https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=200&q=80",
   },
   plans: [
     {
       id: "plan-monthly-2",
       name: "Monthly",
-      price: 999,
+      price: 899,
       periodLabel: "/mo",
       durationLabel: "30 days access",
       features: ["Full Gym Access", "Locker Room"],
     },
+  ],
+  coaches: [],
+  equipment: ["Studio Floor", "Free Weights", "Cardio Machines"],
+};
+
+const GYM_3_PROFILE: Omit<PublicGymProfile, "id"> = {
+  name: "The Iron Den",
+  location: "Cebu City, Cebu",
+  description: "Hardcore lifting environment built for serious strength athletes.",
+  hours: "Mon-Sat: 5AM - 11PM",
+  openTime: "5:00 AM",
+  closeTime: "11:00 PM",
+  website: "ironden.fit",
+  phone: "+63 918 555 9876",
+  socialHandle: "@irondenfit",
+  members: 87,
+  rating: 4.6,
+  reviewCount: 87,
+  image:
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
+  owner: {
+    name: "Marcus Lee",
+    bio: "Powerlifting coach focused on building raw strength in a no-frills training space.",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=200&q=80",
+  },
+  plans: [
     {
-      id: "plan-quarterly-2",
-      name: "Quarterly",
-      price: 2699,
-      periodLabel: "/3mo",
-      durationLabel: "90 days access",
-      features: ["Full Gym Access", "1 Free PT Session"],
+      id: "plan-monthly-3",
+      name: "Monthly",
+      price: 549,
+      periodLabel: "/mo",
+      durationLabel: "30 days access",
+      features: ["Full Gym Access", "Locker Room"],
       popular: true,
     },
+  ],
+  coaches: [],
+  equipment: ["Squat Racks", "Deadlift Platforms", "Bench Stations"],
+};
+
+const GYM_4_PROFILE: Omit<PublicGymProfile, "id"> = {
+  name: "The Zone Fitness",
+  location: "Lapu-Lapu City, Cebu",
+  description: "Modern fitness hub with cardio zones, free weights, and recovery area.",
+  hours: "Mon-Sun: 6AM - 10PM",
+  openTime: "6:00 AM",
+  closeTime: "10:00 PM",
+  website: "thezone.fit",
+  phone: "+63 919 555 2468",
+  socialHandle: "@thezonefit",
+  members: 203,
+  rating: 4.5,
+  reviewCount: 203,
+  image:
+    "https://images.unsplash.com/photo-1540497077202-7bf8a76381cd?auto=format&fit=crop&w=1200&q=80",
+  owner: {
+    name: "Carla Mendoza",
+    bio: "Former competitive lifter building a modern training environment for Cebu athletes.",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80",
+  },
+  plans: [
     {
-      id: "plan-annual-2",
-      name: "Annual",
-      price: 8999,
-      periodLabel: "/yr",
-      durationLabel: "365 days access",
-      features: ["Full Gym Access", "3 Free PT Sessions", "20% off shop"],
+      id: "plan-monthly-4",
+      name: "Monthly",
+      price: 699,
+      periodLabel: "/mo",
+      durationLabel: "30 days access",
+      features: ["Full Gym Access", "Locker Room"],
+      popular: true,
     },
   ],
-  coaches: [
-    {
-      id: "coach-iron-1",
-      name: "Marcus Johnson",
-      specialty: "Powerlifting",
-      sessionPrice: 600,
-      photoUrl:
-        "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?auto=format&fit=crop&w=400&q=80",
-    },
-  ],
-  equipment: ["Squat Racks (x2)", "Bench Press Stations (x4)", "Cable Machines", "Rowing Ergs"],
+  coaches: [],
+  equipment: ["Cardio Zone", "Free Weights", "Recovery Area"],
 };
 
 const STATIC_PROFILES: Record<string, Omit<PublicGymProfile, "id">> = {
   "gym-1": GYM_1_PROFILE,
   "gym-2": GYM_2_PROFILE,
+  "gym-3": GYM_3_PROFILE,
+  "gym-4": GYM_4_PROFILE,
 };
 
 function formatWebsite(slug: string) {
@@ -401,6 +449,7 @@ export function registeredGymToListItem(gym: RegisteredGym): Gym {
     members: gym.memberCount,
     pricePerMonth: gym.membershipPrice,
     image: gym.coverImageUrl,
+    status: "PENDING",
   };
 }
 

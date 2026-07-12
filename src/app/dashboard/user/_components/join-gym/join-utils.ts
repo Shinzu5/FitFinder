@@ -9,6 +9,11 @@ interface BuildMembershipInput {
   paymentRef: string;
 }
 
+function parseDurationDays(durationLabel: string) {
+  const match = durationLabel.match(/(\d+)/);
+  return match ? Number(match[1]) : 30;
+}
+
 export function buildCompletedMembership({
   profile,
   plan,
@@ -28,5 +33,7 @@ export function buildCompletedMembership({
     paymentMethod,
     paymentRef,
     totalPaid: plan.price,
+    joinedAt: new Date().toISOString(),
+    durationDays: parseDurationDays(plan.durationLabel),
   };
 }

@@ -89,10 +89,20 @@ export function ExercisesPanel() {
     addExercise({
       name: form.name,
       muscle: form.muscle,
+      category: form.muscle,
       difficulty: form.difficulty,
+      sets: "3",
+      reps: "8-12",
+      rest: "60s",
+      targetMuscles: form.muscle,
+      formTips: "Follow your coach's cues and move with control.",
       mediaUrl: form.mediaUrl,
       mediaType: form.mediaType,
       mediaName: form.mediaName,
+      cardImageUrl:
+        form.mediaType === "image" && form.mediaUrl
+          ? form.mediaUrl
+          : "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
     });
     resetForm();
   }

@@ -17,6 +17,8 @@ export interface CompletedMembership {
   paymentMethod: JoinPaymentMethod;
   paymentRef: string;
   totalPaid: number;
+  joinedAt?: string;
+  durationDays?: number;
 }
 
 interface JoinGymFlowState {
