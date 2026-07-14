@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect } from "react";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { VerificationCodeForm } from "@/components/features/auth/VerificationCodeForm";
+import { LOGIN_CHALLENGE_STORAGE_KEY } from "@/lib/auth/auth-api";
 import { getDashboardPathForRole, useAuthStore } from "@/stores/auth-store";
 
-function VerifyEmailContent() {
+function VerifyLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") ?? "";
-  const { verifyRegistration, resendRegistrationCode, isAuthenticated, role } = useAuthStore();
+  const { verifyLogin, resendLoginCode, isAuthenticated, role } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated && role) {
@@ -19,54 +20,60 @@ function VerifyEmailContent() {
     }
   }, [isAuthenticated, role, router]);
 
+  useEffect(() => {
+    const token = sessionStorage.getItem(LOGIN_CHALLENGE_STORAGE_KEY);
+    if (!token) {
+      router.replace("/login");
+    }
+  }, [router]);
+
   if (!email) {
     return (
       <AuthShell
-        title="Verify your email"
-        subtitle="We need your email address to resend the verification code."
+        title="Verify sign-in"
+        subtitle="Your login session is missing an email address."
         footerText="Back to"
-        footerLink="/signup"
-        footerLinkText="Sign up"
+        footerLink="/login"
+        footerLinkText="Sign in"
       >
-        <p className="text-sm text-zinc-400">
-          Missing email address. Please register again to receive a verification code.
-        </p>
+        <p className="text-sm text-zinc-400">Please sign in again to receive a new code.</p>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell
-      title="Verify your email"
-      subtitle="Enter the 6-digit code we sent to your inbox."
-      footerText="Already verified?"
+      title="Verify sign-in"
+      subtitle="Enter the 6-digit code we sent to your email."
+      footerText="Wrong account?"
       footerLink="/login"
-      footerLinkText="Sign in"
+      footerLinkText="Sign in again"
     >
       <VerificationCodeForm
         email={email}
-        title="Email Verification"
+        title="Login Verification"
         subtitle="Enter the 6-digit code we sent to"
-        submitLabel="Verify Email"
+        submitLabel="Complete Sign In"
         onSubmit={async (code) => {
-          const ok = await verifyRegistration(email, code);
+          const ok = await verifyLogin(code);
           if (ok) {
-            router.replace("/login");
+            const currentRole = useAuthStore.getState().role;
+            router.replace(getDashboardPathForRole(currentRole));
           } else {
             throw new Error(useAuthStore.getState().error ?? "Verification failed.");
           }
         }}
         onResend={async () => {
-          const ok = await resendRegistrationCode(email);
+          const ok = await resendLoginCode();
           if (!ok) {
             throw new Error(useAuthStore.getState().error ?? "Unable to resend code.");
           }
         }}
         footer={
           <>
-            Didn&apos;t receive a code?{" "}
-            <Link href="/signup" className="text-[#FFD700] hover:text-[#ffe44d]">
-              Register again
+            Need a new sign-in attempt?{" "}
+            <Link href="/login" className="text-[#FFD700] hover:text-[#ffe44d]">
+              Back to login
             </Link>
           </>
         }
@@ -75,7 +82,7 @@ function VerifyEmailContent() {
   );
 }
 
-export default function VerifyEmailPage() {
+export default function VerifyLoginPage() {
   return (
     <Suspense
       fallback={
@@ -84,7 +91,7 @@ export default function VerifyEmailPage() {
         </div>
       }
     >
-      <VerifyEmailContent />
+      <VerifyLoginContent />
     </Suspense>
   );
 }

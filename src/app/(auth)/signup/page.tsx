@@ -73,15 +73,15 @@ function SignupForm() {
 
   async function onSubmit(values: RegisterFormValues) {
     setFormError(null);
-    const ok = await registerUser({
+    const result = await registerUser({
       fullName: `${values.firstName} ${values.lastName}`.trim(),
       email: values.email,
       password: values.password,
       confirmPassword: values.confirmPassword,
       role: values.role,
     });
-    if (ok) {
-      router.replace("/login");
+    if (result.ok) {
+      router.replace(`/verify-email?email=${encodeURIComponent(result.email)}`);
     }
   }
 

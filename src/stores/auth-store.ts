@@ -2,19 +2,20 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { AuthUser, LoginPayload, RegisterPayload } from "@/lib/auth/types";
 import {
-  mockChangePassword,
-  mockForgotPassword,
-  mockLogin,
-  mockRegister,
-  type AuthSession,
-  type LoginPayload,
-  type RegisterPayload,
-} from "@/lib/auth";
+  apiLoginInit,
+  apiRegister,
+  apiResendLoginCode,
+  apiResendRegistrationCode,
+  apiVerifyLogin,
+  apiVerifyRegistration,
+  LOGIN_CHALLENGE_STORAGE_KEY,
+} from "@/lib/auth/auth-api";
 import { roleToDashboardPath, type UserRole } from "@/lib/mock-users";
 
 interface AuthState {
-  user: AuthSession["user"] | null;
+  user: AuthUser | null;
   role: UserRole | null;
   accessToken: string | null;
   isAuthenticated: boolean;
@@ -22,8 +23,17 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   success: string | null;
-  login: (payload: LoginPayload) => Promise<boolean>;
-  register: (payload: RegisterPayload) => Promise<boolean>;
+  pendingLoginEmail: string | null;
+  login: (payload: LoginPayload) => Promise<
+    | { ok: true; requiresVerification: true; email: string }
+    | { ok: true; requiresVerification: false }
+    | { ok: false }
+  >;
+  register: (payload: RegisterPayload) => Promise<{ ok: true; email: string } | { ok: false }>;
+  verifyRegistration: (email: string, code: string) => Promise<boolean>;
+  resendRegistrationCode: (email: string) => Promise<boolean>;
+  verifyLogin: (code: string) => Promise<boolean>;
+  resendLoginCode: () => Promise<boolean>;
   forgotPassword: (email: string) => Promise<boolean>;
   logout: () => void;
   promoteToOwner: () => void;
@@ -44,28 +54,31 @@ export const useAuthStore = create<AuthState>()(
       loading: false,
       error: null,
       success: null,
+      pendingLoginEmail: null,
 
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       login: async (payload) => {
-        set({ loading: true, error: null, success: null });
-        const session = mockLogin(payload);
+        set({ loading: true, error: null, success: null, pendingLoginEmail: null });
 
-        if (!session) {
-          set({ loading: false, error: "Invalid email or password.", success: null });
-          return false;
+        try {
+          const response = await apiLoginInit(payload);
+          sessionStorage.setItem(LOGIN_CHALLENGE_STORAGE_KEY, response.loginToken);
+          set({
+            loading: false,
+            pendingLoginEmail: response.email,
+            success: response.message,
+            error: null,
+          });
+          return { ok: true, requiresVerification: true, email: response.email };
+        } catch (error) {
+          set({
+            loading: false,
+            error: error instanceof Error ? error.message : "Unable to sign in.",
+            success: null,
+          });
+          return { ok: false };
         }
-
-        set({
-          user: session.user,
-          role: session.role,
-          accessToken: session.accessToken,
-          isAuthenticated: true,
-          loading: false,
-          error: null,
-          success: "Welcome back!",
-        });
-        return true;
       },
 
       register: async (payload) => {
@@ -73,31 +86,123 @@ export const useAuthStore = create<AuthState>()(
 
         if (payload.password.length < 8) {
           set({ loading: false, error: "Password must be at least 8 characters.", success: null });
-          return false;
+          return { ok: false };
         }
 
         if (payload.password !== payload.confirmPassword) {
           set({ loading: false, error: "Passwords do not match.", success: null });
-          return false;
+          return { ok: false };
         }
 
-        const session = mockRegister(payload);
-        if (!session) {
+        try {
+          const response = await apiRegister(payload);
           set({
             loading: false,
-            error: "An account with that email already exists.",
+            error: null,
+            success: response.message,
+          });
+          return { ok: true, email: response.email };
+        } catch (error) {
+          set({
+            loading: false,
+            error: error instanceof Error ? error.message : "Unable to register.",
+            success: null,
+          });
+          return { ok: false };
+        }
+      },
+
+      verifyRegistration: async (email, code) => {
+        set({ loading: true, error: null, success: null });
+        try {
+          const response = await apiVerifyRegistration(email, code);
+          set({ loading: false, success: response.message, error: null });
+          return true;
+        } catch (error) {
+          set({
+            loading: false,
+            error: error instanceof Error ? error.message : "Verification failed.",
+            success: null,
+          });
+          return false;
+        }
+      },
+
+      resendRegistrationCode: async (email) => {
+        set({ error: null, success: null });
+        try {
+          const response = await apiResendRegistrationCode(email);
+          set({ success: response.message, error: null });
+          return true;
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Unable to resend code.",
+            success: null,
+          });
+          return false;
+        }
+      },
+
+      verifyLogin: async (code) => {
+        set({ loading: true, error: null, success: null });
+        const loginToken = sessionStorage.getItem(LOGIN_CHALLENGE_STORAGE_KEY);
+
+        if (!loginToken) {
+          set({
+            loading: false,
+            error: "Login session expired. Please sign in again.",
             success: null,
           });
           return false;
         }
 
-        set({ loading: false, error: null, success: "Account created successfully." });
-        return true;
+        try {
+          const response = await apiVerifyLogin(loginToken, code);
+          sessionStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY);
+          set({
+            user: response.user,
+            role: response.role,
+            accessToken: response.accessToken,
+            isAuthenticated: true,
+            pendingLoginEmail: null,
+            loading: false,
+            error: null,
+            success: response.message,
+          });
+          return true;
+        } catch (error) {
+          set({
+            loading: false,
+            error: error instanceof Error ? error.message : "Verification failed.",
+            success: null,
+          });
+          return false;
+        }
       },
 
-      forgotPassword: async (email) => {
-        set({ loading: true, error: null, success: null });
-        mockForgotPassword(email);
+      resendLoginCode: async () => {
+        set({ error: null, success: null });
+        const loginToken = sessionStorage.getItem(LOGIN_CHALLENGE_STORAGE_KEY);
+
+        if (!loginToken) {
+          set({ error: "Login session expired. Please sign in again.", success: null });
+          return false;
+        }
+
+        try {
+          const response = await apiResendLoginCode(loginToken);
+          set({ success: response.message, error: null });
+          return true;
+        } catch (error) {
+          set({
+            error: error instanceof Error ? error.message : "Unable to resend code.",
+            success: null,
+          });
+          return false;
+        }
+      },
+
+      forgotPassword: async (_email) => {
         set({
           loading: false,
           error: null,
@@ -131,35 +236,27 @@ export const useAuthStore = create<AuthState>()(
         set({ user: { ...user, avatarUrl } });
       },
 
-      changePassword: async (currentPassword, newPassword) => {
-        const user = get().user;
-        if (!user) return false;
-
+      changePassword: async (_currentPassword, newPassword) => {
         if (newPassword.length < 8) {
           set({ error: "New password must be at least 8 characters.", success: null });
           return false;
         }
 
-        const ok = mockChangePassword(user.email, currentPassword, newPassword);
-        if (!ok) {
-          set({ error: "Current password is incorrect.", success: null });
-          return false;
-        }
-
         set({
-          user: { ...user, password: newPassword },
-          error: null,
-          success: "Password updated successfully.",
+          error: "Password changes are not available in this demo yet.",
+          success: null,
         });
-        return true;
+        return false;
       },
 
       logout: () => {
+        sessionStorage.removeItem(LOGIN_CHALLENGE_STORAGE_KEY);
         set({
           user: null,
           role: null,
           accessToken: null,
           isAuthenticated: false,
+          pendingLoginEmail: null,
           loading: false,
           error: null,
           success: null,

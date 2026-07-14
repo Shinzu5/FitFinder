@@ -53,14 +53,15 @@ export default function LoginPage() {
 
   async function onSubmit(values: LoginFormValues) {
     setFormError(null);
-    const ok = await login({
+    const result = await login({
       email: values.email,
       password: values.password,
       rememberMe: values.rememberMe ?? false,
     });
-    if (!ok) return;
-    const currentRole = useAuthStore.getState().role;
-    router.push(getDashboardPathForRole(currentRole));
+    if (!result.ok) return;
+    if (result.requiresVerification) {
+      router.push(`/verify-login?email=${encodeURIComponent(result.email)}`);
+    }
   }
 
   return (
