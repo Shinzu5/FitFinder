@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  OWNER
+  CLERK
+  ADMIN
+}
+
+enum GymStatus {
+  PENDING
+  ACTIVE
+  DECLINED
+}
+
+enum EquipmentStatus {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum PaymentMethod {
+  CASH
+  CASHLESS
+  XENDIT
+}
+
+enum TransactionType {
+  MONTHLY
+  SESSION
+  SUPPLEMENTS
+  DAY_PASS
+  RENEWAL
+  COACH
+}
+
+enum ActivityTone {
+  SUCCESS
+  INFO
+  WARNING
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String    @id @default(uuid())
+  fullName            String
+  email               String    @unique
+  passwordHash        String
+  role                UserRole  @default(USER)
+  avatarUrl           String?
+  emailVerified       Boolean   @default(false)
+  verificationCode    String?
+  verificationExpires DateTime?
+  resetToken          String?
+  resetExpires        DateTime?
+  refreshToken        String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  ownedGyms           Gym[]              @relation("GymOwner")
+  ownerSubscriptions  OwnerSubscription[]
+  gymMemberships      GymMembership[]
+  sentMessages        Message[]
+  clerkTransactions   ClerkTransaction[]
+  walkInApprovals     WalkInApproval[]
+  clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id])
+  clerkGymId          String?
+
+  @@map("users")
+}
+
+model Gym {
+  id             String    @id @default(uuid())
+  name           String
+  address        String
+  description    String    @default("")
+  contactNumber  String    @default("")
+  website        String    @default("")
+  coverImageUrl  String    @default("")
+  schedule       String    @default("Mon-Sun: 6AM - 10PM")
+  pricePerMonth  Float     @default(0)
+  status         GymStatus @default(PENDING)
+  ownerId        String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  owner              User                @relation("GymOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerSubscriptions OwnerSubscription[]
+  membershipPlans    MembershipPlan[]
+  gymMemberships     GymMembership[]
+  coaches            Coach[]
+  equipment          Equipment[]
+  exercises          Exercise[]
+  shopProducts       ShopProduct[]
+  conversations      Conversation[]
+  clerkTransactions  ClerkTransaction[]
+  walkInApprovals    WalkInApproval[]
+  clerks             User[]              @relation("GymClerks")
+
+  @@map("gyms")
+}
+
+model OwnerSubscription {
+  id          String   @id @default(uuid())
+  ownerId     String
+  gymId       String?
+  planId      String
+  planName    String
+  price       Float
+  months      Int
+  referenceNo String
+  method      String   @default("Xendit")
+  paidAt      DateTime @default(now())
+  validUntil  DateTime
+
+  owner User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  gym   Gym?  @relation(fields: [gymId], references: [id], onDelete: SetNull)
+
+  @@map("owner_subscriptions")
+}
+
+model MembershipPlan {
+  id                String          @id @default(uuid())
+  gymId             String
+  name              String
+  price             Float
+  durationDays      Int
+  activeSubscribers Int             @default(0)
+  createdAt         DateTime        @default(now())
+
+  gym            Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymMemberships GymMembership[]
+  walkInApprovals WalkInApproval[]
+
+  @@map("membership_plans")
+}
+
+model GymMembership {
+  id            String           @id @default(uuid())
+  userId        String
+  gymId         String
+  planId        String
+  coachId       String?
+  paymentMethod String
+  paymentRef    String
+  totalPaid     Float
+  status        MembershipStatus @default(ACTIVE)
+  joinedAt      DateTime         @default(now())
+  expiresAt     DateTime
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym   Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan  MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  coach Coach?         @relation(fields: [coachId], references: [id], onDelete: SetNull)
+
+  @@map("gym_memberships")
+}
+
+model Coach {
+  id           String  @id @default(uuid())
+  gymId        String
+  name         String
+  specialty    String
+  sessionPrice Float
+  description  String  @default("")
+  photoUrl     String?
+  photoName    String?
+  schedule     Json    @default("{}")
+  createdAt    DateTime @default(now())
+
+  gym            Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymMemberships GymMembership[]
+
+  @@map("coaches")
+}
+
+model Equipment {
+  id       String          @id @default(uuid())
+  gymId    String
+  name     String
+  quantity Int             @default(1)
+  status   EquipmentStatus @default(AVAILABLE)
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("equipment")
+}
+
+model Exercise {
+  id            String  @id @default(uuid())
+  gymId         String
+  name          String
+  muscle        String
+  category      String  @default("")
+  difficulty    String  @default("Beginner")
+  sets          String  @default("3")
+  reps          String  @default("8-12")
+  rest          String  @default("60s")
+  targetMuscles String  @default("")
+  formTips      String  @default("")
+  mediaUrl      String?
+  mediaType     String?
+  mediaName     String?
+  cardImageUrl  String  @default("")
+  createdAt     DateTime @default(now())
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("exercises")
+}
+
+model ShopProduct {
+  id        String  @id @default(uuid())
+  gymId     String
+  name      String
+  price     Float
+  imageUrl  String  @default("")
+  imageName String?
+  createdAt DateTime @default(now())
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("shop_products")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  gymId     String
+  type      String   @default("MEMBER")
+  createdAt DateTime @default(now())
+
+  gym      Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  senderRole     String   @default("user")
+  text           String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model ClerkTransaction {
+  id         String          @id @default(uuid())
+  gymId      String
+  clerkId    String
+  type       TransactionType
+  memberName String
+  amount     Float
+  method     PaymentMethod
+  notes      String          @default("")
+  createdAt  DateTime        @default(now())
+
+  gym   Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  clerk User @relation(fields: [clerkId], references: [id], onDelete: Cascade)
+
+  @@map("clerk_transactions")
+}
+
+model WalkInApproval {
+  id                String         @id @default(uuid())
+  userId            String
+  gymId             String
+  planId            String
+  memberName        String
+  memberEmail       String
+  coachId           String?
+  coachName         String?
+  coachSessionPrice Float          @default(0)
+  paymentRef        String
+  totalPaid         Float
+  durationDays      Int
+  status            ApprovalStatus @default(PENDING)
+  submittedAt       DateTime       @default(now())
+  reviewedAt        DateTime?
+  consumedAt        DateTime?
+
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@map("walk_in_approvals")
+}
+
+model AdminActivity {
+  id        String       @id @default(uuid())
+  message   String
+  tone      ActivityTone @default(INFO)
+  createdAt DateTime     @default(now())
+
+  @@map("admin_activities")
+}
