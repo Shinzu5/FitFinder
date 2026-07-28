@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -9,6 +10,7 @@ import { env } from "./config/env";
 import { verifyEmailConfig } from "./config/email";
 import { setEmailEnabled } from "./services/email.service";
 import { errorHandler } from "./middleware/errorHandler";
+import { initSocket } from "./socket";
 
 // Routes
 import authRoutes from "./routes/auth.routes";
@@ -19,8 +21,12 @@ import clerkRoutes from "./routes/clerk.routes";
 import userRoutes from "./routes/user.routes";
 import subscriptionRoutes from "./routes/subscription.routes";
 import uploadRoutes from "./routes/upload.routes";
+import messagingRoutes from "./routes/messaging.routes";
 
 const app = express();
+const server = http.createServer(app);
+initSocket(server);
+
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
 
@@ -53,6 +59,7 @@ app.use("/api/clerk", clerkRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/messages", messagingRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -69,11 +76,12 @@ async function start() {
     const emailOk = await verifyEmailConfig();
     setEmailEnabled(emailOk);
 
-    app.listen(env.PORT, () => {
+    server.listen(env.PORT, () => {
       console.log(`\n🚀 FitFinder API running on http://localhost:${env.PORT}`);
       console.log(`📦 Environment: ${env.NODE_ENV}`);
       console.log(`🌐 Frontend URL: ${env.FRONTEND_URL}`);
-      console.log(`📁 Uploads: ${path.join(process.cwd(), "uploads")}\n`);
+      console.log(`📁 Uploads: ${path.join(process.cwd(), "uploads")}`);
+      console.log(`🔌 Socket.IO ready for real-time messaging\n`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);

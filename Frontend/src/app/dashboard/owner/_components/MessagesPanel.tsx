@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Send, Sparkles } from "lucide-react";
-import { useOwnerMembersStore } from "@/stores/owner-members-store";
+import { useAuthStore } from "@/stores/auth-store";
 import {
   getContactInitials,
   getConversationPreview,
@@ -125,11 +125,13 @@ function MessageBubble({
 }
 
 export function MessagesPanel() {
-  const members = useOwnerMembersStore((state) => state.members);
+  const authUser = useAuthStore((state) => state.user);
   const contacts = useOwnerMessagesStore((state) => state.contacts);
   const conversations = useOwnerMessagesStore((state) => state.conversations);
   const activeConversationId = useOwnerMessagesStore((state) => state.activeConversationId);
-  const addContact = useOwnerMessagesStore((state) => state.addContact);
+  const loadingConversations = useOwnerMessagesStore((state) => state.loadingConversations);
+  const setCurrentUserId = useOwnerMessagesStore((state) => state.setCurrentUserId);
+  const fetchConversations = useOwnerMessagesStore((state) => state.fetchConversations);
   const setActiveConversation = useOwnerMessagesStore((state) => state.setActiveConversation);
   const openConversationWithContact = useOwnerMessagesStore(
     (state) => state.openConversationWithContact,
@@ -141,14 +143,11 @@ export function MessagesPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    members.forEach((member) => {
-      addContact({
-        id: `member-${member.id}`,
-        name: member.fullName,
-        type: "member",
-      });
-    });
-  }, [members, addContact]);
+    if (authUser?.id) {
+      setCurrentUserId(authUser.id);
+      fetchConversations();
+    }
+  }, [authUser?.id, setCurrentUserId, fetchConversations]);
 
   const allContacts = useMemo(() => {
     const seen = new Set<string>();
@@ -188,8 +187,8 @@ export function MessagesPanel() {
     setDraft("");
   }
 
-  function handleSelectContact(contactId: string) {
-    openConversationWithContact(contactId);
+  function handleSelectContact(contact: MessageContact) {
+    openConversationWithContact(contact);
   }
 
   return (
@@ -208,19 +207,27 @@ export function MessagesPanel() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
-            {sortedConversations.map((conversation) => {
-              const contact = contactMap.get(conversation.contactId);
-              if (!contact) return null;
-              return (
-                <ConversationListItem
-                  key={conversation.id}
-                  contact={contact}
-                  preview={getConversationPreview(conversation, contact.name)}
-                  active={conversation.id === activeConversationId}
-                  onClick={() => setActiveConversation(conversation.id)}
-                />
-              );
-            })}
+            {loadingConversations ? (
+              <p className="px-3 py-4 text-sm text-zinc-500">Loading conversations...</p>
+            ) : sortedConversations.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-zinc-500">
+                No conversations yet. Tap + to message a registered user.
+              </p>
+            ) : (
+              sortedConversations.map((conversation) => {
+                const contact = contactMap.get(conversation.contactId);
+                if (!contact) return null;
+                return (
+                  <ConversationListItem
+                    key={conversation.id}
+                    contact={contact}
+                    preview={getConversationPreview(conversation, contact.name)}
+                    active={conversation.id === activeConversationId}
+                    onClick={() => setActiveConversation(conversation.id)}
+                  />
+                );
+              })
+            )}
           </div>
         </aside>
 
@@ -232,11 +239,9 @@ export function MessagesPanel() {
                 <div>
                   <p className="font-semibold text-white">{activeContact.name}</p>
                   <p className="text-xs text-zinc-500">
-                    {activeContact.isOnline
-                      ? "Active now"
-                      : activeContact.type === "ai"
-                        ? "AI assistant"
-                        : "Member"}
+                    {activeContact.type === "ai"
+                      ? "AI assistant"
+                      : activeContact.subtitle ?? "Member"}
                   </p>
                 </div>
               </div>
@@ -292,7 +297,6 @@ export function MessagesPanel() {
 
       <NewMessageModal
         open={newMessageOpen}
-        contacts={allContacts}
         onClose={() => setNewMessageOpen(false)}
         onSelectContact={handleSelectContact}
       />

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Plus, Send } from "lucide-react";
+import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import {
   getThreadPreview,
   type GymMessageThread,
   type UserChatMessage,
+  type UserSearchContact,
   useUserMessagesStore,
 } from "@/stores/user-messages-store";
+import { UserNewMessageModal } from "./UserNewMessageModal";
 
 function ThreadAvatar({ thread, size = "md" }: { thread: GymMessageThread; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-10 w-10" : "h-11 w-11";
@@ -69,21 +72,38 @@ function MessageBubble({
 }
 
 export function UserMessagesPanel() {
+  const authUser = useAuthStore((state) => state.user);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const membership = useMembershipStore((state) => state.membership);
   const threads = useUserMessagesStore((state) => state.threads);
   const activeThreadId = useUserMessagesStore((state) => state.activeThreadId);
+  const loadingThreads = useUserMessagesStore((state) => state.loadingThreads);
+  const setCurrentUserId = useUserMessagesStore((state) => state.setCurrentUserId);
+  const fetchThreads = useUserMessagesStore((state) => state.fetchThreads);
   const setActiveThread = useUserMessagesStore((state) => state.setActiveThread);
+  const openThreadWithContact = useUserMessagesStore((state) => state.openThreadWithContact);
   const sendMessage = useUserMessagesStore((state) => state.sendMessage);
   const syncJoinedGym = useUserMessagesStore((state) => state.syncJoinedGym);
 
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
+  const [newMessageOpen, setNewMessageOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (authUser?.id) {
+      setCurrentUserId(authUser.id);
+      fetchThreads();
+    }
+  }, [authUser?.id, setCurrentUserId, fetchThreads]);
 
   useEffect(() => {
     syncJoinedGym(joinedGymId, membership?.gymName ?? null);
   }, [joinedGymId, membership?.gymName, syncJoinedGym]);
+
+  function handleSelectContact(contact: UserSearchContact) {
+    openThreadWithContact(contact);
+  }
 
   const filteredThreads = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -112,10 +132,21 @@ export function UserMessagesPanel() {
   }
 
   return (
+    <>
     <div className="flex h-[calc(100vh-8.5rem)] min-h-[520px] overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
       <aside className="flex w-full max-w-xs shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d]">
         <div className="border-b border-zinc-800/70 px-4 py-4">
-          <h2 className="font-bold text-white">Messages</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-white">Messages</h2>
+            <button
+              type="button"
+              onClick={() => setNewMessageOpen(true)}
+              className="rounded-lg border border-zinc-800/80 p-2 text-zinc-300 transition hover:border-[#FACC15]/40 hover:text-[#FACC15]"
+              aria-label="New message"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -125,8 +156,12 @@ export function UserMessagesPanel() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
-          {filteredThreads.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-zinc-500">No conversations found.</p>
+          {loadingThreads ? (
+            <p className="px-3 py-6 text-center text-sm text-zinc-500">Loading conversations...</p>
+          ) : filteredThreads.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-zinc-500">
+              No conversations yet. Tap + to message a registered user.
+            </p>
           ) : (
             filteredThreads.map((thread) => {
               const active = thread.id === activeThreadId;
@@ -149,7 +184,7 @@ export function UserMessagesPanel() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className={`truncate font-semibold ${active ? "text-[#FACC15]" : "text-white"}`}>
-                      {thread.gymName}
+                      {thread.ownerName}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-zinc-500">
                       {getThreadPreview(thread)}
@@ -209,11 +244,25 @@ export function UserMessagesPanel() {
             </form>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
-            Select a conversation to start messaging.
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-zinc-500">Select a conversation to start messaging.</p>
+            <button
+              type="button"
+              onClick={() => setNewMessageOpen(true)}
+              className="rounded-lg bg-[#FACC15] px-4 py-2 text-sm font-semibold text-black hover:bg-[#e6c200]"
+            >
+              New Message
+            </button>
           </div>
         )}
       </section>
     </div>
+
+    <UserNewMessageModal
+      open={newMessageOpen}
+      onClose={() => setNewMessageOpen(false)}
+      onSelectContact={handleSelectContact}
+    />
+    </>
   );
 }
