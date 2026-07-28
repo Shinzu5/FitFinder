@@ -10,11 +10,16 @@ export interface FrontDeskClerk {
   email: string;
 }
 
+export interface AddClerkResult {
+  ok: boolean;
+  message?: string;
+}
+
 interface OwnerStaffState {
   clerks: FrontDeskClerk[];
   loading: boolean;
   fetchStaff: () => Promise<void>;
-  addClerk: (clerk: Omit<FrontDeskClerk, "id">) => Promise<boolean>;
+  addClerk: (clerk: { fullName: string; email: string; password: string }) => Promise<AddClerkResult>;
   removeClerk: (id: string) => Promise<void>;
 }
 
@@ -43,27 +48,16 @@ export const useOwnerStaffStore = create<OwnerStaffState>()(
           const { data } = await api.post("/owner/staff", clerk);
           if (data.success) {
             set({ clerks: [...get().clerks, data.data] });
-            return true;
+            return { ok: true };
           }
-        } catch (error) {
+          return { ok: false, message: data.message || "Failed to create clerk account." };
+        } catch (error: any) {
           console.error("Failed to add clerk:", error);
+          const message =
+            error?.response?.data?.message ||
+            "Failed to create clerk account. Please check your connection and try again.";
+          return { ok: false, message };
         }
-
-        const email = clerk.email.trim().toLowerCase();
-        const exists = get().clerks.some((c) => c.email.toLowerCase() === email);
-        if (exists) return false;
-
-        set({
-          clerks: [
-            ...get().clerks,
-            {
-              id: `clerk-${Date.now()}`,
-              fullName: clerk.fullName.trim(),
-              email: clerk.email.trim(),
-            },
-          ],
-        });
-        return true;
       },
 
       removeClerk: async (id) => {

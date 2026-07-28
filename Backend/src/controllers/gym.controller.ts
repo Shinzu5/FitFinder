@@ -51,7 +51,7 @@ export async function getGym(req: Request, res: Response): Promise<void> {
     const gym = await prisma.gym.findUnique({
       where: { id: req.params.id as string },
       include: {
-        owner: { select: { id: true, fullName: true, email: true } },
+        owner: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
         membershipPlans: true,
         coaches: true,
         equipment: true,
