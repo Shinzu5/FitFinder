@@ -33,17 +33,34 @@ export default function RegisterGymPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !address.trim() || !contactNumber.trim() || !description.trim()) {
-      setError("Please fill in all required gym details.");
+
+    const missing: string[] = [];
+    if (!name.trim()) missing.push("Gym Name");
+    if (!address.trim()) missing.push("Address");
+    if (!contactNumber.trim()) missing.push("Contact Number");
+    if (!description.trim()) missing.push("Description");
+
+    if (missing.length > 0) {
+      setError(`Please fill in: ${missing.join(", ")}.`);
       return;
     }
+
+    setError(null);
+
+    // Website / slug is optional — treat blank or placeholder values as empty
+    const normalizedWebsite = websiteOrSlug.trim();
+    const websiteValue =
+      !normalizedWebsite ||
+      ["n/a", "na", "none", "-"].includes(normalizedWebsite.toLowerCase())
+        ? ""
+        : normalizedWebsite;
 
     registerGym({
       name: name.trim(),
       address: address.trim(),
       contactNumber: contactNumber.trim(),
       description: description.trim(),
-      websiteOrSlug: websiteOrSlug.trim(),
+      websiteOrSlug: websiteValue,
       coverPhotoName,
     });
     if (user && referenceNo) {
@@ -72,7 +89,7 @@ export default function RegisterGymPage() {
 
         <div className="mt-6 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="gymName">Gym Name</Label>
+            <Label htmlFor="gymName">Gym Name *</Label>
             <Input
               id="gymName"
               value={name}
@@ -82,7 +99,7 @@ export default function RegisterGymPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="address">Address</Label>
+            <Label htmlFor="address">Address *</Label>
             <Input
               id="address"
               value={address}
@@ -92,7 +109,7 @@ export default function RegisterGymPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact">Contact Number</Label>
+            <Label htmlFor="contact">Contact Number *</Label>
             <Input
               id="contact"
               value={contactNumber}
@@ -102,7 +119,7 @@ export default function RegisterGymPage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Cover Photo Upload</Label>
+            <Label>Cover Photo Upload (optional)</Label>
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0A0A0A] px-4 py-8 text-sm text-zinc-400 transition hover:border-[#FFD700]/40 hover:text-zinc-200">
               <Upload className="h-5 w-5" />
               {coverPhotoName ? coverPhotoName : "Upload Cover Photo"}
@@ -119,7 +136,7 @@ export default function RegisterGymPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description *</Label>
             <textarea
               id="description"
               value={description}
@@ -138,8 +155,11 @@ export default function RegisterGymPage() {
                 id="slug"
                 value={websiteOrSlug}
                 onChange={(e) => setWebsiteOrSlug(e.target.value)}
-                placeholder="e.g. https://mygym.com or @mygym"
+                placeholder="Leave blank if you don't have one"
               />
+              <p className="text-xs text-zinc-500">
+                You can skip this and submit without a website or slug.
+              </p>
             </div>
           </div>
         </div>
