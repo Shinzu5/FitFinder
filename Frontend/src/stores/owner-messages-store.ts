@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import api from "@/lib/api";
 
 export type MessageSender = "owner" | "contact";
 
@@ -31,102 +31,49 @@ export interface Conversation {
   messages: ChatMessage[];
 }
 
-export const DEFAULT_MESSAGE_CONTACTS: MessageContact[] = [
-  {
-    id: "contact-ai",
-    name: "Fitness AI",
-    subtitle: "Your AI assistant",
-    type: "ai",
-    geminiTag: true,
-  },
-  {
-    id: "contact-alex-cruz",
-    name: "Alex Cruz",
-    type: "member",
-    isOnline: true,
-    avatarUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80",
-  },
-  {
-    id: "contact-maria-santos",
-    name: "Maria Santos",
-    type: "member",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
-  },
-];
+const AI_CONTACT: MessageContact = {
+  id: "contact-ai",
+  name: "Fitness AI",
+  subtitle: "Your AI assistant",
+  type: "ai",
+  geminiTag: true,
+};
 
-const DEFAULT_CONVERSATIONS: Conversation[] = [
-  {
-    id: "conv-ai",
-    contactId: "contact-ai",
-    messages: [
-      {
-        id: "msg-ai-1",
-        sender: "contact",
-        text: "Hi! I'm your Fitness AI assistant. Ask me about workouts, nutrition, or gym policies.",
-        time: "9:00 AM",
-        createdAt: Date.now() - 1000 * 60 * 60 * 4,
-      },
-    ],
-  },
-  {
-    id: "conv-alex-cruz",
-    contactId: "contact-alex-cruz",
-    messages: [
-      {
-        id: "msg-alex-1",
-        sender: "contact",
-        text: "Can I freeze my membership until next month? I will be travelling for work.",
-        time: "10:28 AM",
-        createdAt: Date.now() - 1000 * 60 * 12,
-      },
-      {
-        id: "msg-alex-2",
-        sender: "owner",
-        text: "Hi Alex! Membership freeze is allowed for up to 30 days upon request.",
-        time: "10:30 AM",
-        createdAt: Date.now() - 1000 * 60 * 10,
-      },
-      {
-        id: "msg-alex-3",
-        sender: "owner",
-        text: "We open at 8 AM and close by 9 PM on weekends. Drop by anytime!",
-        time: "10:30 AM",
-        createdAt: Date.now() - 1000 * 60 * 9,
-      },
-      {
-        id: "msg-alex-4",
-        sender: "contact",
-        text: "Perfect, thank you! I'll visit on Saturday morning.",
-        time: "10:32 AM",
-        createdAt: Date.now() - 1000 * 60 * 7,
-      },
-    ],
-  },
-  {
-    id: "conv-maria-santos",
-    contactId: "contact-maria-santos",
-    messages: [
-      {
-        id: "msg-maria-1",
-        sender: "contact",
-        text: "Can I freeze my membership until next month?",
-        time: "Yesterday",
-        createdAt: Date.now() - 1000 * 60 * 60 * 26,
-      },
-    ],
-  },
-];
+const AI_CONVERSATION: Conversation = {
+  id: "conv-ai",
+  contactId: "contact-ai",
+  messages: [
+    {
+      id: "msg-ai-1",
+      sender: "contact",
+      text: "Hi! I'm your Fitness AI assistant. Ask me about workouts, nutrition, or gym policies.",
+      time: "9:00 AM",
+      createdAt: Date.now(),
+    },
+  ],
+};
 
-interface OwnerMessagesState {
-  contacts: MessageContact[];
-  conversations: Conversation[];
-  activeConversationId: string;
-  addContact: (contact: MessageContact) => void;
-  setActiveConversation: (id: string) => void;
-  openConversationWithContact: (contactId: string) => string;
-  sendMessage: (conversationId: string, text: string) => void;
+function roleLabel(role: string): string {
+  switch (role) {
+    case "OWNER":
+      return "Gym Owner";
+    case "ADMIN":
+      return "Admin";
+    case "CLERK":
+      return "Clerk";
+    default:
+      return "Member";
+  }
+}
+
+function toContact(user: { id: string; fullName: string; role: string; avatarUrl?: string | null }): MessageContact {
+  return {
+    id: user.id,
+    name: user.fullName,
+    subtitle: roleLabel(user.role),
+    avatarUrl: user.avatarUrl || undefined,
+    type: "member",
+  };
 }
 
 export function formatMessageTime(date = new Date()) {
@@ -139,7 +86,7 @@ export function formatMessageTime(date = new Date()) {
 
 export function getConversationPreview(
   conversation: Conversation,
-  contactName: string,
+  _contactName: string,
 ): string {
   const last = conversation.messages[conversation.messages.length - 1];
   if (!last) return "No messages yet";
@@ -155,87 +102,273 @@ export function getContactInitials(name: string) {
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
-export const useOwnerMessagesStore = create<OwnerMessagesState>()(
-  persist(
-    (set, get) => ({
-      contacts: DEFAULT_MESSAGE_CONTACTS,
-      conversations: DEFAULT_CONVERSATIONS,
-      activeConversationId: "conv-alex-cruz",
+interface RawDirectMessage {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  text: string;
+  createdAt: string;
+}
 
-      addContact: (contact) => {
-        const exists = get().contacts.some((item) => item.id === contact.id);
-        if (exists) return;
-        set({ contacts: [...get().contacts, contact] });
-      },
+interface OwnerMessagesState {
+  currentUserId: string | null;
+  contacts: MessageContact[];
+  conversations: Conversation[];
+  activeConversationId: string;
+  loadingConversations: boolean;
+  searchQuery: string;
+  searchResults: MessageContact[];
+  searching: boolean;
+  setCurrentUserId: (id: string) => void;
+  fetchConversations: () => Promise<void>;
+  searchUsers: (query: string) => Promise<void>;
+  clearSearch: () => void;
+  setActiveConversation: (id: string) => void;
+  openConversationWithContact: (contact: MessageContact) => Promise<string>;
+  sendMessage: (conversationId: string, text: string) => Promise<void>;
+  receiveMessage: (
+    raw: RawDirectMessage,
+    sender: { id: string; fullName: string; role: string; avatarUrl?: string | null },
+  ) => void;
+}
 
-      setActiveConversation: (id) => set({ activeConversationId: id }),
+function toChatMessage(raw: RawDirectMessage, currentUserId: string): ChatMessage {
+  const date = new Date(raw.createdAt);
+  return {
+    id: raw.id,
+    sender: raw.senderId === currentUserId ? "owner" : "contact",
+    text: raw.text,
+    time: formatMessageTime(date),
+    createdAt: date.getTime(),
+  };
+}
 
-      openConversationWithContact: (contactId) => {
-        const existing = get().conversations.find((conv) => conv.contactId === contactId);
-        if (existing) {
-          set({ activeConversationId: existing.id });
-          return existing.id;
-        }
+export const useOwnerMessagesStore = create<OwnerMessagesState>()((set, get) => ({
+  currentUserId: null,
+  contacts: [AI_CONTACT],
+  conversations: [AI_CONVERSATION],
+  activeConversationId: "",
+  loadingConversations: false,
+  searchQuery: "",
+  searchResults: [],
+  searching: false,
 
-        const newConversation: Conversation = {
-          id: `conv-${contactId}-${Date.now()}`,
-          contactId,
-          messages: [],
-        };
+  setCurrentUserId: (id) => set({ currentUserId: id }),
+
+  fetchConversations: async () => {
+    set({ loadingConversations: true });
+    try {
+      const { data } = await api.get("/messages/conversations");
+      if (data.success) {
+        const currentUserId = get().currentUserId;
+        const dbContacts: MessageContact[] = data.data.map((row: any) => toContact(row.user));
+        const dbConversations: Conversation[] = data.data.map((row: any) => {
+          const previewMessage: ChatMessage | null = currentUserId
+            ? toChatMessage(
+                {
+                  id: `preview-${row.user.id}`,
+                  senderId: row.lastSenderId,
+                  receiverId: currentUserId,
+                  text: row.lastMessage,
+                  createdAt: row.lastMessageAt,
+                },
+                currentUserId,
+              )
+            : null;
+          return {
+            id: row.user.id,
+            contactId: row.user.id,
+            messages: previewMessage ? [previewMessage] : [],
+          };
+        });
 
         set({
-          conversations: [...get().conversations, newConversation],
-          activeConversationId: newConversation.id,
+          contacts: [AI_CONTACT, ...dbContacts],
+          conversations: [
+            AI_CONVERSATION,
+            ...dbConversations.map((conv) => {
+              // Keep a fully-loaded thread if the user already opened it this session.
+              const existing = get().conversations.find((c) => c.id === conv.id);
+              return existing && existing.messages.length > 1 ? existing : conv;
+            }),
+          ],
+          loadingConversations: false,
         });
-        return newConversation.id;
-      },
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to fetch conversations:", error);
+    }
+    set({ loadingConversations: false });
+  },
 
-      sendMessage: (conversationId, text) => {
-        const trimmed = text.trim();
-        if (!trimmed) return;
+  searchUsers: async (query) => {
+    set({ searchQuery: query });
+    const trimmed = query.trim();
+    if (!trimmed) {
+      set({ searchResults: [], searching: false });
+      return;
+    }
+    set({ searching: true });
+    try {
+      const { data } = await api.get("/messages/search", { params: { q: trimmed } });
+      if (data.success) {
+        set({ searchResults: data.data.map(toContact), searching: false });
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to search users:", error);
+    }
+    set({ searching: false });
+  },
 
-        const message: ChatMessage = {
-          id: `msg-${Date.now()}`,
-          sender: "owner",
-          text: trimmed,
+  clearSearch: () => set({ searchQuery: "", searchResults: [] }),
+
+  setActiveConversation: (id) => set({ activeConversationId: id }),
+
+  receiveMessage: (raw, sender) => {
+    const currentUserId = get().currentUserId;
+    if (!currentUserId) return;
+
+    const contactId = raw.senderId === currentUserId ? raw.receiverId : raw.senderId;
+
+    const contactExists = get().contacts.some((c) => c.id === contactId);
+    if (!contactExists) {
+      set({ contacts: [...get().contacts, toContact(sender)] });
+    }
+
+    const message = toChatMessage(raw, currentUserId);
+    const existingConversation = get().conversations.find((conv) => conv.id === contactId);
+
+    if (existingConversation) {
+      // Avoid duplicating a message we already have (e.g. our own optimistic send).
+      if (existingConversation.messages.some((m) => m.id === message.id)) return;
+      set({
+        conversations: get().conversations.map((conv) =>
+          conv.id === contactId ? { ...conv, messages: [...conv.messages, message] } : conv,
+        ),
+      });
+    } else {
+      set({
+        conversations: [...get().conversations, { id: contactId, contactId, messages: [message] }],
+      });
+    }
+  },
+
+  openConversationWithContact: async (contact) => {
+    if (contact.type === "ai") {
+      set({ activeConversationId: AI_CONVERSATION.id });
+      return AI_CONVERSATION.id;
+    }
+
+    const currentUserId = get().currentUserId;
+    const existingContact = get().contacts.some((c) => c.id === contact.id);
+    if (!existingContact) {
+      set({ contacts: [...get().contacts, contact] });
+    }
+
+    let existingConversation = get().conversations.find((conv) => conv.id === contact.id);
+    if (!existingConversation) {
+      existingConversation = { id: contact.id, contactId: contact.id, messages: [] };
+      set({ conversations: [...get().conversations, existingConversation] });
+    }
+
+    set({ activeConversationId: contact.id });
+
+    try {
+      const { data } = await api.get(`/messages/thread/${contact.id}`);
+      if (data.success && currentUserId) {
+        const messages = data.data.messages.map((m: RawDirectMessage) =>
+          toChatMessage(m, currentUserId),
+        );
+        set({
+          conversations: get().conversations.map((conv) =>
+            conv.id === contact.id ? { ...conv, messages } : conv,
+          ),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load conversation thread:", error);
+    }
+
+    return contact.id;
+  },
+
+  sendMessage: async (conversationId, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // AI assistant stays local-only — not a registered user in the database.
+    if (conversationId === AI_CONVERSATION.id) {
+      const message: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        sender: "owner",
+        text: trimmed,
+        time: formatMessageTime(),
+        createdAt: Date.now(),
+      };
+      set({
+        conversations: get().conversations.map((conv) =>
+          conv.id === conversationId ? { ...conv, messages: [...conv.messages, message] } : conv,
+        ),
+      });
+
+      window.setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `msg-ai-reply-${Date.now()}`,
+          sender: "contact",
+          text: "Thanks for your message! I can help with workout plans, nutrition tips, and gym FAQs. What would you like to know?",
           time: formatMessageTime(),
           createdAt: Date.now(),
         };
+        set({
+          conversations: get().conversations.map((conv) =>
+            conv.id === conversationId ? { ...conv, messages: [...conv.messages, reply] } : conv,
+          ),
+        });
+      }, 900);
+      return;
+    }
 
+    const optimisticMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      sender: "owner",
+      text: trimmed,
+      time: formatMessageTime(),
+      createdAt: Date.now(),
+    };
+
+    set({
+      conversations: get().conversations.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, messages: [...conv.messages, optimisticMessage] }
+          : conv,
+      ),
+    });
+
+    try {
+      const { data } = await api.post("/messages", {
+        receiverId: conversationId,
+        text: trimmed,
+      });
+      if (data.success) {
+        const currentUserId = get().currentUserId;
+        const confirmed = currentUserId ? toChatMessage(data.data, currentUserId) : optimisticMessage;
         set({
           conversations: get().conversations.map((conv) =>
             conv.id === conversationId
-              ? { ...conv, messages: [...conv.messages, message] }
+              ? {
+                  ...conv,
+                  messages: conv.messages.map((m) =>
+                    m.id === optimisticMessage.id ? confirmed : m,
+                  ),
+                }
               : conv,
           ),
         });
-
-        const conversation = get().conversations.find((conv) => conv.id === conversationId);
-        const contact = get().contacts.find((item) => item.id === conversation?.contactId);
-
-        if (contact?.type === "ai") {
-          window.setTimeout(() => {
-            const reply: ChatMessage = {
-              id: `msg-ai-reply-${Date.now()}`,
-              sender: "contact",
-              text: "Thanks for your message! I can help with workout plans, nutrition tips, and gym FAQs. What would you like to know?",
-              time: formatMessageTime(),
-              createdAt: Date.now(),
-            };
-            set({
-              conversations: get().conversations.map((conv) =>
-                conv.id === conversationId
-                  ? { ...conv, messages: [...conv.messages, reply] }
-                  : conv,
-              ),
-            });
-          }, 900);
-        }
-      },
-    }),
-    {
-      name: "fitfinder-owner-messages",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+      }
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
+  },
+}));

@@ -2,6 +2,7 @@ import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
+import { hashPassword } from "../utils/hash";
 
 // Helper: get the owner's gym
 async function getOwnerGym(ownerId: string) {
@@ -402,31 +403,51 @@ export async function getStaff(req: AuthRequest, res: Response): Promise<void> {
 }
 
 // POST /api/owner/staff
+// Creates a brand-new CLERK account with the email/password the owner enters,
+// so the clerk can log in immediately with those credentials.
 export async function addStaff(req: AuthRequest, res: Response): Promise<void> {
   try {
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
-    const user = await prisma.user.findUnique({
-      where: { email: req.body.email.toLowerCase() },
-    });
+    const { fullName, email, password } = req.body;
 
-    if (!user) {
-      sendError(res, "User not found. They need to register first.");
+    if (!fullName?.trim() || !email?.trim() || !password) {
+      sendError(res, "Full name, email, and password are required");
       return;
     }
 
-    if (user.role !== "CLERK") {
-      sendError(res, "User must have CLERK role");
+    if (password.length < 6) {
+      sendError(res, "Password must be at least 6 characters");
       return;
     }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { clerkGymId: gym.id },
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+    if (existing) {
+      sendError(res, "An account with that email already exists.", 409);
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    const clerk = await prisma.user.create({
+      data: {
+        fullName: fullName.trim(),
+        email: normalizedEmail,
+        passwordHash,
+        role: "CLERK",
+        emailVerified: true, // owner-created staff accounts skip email verification
+        clerkGymId: gym.id,
+      },
     });
 
-    sendCreated(res, { id: user.id, fullName: user.fullName, email: user.email }, "Staff added");
+    sendCreated(
+      res,
+      { id: clerk.id, fullName: clerk.fullName, email: clerk.email },
+      "Clerk account created",
+    );
   } catch (error) {
     console.error("Add staff error:", error);
     sendError(res, "Failed to add staff", 500);

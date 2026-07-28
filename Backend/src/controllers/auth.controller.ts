@@ -10,10 +10,11 @@ import { AuthRequest } from "../middleware/auth";
 export async function register(req: Request, res: Response): Promise<void> {
   try {
     const { fullName, email, password, role } = req.body;
+    const normalizedEmail = email.toLowerCase();
 
     // Check if user exists
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-    if (existing) {
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing && existing.emailVerified) {
       sendError(res, "An account with that email already exists.", 409);
       return;
     }
@@ -26,19 +27,39 @@ export async function register(req: Request, res: Response): Promise<void> {
     const verificationCode = generateVerificationCode();
     const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
-    const user = await prisma.user.create({
-      data: {
-        fullName,
-        email: email.toLowerCase(),
-        passwordHash,
-        role: userRole,
-        verificationCode,
-        verificationExpires,
-      },
-    });
+    // If a previous registration attempt created the user but never got
+    // verified (e.g. the verification email failed to send), reuse that
+    // record instead of permanently blocking this email with a 409.
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            fullName,
+            passwordHash,
+            role: userRole,
+            verificationCode,
+            verificationExpires,
+          },
+        })
+      : await prisma.user.create({
+          data: {
+            fullName,
+            email: normalizedEmail,
+            passwordHash,
+            role: userRole,
+            verificationCode,
+            verificationExpires,
+          },
+        });
 
-    // Send verification email
-    await sendVerificationEmail(user.email, user.fullName, verificationCode);
+    // Send verification email — don't fail the whole registration if this
+    // errors out; the account was already created/updated successfully and
+    // the user can request a new code via "resend verification".
+    try {
+      await sendVerificationEmail(user.email, user.fullName, verificationCode);
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+    }
 
     sendCreated(res, {
       userId: user.id,

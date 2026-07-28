@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import { useWalkInApprovalSync } from "@/hooks/useWalkInApprovalSync";
+import { useDirectMessageSocket } from "@/hooks/useDirectMessageSocket";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
 
 const NAV_ITEMS = [
@@ -35,6 +36,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { user, role, logout, isAuthenticated, hasHydrated } = useAuthStore();
   const [ready, setReady] = useState(false);
+
+  useDirectMessageSocket();
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {

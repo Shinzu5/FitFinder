@@ -17,6 +17,7 @@ export function AddClerkModal({ open, onClose }: AddClerkModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +38,7 @@ export function AddClerkModal({ open, onClose }: AddClerkModalProps) {
 
   if (!open) return null;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!fullName.trim() || !email.trim() || !password.trim()) {
       setError("Please fill in all fields.");
@@ -52,9 +53,13 @@ export function AddClerkModal({ open, onClose }: AddClerkModalProps) {
       return;
     }
 
-    const ok = addClerk({ fullName, email });
-    if (!ok) {
-      setError("A clerk with this email already exists.");
+    setSubmitting(true);
+    setError(null);
+    const result = await addClerk({ fullName: fullName.trim(), email: email.trim(), password });
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.message || "Failed to create clerk account.");
       return;
     }
 
@@ -132,9 +137,10 @@ export function AddClerkModal({ open, onClose }: AddClerkModalProps) {
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+            disabled={submitting}
+            className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-60"
           >
-            Add Clerk
+            {submitting ? "Creating..." : "Add Clerk"}
           </button>
         </div>
       </form>
