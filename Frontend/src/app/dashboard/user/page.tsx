@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
+import api from "@/lib/api";
 import { Plus } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
@@ -21,8 +22,24 @@ export default function UserDashboardPage() {
   const firstName = getFirstName(user?.fullName ?? "Member");
   const hasMembership = Boolean(joinedGymId);
 
+  const [realGyms, setRealGyms] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchGyms() {
+      try {
+        const { data } = await api.get("/gyms");
+        if (data.success) {
+          setRealGyms(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch real gyms:", error);
+      }
+    }
+    fetchGyms();
+  }, []);
+
   const availableGyms = useMemo(() => {
-    const gyms = [...mockGyms];
+    const gyms = [...realGyms, ...mockGyms];
     if (registeredGym && !gyms.some((gym) => gym.id === registeredGym.id)) {
       gyms.unshift(registeredGymToListItem(registeredGym));
     }
@@ -34,7 +51,7 @@ export default function UserDashboardPage() {
       });
     }
     return gyms;
-  }, [registeredGym, joinedGymId]);
+  }, [realGyms, registeredGym, joinedGymId]);
 
   const joinedGymName =
     membership?.gymName ?? availableGyms.find((gym) => gym.id === joinedGymId)?.name ?? "your gym";

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
 import { mockGyms } from "@/lib/mock-gyms";
@@ -22,6 +23,29 @@ export default function UserGymProfilePage() {
   const ownerCoaches = useOwnerCoachesStore((state) => state.coaches);
   const ownerEquipment = useOwnerEquipmentStore((state) => state.equipment);
 
+  const [realGym, setRealGym] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchGym() {
+      try {
+        const { data } = await api.get(`/gyms/${gymId}`);
+        if (data.success) {
+          setRealGym(data.data);
+        }
+      } catch (error) {
+        // Will fallback to mockGym or registeredGym if it fails
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (gymId) {
+      fetchGym();
+    } else {
+      setLoading(false);
+    }
+  }, [gymId]);
+
   const mockGym = useMemo(() => {
     const fromMock = mockGyms.find((gym) => gym.id === gymId);
     if (fromMock) return fromMock;
@@ -35,6 +59,7 @@ export default function UserGymProfilePage() {
         gymId,
         mockGym,
         registeredGym,
+        realGym,
         ownerName: user?.fullName ?? "Gym Owner",
         ownerAvatarUrl: user?.avatarUrl,
         ownerPlans,
@@ -45,6 +70,7 @@ export default function UserGymProfilePage() {
       gymId,
       mockGym,
       registeredGym,
+      realGym,
       user?.fullName,
       user?.avatarUrl,
       ownerPlans,
@@ -52,6 +78,14 @@ export default function UserGymProfilePage() {
       ownerEquipment,
     ],
   );
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#FACC15] border-t-transparent"></div>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (
@@ -63,7 +97,7 @@ export default function UserGymProfilePage() {
           </p>
           <Link
             href="/dashboard/user"
-            className="mt-6 inline-flex rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black hover:bg-[#e6c200]"
+            className="mt-6 inline-flex rounded-lg bg-[#FACC15] px-4 py-2 text-sm font-semibold text-black hover:bg-[#e6c200]"
           >
             Back to gyms
           </Link>
