@@ -2,59 +2,42 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ShieldCheck } from "lucide-react";
+import { CalendarDays, Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { CreateGymShell } from "@/components/features/create-gym/CreateGymShell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   formatPlanPrice,
   getAccessUntilDate,
   getOwnerPlan,
 } from "@/lib/owner-plans";
-import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
-import { useOwnerPlanTransactionsStore } from "@/stores/owner-plan-transactions-store";
 
 export default function CreateGymPaymentPage() {
   const router = useRouter();
-  const user = useAuthStore((state) => state.user);
-  const recordPlanPurchase = useOwnerPlanTransactionsStore((state) => state.recordPlanPurchase);
   const {
     selectedPlanId,
-    gcashNumber,
-    accountName,
-    setPaymentDetails,
-    completePayment,
+    paymentLoading,
+    paymentError,
+    initiateGcashPayment,
   } = useCreateGymStore();
   const plan = getOwnerPlan(selectedPlanId);
   const [error, setError] = useState<string | null>(null);
-  const [number, setNumber] = useState(gcashNumber);
-  const [name, setName] = useState(accountName);
 
-  function handleProceed() {
-    if (!/^09\d{9}$/.test(number.replace(/\s+/g, ""))) {
-      setError("Enter a valid GCash mobile number (09XXXXXXXXX).");
-      return;
-    }
-    if (name.trim().length < 2) {
-      setError("Enter the account name as shown in GCash.");
-      return;
-    }
+  // Check if payment_failed query param is present (returned from Xendit failure)
+  const isFailed =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("payment_failed") === "true";
 
+  async function handlePayViaGcash() {
     setError(null);
-    setPaymentDetails(number.trim(), name.trim());
-    completePayment();
-    const { referenceNo, selectedPlanId: planId } = useCreateGymStore.getState();
-    if (user && referenceNo) {
-      recordPlanPurchase({
-        ownerId: user.id,
-        ownerName: name.trim() || user.fullName,
-        ownerEmail: user.email,
-        planId,
-        referenceNo,
-      });
+
+    const redirectUrl = await initiateGcashPayment();
+
+    if (redirectUrl) {
+      // Redirect user to GCash authorization page
+      window.location.href = redirectUrl;
+    } else {
+      setError("Could not create payment. Please check your connection and try again.");
     }
-    router.push("/dashboard/user/create-gym/done");
   }
 
   return (
@@ -106,7 +89,7 @@ export default function CreateGymPaymentPage() {
             <div>
               <p className="font-medium text-white">GCash payment</p>
               <p className="text-xs text-zinc-400">
-                Powered by Xendit · Secure checkout
+                Powered by Xendit · Secure redirect
               </p>
             </div>
           </div>
@@ -123,28 +106,22 @@ export default function CreateGymPaymentPage() {
           </p>
         </div>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="gcashNumber">GCash Mobile Number</Label>
-            <Input
-              id="gcashNumber"
-              value={number}
-              onChange={(e) => setNumber(e.target.value)}
-              placeholder="09XX XXX XXXX"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="accountName">Account Name</Label>
-            <Input
-              id="accountName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Full name as in GCash"
-            />
+        {/* Info: How the redirect works */}
+        <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+          <div className="flex items-start gap-3 text-sm text-sky-200">
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+            <p>
+              You&apos;ll be redirected to GCash to authorize the payment securely.
+              No need to enter your phone number — just confirm in the GCash app.
+            </p>
           </div>
         </div>
 
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        {(error || paymentError || isFailed) ? (
+          <p className="text-sm text-red-400">
+            {error || paymentError || "Payment was cancelled or failed. Please try again."}
+          </p>
+        ) : null}
 
         <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
@@ -154,10 +131,24 @@ export default function CreateGymPaymentPage() {
 
         <button
           type="button"
-          onClick={handleProceed}
-          className="w-full rounded-xl border border-white/10 bg-[#1a1a1a] py-3.5 text-sm font-bold text-[#FFD700] transition hover:bg-[#222]"
+          onClick={handlePayViaGcash}
+          disabled={paymentLoading}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#007DFE] py-3.5 text-sm font-bold text-white transition hover:bg-[#0066CC] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Proceed
+          {paymentLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating payment...
+            </>
+          ) : (
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" fill="white" />
+                <text x="12" y="16" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#007DFE">G</text>
+              </svg>
+              Pay ₱{formatPlanPrice(plan.price)} via GCash
+            </>
+          )}
         </button>
       </div>
     </CreateGymShell>

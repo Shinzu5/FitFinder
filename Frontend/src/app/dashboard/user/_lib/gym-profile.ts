@@ -401,6 +401,7 @@ export interface ResolveGymProfileInput {
   gymId: string;
   mockGym?: Gym;
   registeredGym?: RegisteredGym | null;
+  realGym?: any | null;
   ownerName?: string;
   ownerAvatarUrl?: string;
   ownerPlans?: MembershipPlan[];
@@ -413,12 +414,52 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
     gymId,
     mockGym,
     registeredGym,
+    realGym,
     ownerName = "Gym Owner",
     ownerAvatarUrl,
     ownerPlans = [],
     ownerCoaches = [],
     ownerEquipment = [],
   } = input;
+
+  if (realGym && realGym.id === gymId) {
+    const { openTime, closeTime } = parseScheduleHours(realGym.schedule || "");
+    const mappedPlans = mapOwnerPlans(realGym.membershipPlans || []);
+    return {
+      id: realGym.id,
+      name: realGym.name,
+      location: realGym.address || realGym.location,
+      description: realGym.description,
+      hours: realGym.schedule || realGym.hours,
+      openTime,
+      closeTime,
+      website: formatWebsite(realGym.website || ""),
+      phone: realGym.contactNumber || "+63 900 000 0000",
+      socialHandle: `@${formatWebsite(realGym.website || "").split(".")[0]}`,
+      members: realGym._count?.gymMemberships || 0,
+      rating: 4.8,
+      reviewCount: realGym._count?.gymMemberships || 0,
+      image: realGym.coverImageUrl || realGym.image,
+      owner: {
+        name: realGym.owner?.fullName || ownerName,
+        bio: `Owner of ${realGym.name}. Dedicated to helping members train smarter and stay consistent.`,
+        avatarUrl: ownerAvatarUrl ?? "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=200&q=80",
+      },
+      plans: mappedPlans.length > 0 ? mappedPlans : [
+        {
+          id: "plan-default",
+          name: "Monthly",
+          price: realGym.pricePerMonth || 0,
+          periodLabel: "/mo",
+          durationLabel: "30 days access",
+          features: ["Full Gym Access", "Locker Room"],
+          popular: true,
+        },
+      ],
+      coaches: mapOwnerCoaches(realGym.coaches || []),
+      equipment: mapOwnerEquipment(realGym.equipment || []).length > 0 ? mapOwnerEquipment(realGym.equipment || []) : ["Full Gym Access", "Locker Room"],
+    };
+  }
 
   if (registeredGym?.id === gymId) {
     return buildFromRegisteredGym(

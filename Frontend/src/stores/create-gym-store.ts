@@ -43,13 +43,15 @@ interface CreateGymState {
   referenceNo: string | null;
   paidAt: string | null;
   validUntil: string | null;
-  gcashNumber: string;
-  accountName: string;
+  xenditPaymentId: string | null;
+  paymentRedirectUrl: string | null;
+  paymentLoading: boolean;
+  paymentError: string | null;
   registeredGym: RegisteredGym | null;
   subscriptionId: string | null;
   setSelectedPlanId: (id: OwnerPlanId) => void;
-  setPaymentDetails: (gcashNumber: string, accountName: string) => void;
-  completePayment: () => Promise<void>;
+  initiateGcashPayment: () => Promise<string | null>;
+  checkPaymentStatus: () => Promise<"PENDING" | "SUCCEEDED" | "FAILED">;
   registerGym: (gym: RegisterGymPayload) => Promise<void>;
   updateGymProfile: (updates: GymProfileUpdate) => Promise<void>;
   deleteGym: () => Promise<void>;
@@ -64,43 +66,92 @@ export const useCreateGymStore = create<CreateGymState>()(
       referenceNo: null,
       paidAt: null,
       validUntil: null,
-      gcashNumber: "",
-      accountName: "",
+      xenditPaymentId: null,
+      paymentRedirectUrl: null,
+      paymentLoading: false,
+      paymentError: null,
       registeredGym: null,
       subscriptionId: null,
 
       setSelectedPlanId: (id) => set({ selectedPlanId: id }),
 
-      setPaymentDetails: (gcashNumber, accountName) =>
-        set({ gcashNumber, accountName }),
-
-      completePayment: async () => {
+      /**
+       * Create a GCash payment via Xendit and return the redirect URL.
+       * The user should be redirected to this URL to complete payment.
+       */
+      initiateGcashPayment: async () => {
         const plan = getOwnerPlan(get().selectedPlanId);
+        set({ paymentLoading: true, paymentError: null });
+
         try {
-          const { data } = await api.post("/subscriptions/purchase", {
-            planId: plan.id,
-            planName: plan.name,
-            price: plan.price,
-            months: plan.months,
+          const { data } = await api.post("/payments/create-gcash", {
+            type: "SUBSCRIPTION",
+            amount: plan.price,
+            description: `FitFinder ${plan.name} Plan — ${plan.months} month${plan.months > 1 ? "s" : ""}`,
+            metadata: {
+              planId: plan.id,
+              planName: plan.name,
+              months: plan.months,
+              price: plan.price,
+            },
           });
+
+          if (data.success && data.data.redirectUrl) {
+            set({
+              xenditPaymentId: data.data.xenditPaymentId,
+              paymentRedirectUrl: data.data.redirectUrl,
+              referenceNo: data.data.referenceId,
+              paymentLoading: false,
+            });
+            return data.data.redirectUrl;
+          }
+
+          set({ paymentLoading: false, paymentError: "Failed to create payment" });
+          return null;
+        } catch (error) {
+          console.error("Failed to initiate GCash payment:", error);
+          set({
+            paymentLoading: false,
+            paymentError: "Failed to create GCash payment. Please try again.",
+          });
+          return null;
+        }
+      },
+
+      /**
+       * Check payment status by polling the backend (which checks Xendit).
+       */
+      checkPaymentStatus: async () => {
+        const paymentId = get().xenditPaymentId;
+        if (!paymentId) return "PENDING";
+
+        try {
+          const { data } = await api.get(`/payments/${paymentId}/status`);
 
           if (data.success) {
-            set({
-              paymentComplete: true,
-              referenceNo: data.data.referenceNo,
-              paidAt: data.data.paidAt,
-              validUntil: data.data.validUntil,
-              subscriptionId: data.data.id,
-            });
+            const status = data.data.status;
+
+            if (status === "SUCCEEDED") {
+              const plan = getOwnerPlan(get().selectedPlanId);
+              set({
+                paymentComplete: true,
+                paidAt: data.data.paidAt || new Date().toISOString(),
+                validUntil: getAccessUntilDate(plan.months),
+                referenceNo: data.data.referenceId || get().referenceNo,
+              });
+              return "SUCCEEDED";
+            }
+
+            if (status === "FAILED" || status === "EXPIRED") {
+              set({ paymentError: "Payment was not completed" });
+              return "FAILED";
+            }
           }
+
+          return "PENDING";
         } catch (error) {
-          // Fallback to local
-          set({
-            paymentComplete: true,
-            referenceNo: `XDT-${Date.now().toString().slice(-7)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-            paidAt: new Date().toISOString(),
-            validUntil: getAccessUntilDate(plan.months),
-          });
+          console.error("Payment status check failed:", error);
+          return "PENDING";
         }
       },
 
@@ -165,7 +216,33 @@ export const useCreateGymStore = create<CreateGymState>()(
         if (!gym) return;
 
         try {
-          await api.put(`/gyms/${gym.id}`, updates);
+          if (gym.id.startsWith("gym-")) {
+            // Gym was only saved locally (due to previous token error). Create it now!
+            const { data } = await api.post("/gyms", {
+              name: updates.name ?? gym.name,
+              address: updates.address ?? gym.address,
+              contactNumber: updates.contactNumber ?? gym.contactNumber,
+              description: updates.description ?? gym.description,
+              websiteOrSlug: updates.websiteOrSlug ?? gym.websiteOrSlug,
+              coverImageUrl: updates.coverImageUrl ?? gym.coverImageUrl,
+              schedule: updates.schedule ?? gym.schedule,
+              pricePerMonth: updates.membershipPrice ?? gym.membershipPrice,
+              subscriptionId: get().subscriptionId,
+            });
+            if (data.success) {
+              set({
+                registeredGym: {
+                  ...gym,
+                  ...updates,
+                  id: data.data.id,
+                  createdAt: data.data.createdAt,
+                }
+              });
+              return;
+            }
+          } else {
+            await api.put(`/gyms/${gym.id}`, updates);
+          }
         } catch (error) {
           console.error("Failed to update gym:", error);
         }
@@ -192,8 +269,10 @@ export const useCreateGymStore = create<CreateGymState>()(
           referenceNo: null,
           paidAt: null,
           validUntil: null,
-          gcashNumber: "",
-          accountName: "",
+          xenditPaymentId: null,
+          paymentRedirectUrl: null,
+          paymentLoading: false,
+          paymentError: null,
           registeredGym: null,
           subscriptionId: null,
         }),
