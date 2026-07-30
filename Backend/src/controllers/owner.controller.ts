@@ -513,3 +513,113 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     sendError(res, "Failed to send message", 500);
   }
 }
+
+function toFrontendTxnType(type: string): string {
+  return type.toLowerCase().replace(/_/g, "-");
+}
+
+// GET /api/owner/sales-reports
+export async function getSalesReports(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const dateFilter = typeof req.query.date === "string" ? req.query.date.trim() : "";
+
+    const where: any = { gymId: gym.id };
+
+    if (dateFilter) {
+      // Expect YYYY-MM-DD
+      const parts = dateFilter.split("-").map(Number);
+      if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+        const [y, m, d] = parts;
+        where.reportDate = new Date(Date.UTC(y, m - 1, d));
+      }
+    }
+
+    if (search) {
+      where.clerk = {
+        OR: [
+          { fullName: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } },
+        ],
+      };
+    }
+
+    const reports = await prisma.dailySalesReport.findMany({
+      where,
+      include: {
+        clerk: { select: { id: true, fullName: true, email: true } },
+      },
+      orderBy: [{ closedAt: "desc" }],
+    });
+
+    sendSuccess(
+      res,
+      reports.map((report) => ({
+        id: report.id,
+        date: report.reportDate,
+        clerkId: report.clerkId,
+        clerkName: report.clerk.fullName,
+        totalTransactions: report.totalTransactions,
+        totalRevenue: report.totalRevenue,
+        closedAt: report.closedAt,
+        status: "Closed",
+      })),
+    );
+  } catch (error) {
+    console.error("Get sales reports error:", error);
+    sendError(res, "Failed to fetch sales reports", 500);
+  }
+}
+
+// GET /api/owner/sales-reports/:id
+export async function getSalesReportReceipt(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const report = await prisma.dailySalesReport.findFirst({
+      where: {
+        id: req.params.id as string,
+        gymId: gym.id, // private to this owner's gym only
+      },
+      include: {
+        clerk: { select: { id: true, fullName: true, email: true } },
+        transactions: { orderBy: { createdAt: "asc" } },
+      },
+    });
+
+    if (!report) {
+      sendError(res, "Report not found", 404);
+      return;
+    }
+
+    sendSuccess(res, {
+      id: report.id,
+      gymId: gym.id,
+      gymName: gym.name,
+      gymAddress: gym.address,
+      date: report.reportDate,
+      clerkId: report.clerkId,
+      clerkName: report.clerk.fullName,
+      totalTransactions: report.totalTransactions,
+      totalRevenue: report.totalRevenue,
+      closedAt: report.closedAt,
+      status: "Closed",
+      transactions: report.transactions.map((txn) => ({
+        id: txn.id,
+        type: toFrontendTxnType(txn.type),
+        memberName: txn.memberName,
+        amount: txn.amount,
+        method: txn.method === "CASH" ? "Cash" : "Cashless",
+        notes: txn.notes,
+        createdAt: txn.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("Get sales report receipt error:", error);
+    sendError(res, "Failed to fetch receipt", 500);
+  }
+}

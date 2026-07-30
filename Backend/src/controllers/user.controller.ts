@@ -46,6 +46,25 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
         return;
       }
 
+      // Also block if already approved but payment not yet confirmed at front desk
+      const awaitingPayment = await prisma.walkInApproval.findFirst({
+        where: {
+          userId: req.userId!,
+          gymId,
+          status: "APPROVED",
+          consumedAt: null,
+        },
+      });
+
+      if (awaitingPayment) {
+        sendSuccess(
+          res,
+          { approval: awaitingPayment },
+          "Your walk-in request was approved. Complete payment at the front desk.",
+        );
+        return;
+      }
+
       const approval = await prisma.walkInApproval.create({
         data: {
           userId: req.userId!,
@@ -62,36 +81,17 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
         },
       });
 
-      sendCreated(res, { approval }, "Walk-in request submitted for approval");
+      sendCreated(res, { approval }, "Walk-in request submitted for clerk approval");
       return;
     }
 
-    // Direct membership (cashless/online payment)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
-
-    const membership = await prisma.gymMembership.create({
-      data: {
-        userId: req.userId!,
-        gymId,
-        planId,
-        coachId: coachId || null,
-        paymentMethod: paymentMethod || "CASHLESS",
-        paymentRef: paymentRef || `XDT-${Date.now()}`,
-        totalPaid: totalPaid || plan.price,
-        status: "ACTIVE",
-        expiresAt,
-      },
-    });
-
-    sendCreated(res, {
-      membership: {
-        ...membership,
-        gymName: gym.name,
-        planName: plan.name,
-        planPrice: plan.price,
-      },
-    }, "Successfully joined the gym!");
+    // Cashless memberships are activated only after successful Xendit payment
+    // (see /api/payments/create-gcash + webhook / status poll).
+    sendError(
+      res,
+      "Cashless memberships must be paid via Xendit GCash. Use the GCash payment flow.",
+      400,
+    );
   } catch (error) {
     console.error("Join gym error:", error);
     sendError(res, "Failed to join gym", 500);
@@ -259,10 +259,37 @@ export async function getWalkInStatus(req: AuthRequest, res: Response): Promise<
   try {
     const approvals = await prisma.walkInApproval.findMany({
       where: { userId: req.userId! },
+      include: {
+        gym: { select: { name: true } },
+        plan: { select: { name: true, price: true } },
+      },
       orderBy: { submittedAt: "desc" },
     });
 
-    sendSuccess(res, approvals);
+    sendSuccess(
+      res,
+      approvals.map((a) => ({
+        id: a.id,
+        userId: a.userId,
+        memberName: a.memberName,
+        memberEmail: a.memberEmail,
+        gymId: a.gymId,
+        gymName: a.gym.name,
+        planId: a.planId,
+        planName: a.plan.name,
+        planPrice: a.plan.price,
+        coachId: a.coachId,
+        coachName: a.coachName,
+        coachSessionPrice: a.coachSessionPrice,
+        paymentRef: a.paymentRef,
+        totalPaid: a.totalPaid,
+        durationDays: a.durationDays,
+        status: a.status.toLowerCase(),
+        submittedAt: a.submittedAt.getTime(),
+        reviewedAt: a.reviewedAt?.getTime(),
+        consumedAt: a.consumedAt?.getTime(),
+      })),
+    );
   } catch (error) {
     console.error("Get walk-in status error:", error);
     sendError(res, "Failed to fetch status", 500);

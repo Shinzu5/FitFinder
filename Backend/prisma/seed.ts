@@ -8,11 +8,22 @@ async function main() {
   console.log("🌱 Seeding database...\n");
 
   // ─── Users ────────────────────────────────────────────────────────────────
-  const passwordHash = await bcrypt.hash("Password123!", 12);
+  // Same hashing method as Backend/src/utils/hash.ts (bcrypt, 12 rounds)
+  const passwordHash = await bcrypt.hash("12345", 12);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@test.com" },
-    update: {},
+    update: {
+      fullName: "Admin Super",
+      passwordHash,
+      role: "ADMIN",
+      emailVerified: true,
+      refreshToken: null,
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
     create: {
       fullName: "Admin Super",
       email: "admin@test.com",
@@ -24,9 +35,19 @@ async function main() {
 
   const owner = await prisma.user.upsert({
     where: { email: "owner@test.com" },
-    update: {},
+    update: {
+      fullName: "Gym Owner",
+      passwordHash,
+      role: "OWNER",
+      emailVerified: true,
+      refreshToken: null,
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
     create: {
-      fullName: "Owner User",
+      fullName: "Gym Owner",
       email: "owner@test.com",
       passwordHash,
       role: "OWNER",
@@ -36,7 +57,17 @@ async function main() {
 
   const clerk = await prisma.user.upsert({
     where: { email: "clerk@test.com" },
-    update: {},
+    update: {
+      fullName: "Ana Reyes",
+      passwordHash,
+      role: "CLERK",
+      emailVerified: true,
+      refreshToken: null,
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
     create: {
       fullName: "Ana Reyes",
       email: "clerk@test.com",
@@ -46,9 +77,42 @@ async function main() {
     },
   });
 
+  // Gymer uses the existing USER role (dashboard/user)
   const member = await prisma.user.upsert({
+    where: { email: "gymer@test.com" },
+    update: {
+      fullName: "Gymer User",
+      passwordHash,
+      role: "USER",
+      emailVerified: true,
+      refreshToken: null,
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
+    create: {
+      fullName: "Gymer User",
+      email: "gymer@test.com",
+      passwordHash,
+      role: "USER",
+      emailVerified: true,
+    },
+  });
+
+  // Keep legacy member account usable with the same password for existing data
+  await prisma.user.upsert({
     where: { email: "member@test.com" },
-    update: {},
+    update: {
+      passwordHash,
+      role: "USER",
+      emailVerified: true,
+      refreshToken: null,
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
     create: {
       fullName: "Member User",
       email: "member@test.com",
@@ -352,11 +416,11 @@ async function main() {
   console.log("✅ Admin activities seeded");
 
   console.log("\n🎉 Database seeded successfully!\n");
-  console.log("📧 Test accounts (password: Password123!):");
-  console.log("   Admin:  admin@test.com");
-  console.log("   Owner:  owner@test.com");
-  console.log("   Clerk:  clerk@test.com");
-  console.log("   Member: member@test.com\n");
+  console.log("📧 Test accounts (password: 12345):");
+  console.log("   Admin:     admin@test.com");
+  console.log("   Gym Owner: owner@test.com");
+  console.log("   Clerk:     clerk@test.com");
+  console.log("   Gymer:     gymer@test.com\n");
 }
 
 main()

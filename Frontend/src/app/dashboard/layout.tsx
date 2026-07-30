@@ -195,9 +195,9 @@ function UserDashboardFrame({
         <header className="flex items-center justify-end gap-4 border-b border-white/10 px-6 py-3">
           <div className="flex items-center gap-3">
             {!unlocked ? (
-              <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
+              <div className="hidden max-w-md items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
                 <span className="text-[#FFD700]">⚠</span>
-                Join a gym to unlock all features
+                Dashboard locked — join a gym and complete payment to unlock
               </div>
             ) : null}
             <button type="button" className="rounded-full border border-white/10 p-2 text-zinc-300">

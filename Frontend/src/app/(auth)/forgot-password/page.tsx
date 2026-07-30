@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +23,7 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const { forgotPassword, loading, error, success } = useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
   const {
@@ -35,18 +37,22 @@ export default function ForgotPasswordPage() {
 
   async function onSubmit(values: ForgotPasswordFormValues) {
     setFormError(null);
-    await forgotPassword(values.email);
+    const email = values.email.trim().toLowerCase();
+    const ok = await forgotPassword(email);
+    if (ok) {
+      router.push(`/verify-reset-code?email=${encodeURIComponent(email)}`);
+    }
   }
 
   return (
     <AuthShell
-      title="Reset your password"
-      subtitle="Enter your email and we'll send a recovery link"
+      title="Forgot password"
+      subtitle="Enter your registered email and we'll send a verification code"
       footerText="Remembered it?"
       footerLink="/login"
       footerLinkText="Back to login"
     >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
         {error || formError ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
 
@@ -68,7 +74,7 @@ export default function ForgotPasswordPage() {
           className="flex w-full items-center justify-center rounded-lg bg-[#FFD700] px-4 py-3 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {loading ? "Sending link..." : "Send Reset Link"}
+          {loading ? "Sending code..." : "Send Verification Code"}
         </button>
       </form>
     </AuthShell>

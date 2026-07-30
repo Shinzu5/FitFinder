@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import api from "@/lib/api";
+import api, { setMemoryAccessToken } from "@/lib/api";
 import { type UserRole, roleToDashboardPath } from "@/lib/mock-users";
 
 export interface AuthUser {
@@ -34,8 +34,15 @@ interface AuthState {
   verifyEmail: (email: string, code: string) => Promise<boolean>;
   resendVerification: (email: string) => Promise<boolean>;
   forgotPassword: (email: string) => Promise<boolean>;
-  resetPassword: (email: string, code: string, newPassword: string) => Promise<boolean>;
-  logout: () => void;
+  verifyResetCode: (email: string, code: string) => Promise<string | null>;
+  resetPassword: (
+    email: string,
+    resetToken: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) => Promise<boolean>;
+  logout: () => Promise<void>;
+  clearSession: () => void;
   promoteToOwner: () => void;
   demoteToUser: () => void;
   setHasHydrated: (value: boolean) => void;
@@ -58,15 +65,35 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (value) => set({ hasHydrated: value }),
 
       login: async (payload) => {
+        const email = payload.email?.trim() ?? "";
+        const password = payload.password ?? "";
+
+        // Never treat a restored localStorage session as a successful login.
+        // Credentials must be present and validated by the API.
+        if (!email || !password) {
+          set({
+            loading: false,
+            error: "Email and password are required.",
+            success: null,
+          });
+          return false;
+        }
+
         set({ loading: true, error: null, success: null });
         try {
-          const { data } = await api.post("/auth/login", payload);
+          const { data } = await api.post("/auth/login", {
+            email,
+            password,
+            rememberMe: payload.rememberMe,
+          });
 
           if (data.success) {
+            const accessToken = data.data.accessToken as string;
+            setMemoryAccessToken(accessToken);
             set({
               user: data.data.user,
               role: data.data.user.role,
-              accessToken: data.data.accessToken,
+              accessToken,
               isAuthenticated: true,
               loading: false,
               error: null,
@@ -170,33 +197,66 @@ export const useAuthStore = create<AuthState>()(
             error: null,
             success:
               data.message ||
-              "If an account exists for this email, a password reset code has been sent.",
+              "If an account exists for this email, a verification code has been sent.",
           });
           return true;
-        } catch (error: any) {
+        } catch {
+          // Same UX even on network errors — never reveal whether the email exists.
           set({
             loading: false,
             error: null,
-            success: "If an account exists for this email, a password reset code has been sent.",
+            success:
+              "If an account exists for this email, a verification code has been sent.",
           });
           return true;
         }
       },
 
-      resetPassword: async (email, code, newPassword) => {
+      verifyResetCode: async (email, code) => {
+        set({ loading: true, error: null, success: null });
+        try {
+          const { data } = await api.post("/auth/verify-reset-code", { email, code });
+          if (data.success && data.data?.resetToken) {
+            set({
+              loading: false,
+              error: null,
+              success: data.message || "Code verified successfully.",
+            });
+            return data.data.resetToken as string;
+          }
+          set({
+            loading: false,
+            error: data.message || "Invalid verification code.",
+            success: null,
+          });
+          return null;
+        } catch (error: any) {
+          set({
+            loading: false,
+            error: error.response?.data?.message || "Invalid or expired verification code.",
+            success: null,
+          });
+          return null;
+        }
+      },
+
+      resetPassword: async (email, resetToken, newPassword, confirmPassword) => {
         set({ loading: true, error: null, success: null });
         try {
           const { data } = await api.post("/auth/reset-password", {
             email,
-            code,
+            resetToken,
             newPassword,
+            confirmPassword,
           });
 
           if (data.success) {
             set({
               loading: false,
               error: null,
-              success: data.message || "Password reset successfully.",
+              success:
+                data.message ||
+                "Password reset successfully. You can now log in with your new password.",
             });
             return true;
           }
@@ -273,19 +333,15 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: async () => {
-        try {
-          await api.post("/auth/logout");
-        } catch {}
-
-        // Clear other persisted stores to prevent state leakage between accounts
+      clearSession: () => {
+        setMemoryAccessToken(null);
         localStorage.removeItem("fitfinder-create-gym");
         localStorage.removeItem("fitfinder-membership");
         localStorage.removeItem("fitfinder-owner-coaches");
         localStorage.removeItem("fitfinder-owner-equipment");
         localStorage.removeItem("fitfinder-owner-plans");
         localStorage.removeItem("fitfinder-admin-gym-approvals-v2");
-
+        localStorage.removeItem("fitfinder-auth-v2");
         set({
           user: null,
           role: null,
@@ -295,6 +351,16 @@ export const useAuthStore = create<AuthState>()(
           error: null,
           success: null,
         });
+      },
+
+      logout: async () => {
+        try {
+          await api.post("/auth/logout");
+        } catch {
+          // Ignore — local session is cleared either way
+        }
+
+        get().clearSession();
       },
     }),
     {
@@ -307,6 +373,9 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
+        if (state?.accessToken) {
+          setMemoryAccessToken(state.accessToken);
+        }
         state?.setHasHydrated(true);
       },
     },

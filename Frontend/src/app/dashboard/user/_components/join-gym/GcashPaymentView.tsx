@@ -31,7 +31,7 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
     profile.plans.find((plan) => plan.id === selectedPlanId) ?? profile.plans[0];
   const selectedCoach =
     profile.coaches.find((coach) => coach.id === selectedCoachId) ?? null;
-  const total = selectedPlan?.price ?? 0;
+  const total = (selectedPlan?.price ?? 0) + (selectedCoach?.sessionPrice ?? 0);
 
   // Check if returned from Xendit with failure
   const isFailed =

@@ -1,11 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import api from "@/lib/api";
 
 export type PaymentMethod = "cash" | "cashless";
 export type TransactionType = "monthly" | "session" | "supplements" | "day-pass" | "renewal" | "coach";
-export type MemberStatus = "active" | "expiring";
+export type MemberStatus = "active" | "expiring" | "expired";
 
 export interface ClerkTransaction {
   id: string;
@@ -21,12 +21,20 @@ export interface ClerkMember {
   id: string;
   firstName: string;
   lastName: string;
-  phone: string;
   email?: string;
   plan: string;
   planPrice: number;
   status: MemberStatus;
   joinedAt: number;
+  expiresAt: number;
+  remainingDays: number;
+}
+
+export interface MembershipPlanOption {
+  id: string;
+  label: string;
+  price: number;
+  durationDays: number;
 }
 
 export interface WalkInPaymentOption {
@@ -36,95 +44,12 @@ export interface WalkInPaymentOption {
   transactionType: TransactionType;
 }
 
-export const CLERK_GYM_NAME = "Abbsy Mini Gym";
-
+/** UI catalog for walk-in payment categories (not demo rows). */
 export const WALK_IN_PAYMENT_OPTIONS: WalkInPaymentOption[] = [
   { id: "day-pass", label: "Day Pass", defaultAmount: 150, transactionType: "day-pass" },
   { id: "renewal", label: "Membership Renewal", defaultAmount: 1500, transactionType: "renewal" },
   { id: "supplements", label: "Supplement Purchase", defaultAmount: 1200, transactionType: "supplements" },
   { id: "coach", label: "Coach Session", defaultAmount: 600, transactionType: "coach" },
-];
-
-export const MEMBERSHIP_PLANS = [
-  { id: "monthly", label: "Monthly", price: 1500 },
-  { id: "quarterly", label: "Quarterly", price: 4000 },
-  { id: "yearly", label: "Yearly", price: 15000 },
-] as const;
-
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function makeTimeStamp(hours: number, minutes: number) {
-  const d = new Date();
-  d.setHours(hours, minutes, 0, 0);
-  return d.getTime();
-}
-
-const DEFAULT_TRANSACTIONS: ClerkTransaction[] = [
-  {
-    id: "txn-1",
-    type: "monthly",
-    member: "Juan Dela Cruz",
-    amount: 1500,
-    method: "cash",
-    notes: "Paid at front desk",
-    createdAt: makeTimeStamp(8, 59),
-  },
-  {
-    id: "txn-2",
-    type: "session",
-    member: "Maria Santos",
-    amount: 600,
-    method: "cashless",
-    notes: "GCash transfer",
-    createdAt: makeTimeStamp(9, 44),
-  },
-  {
-    id: "txn-3",
-    type: "supplements",
-    member: "Guest",
-    amount: 1200,
-    method: "cash",
-    notes: "Whey Protein 1lb",
-    createdAt: makeTimeStamp(13, 30),
-  },
-];
-
-const DEFAULT_MEMBERS: ClerkMember[] = [
-  {
-    id: "member-1",
-    firstName: "Juan",
-    lastName: "Dela Cruz",
-    phone: "+63 917 123 4567",
-    email: "juan@email.com",
-    plan: "Monthly",
-    planPrice: 1500,
-    status: "active",
-    joinedAt: makeTimeStamp(8, 0),
-  },
-  {
-    id: "member-2",
-    firstName: "Maria",
-    lastName: "Santos",
-    phone: "+63 918 234 5678",
-    plan: "Monthly",
-    planPrice: 1500,
-    status: "active",
-    joinedAt: makeTimeStamp(7, 30),
-  },
-  {
-    id: "member-3",
-    firstName: "Carlo",
-    lastName: "Garcia",
-    phone: "+63 919 345 6789",
-    plan: "Quarterly",
-    planPrice: 4000,
-    status: "expiring",
-    joinedAt: makeTimeStamp(6, 0) - 1000 * 60 * 60 * 24 * 80,
-  },
 ];
 
 export function formatTransactionTime(timestamp: number) {
@@ -181,133 +106,232 @@ interface RegisterMemberInput {
   planId: string;
 }
 
-interface AddMemberFromApprovalInput {
-  firstName: string;
-  lastName: string;
-  email?: string;
-  plan: string;
-  planPrice: number;
-}
-
 interface ClerkState {
+  gymName: string;
   transactions: ClerkTransaction[];
   members: ClerkMember[];
+  plans: MembershipPlanOption[];
+  walkInsToday: number;
+  revenueToday: number;
+  newMembersToday: number;
   activeNow: number;
-  recordPayment: (input: RecordPaymentInput) => void;
-  registerMember: (input: RegisterMemberInput) => ClerkMember | null;
-  addMemberFromApproval: (input: AddMemberFromApprovalInput) => void;
-  getTodayTransactions: () => ClerkTransaction[];
-  getTodayStats: () => {
-    walkInsToday: number;
-    revenueToday: number;
-    newMembersToday: number;
-    activeNow: number;
-  };
+  loading: boolean;
+  error: string | null;
+  fetchDashboard: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
+  fetchMembers: () => Promise<void>;
+  fetchPlans: () => Promise<void>;
+  fetchAll: () => Promise<void>;
+  recordPayment: (input: RecordPaymentInput) => Promise<boolean>;
+  registerMember: (input: RegisterMemberInput) => Promise<ClerkMember | null>;
+  fetchClosingPreview: () => Promise<{
+    date: string;
+    totalTransactions: number;
+    totalRevenue: number;
+    canClose: boolean;
+    message: string;
+  } | null>;
+  closeDailySales: () => Promise<boolean>;
 }
 
-export const useClerkStore = create<ClerkState>()(
-  persist(
-    (set, get) => ({
-      transactions: DEFAULT_TRANSACTIONS,
-      members: DEFAULT_MEMBERS,
-      activeNow: 45,
+export const useClerkStore = create<ClerkState>((set, get) => ({
+  gymName: "",
+  transactions: [],
+  members: [],
+  plans: [],
+  walkInsToday: 0,
+  revenueToday: 0,
+  newMembersToday: 0,
+  activeNow: 0,
+  loading: false,
+  error: null,
 
-      recordPayment: (input) => {
-        const transaction: ClerkTransaction = {
-          id: `txn-${Date.now()}`,
-          type: input.type,
-          member: input.member.trim() || "Guest",
-          amount: input.amount,
-          method: input.method,
-          notes: input.notes.trim(),
-          createdAt: Date.now(),
-        };
-        set({ transactions: [transaction, ...get().transactions] });
-      },
+  fetchDashboard: async () => {
+    try {
+      const { data } = await api.get("/clerk/dashboard");
+      if (!data.success) return;
+      set({
+        gymName: data.data.gymName || "",
+        walkInsToday: data.data.walkInsToday ?? 0,
+        revenueToday: data.data.revenueToday ?? 0,
+        newMembersToday: data.data.newMembersToday ?? 0,
+        activeNow: data.data.activeNow ?? 0,
+        error: null,
+      });
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to load dashboard." });
+    }
+  },
 
-      registerMember: (input) => {
-        const plan = MEMBERSHIP_PLANS.find((p) => p.id === input.planId);
-        if (!plan) return null;
+  fetchTransactions: async () => {
+    try {
+      const { data } = await api.get("/clerk/transactions");
+      if (!data.success) return;
+      set({
+        transactions: (data.data || []) as ClerkTransaction[],
+        error: null,
+      });
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to load transactions." });
+    }
+  },
 
-        const member: ClerkMember = {
-          id: `member-${Date.now()}`,
-          firstName: input.firstName.trim(),
-          lastName: input.lastName.trim(),
-          phone: input.phone.trim(),
-          email: input.email?.trim() || undefined,
-          plan: plan.label,
-          planPrice: plan.price,
-          status: "active",
-          joinedAt: Date.now(),
-        };
+  fetchMembers: async () => {
+    try {
+      const { data } = await api.get("/clerk/members");
+      if (!data.success) return;
+      const members = (data.data || []).map((m: any) => ({
+        id: m.id,
+        firstName: m.firstName || "",
+        lastName: m.lastName || "",
+        email: m.email,
+        plan: m.plan,
+        planPrice: m.planPrice,
+        status: (m.status || "active") as MemberStatus,
+        joinedAt: typeof m.joinedAt === "number" ? m.joinedAt : new Date(m.joinedAt).getTime(),
+        expiresAt:
+          typeof m.expiresAt === "number"
+            ? m.expiresAt
+            : m.expiresAt
+              ? new Date(m.expiresAt).getTime()
+              : 0,
+        remainingDays:
+          typeof m.remainingDays === "number"
+            ? m.remainingDays
+            : 0,
+      }));
+      set({ members, error: null });
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to load members." });
+    }
+  },
 
-        const transaction: ClerkTransaction = {
-          id: `txn-${Date.now()}`,
-          type: "monthly",
-          member: `${member.firstName} ${member.lastName}`,
-          amount: plan.price,
-          method: "cash",
-          notes: `New ${plan.label.toLowerCase()} registration`,
-          createdAt: Date.now(),
-        };
+  fetchPlans: async () => {
+    try {
+      const { data } = await api.get("/clerk/plans");
+      if (!data.success) return;
+      set({ plans: (data.data || []) as MembershipPlanOption[], error: null });
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to load plans." });
+    }
+  },
 
-        set({
-          members: [member, ...get().members],
-          transactions: [transaction, ...get().transactions],
-          activeNow: get().activeNow + 1,
-        });
+  fetchAll: async () => {
+    set({ loading: true, error: null });
+    await Promise.all([
+      get().fetchDashboard(),
+      get().fetchTransactions(),
+      get().fetchMembers(),
+      get().fetchPlans(),
+    ]);
+    set({ loading: false });
+  },
 
-        return member;
-      },
+  recordPayment: async (input) => {
+    try {
+      const { data } = await api.post("/clerk/transactions", {
+        type: input.type,
+        member: input.member.trim() || "Guest",
+        amount: input.amount,
+        method: input.method,
+        notes: input.notes.trim(),
+      });
 
-      addMemberFromApproval: (input) => {
-        const exists = get().members.some(
-          (member) =>
-            member.firstName.toLowerCase() === input.firstName.toLowerCase() &&
-            member.lastName.toLowerCase() === input.lastName.toLowerCase(),
-        );
-        if (exists) return;
+      if (!data.success) {
+        set({ error: data.message || "Failed to record payment." });
+        return false;
+      }
 
-        const member: ClerkMember = {
-          id: `member-${Date.now()}`,
-          firstName: input.firstName.trim(),
-          lastName: input.lastName.trim(),
-          phone: "—",
-          email: input.email?.trim() || undefined,
-          plan: input.plan,
-          planPrice: input.planPrice,
-          status: "active",
-          joinedAt: Date.now(),
-        };
+      const txn = data.data as ClerkTransaction;
+      set({
+        transactions: [txn, ...get().transactions],
+        walkInsToday: get().walkInsToday + 1,
+        revenueToday: get().revenueToday + txn.amount,
+        error: null,
+      });
+      return true;
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to record payment." });
+      return false;
+    }
+  },
 
-        set({
-          members: [member, ...get().members],
-          activeNow: get().activeNow + 1,
-        });
-      },
+  registerMember: async (input) => {
+    try {
+      const { data } = await api.post("/clerk/members", {
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+        phone: input.phone.trim(),
+        email: input.email?.trim() || undefined,
+        planId: input.planId,
+      });
 
-      getTodayTransactions: () => {
-        const todayStart = startOfToday();
-        return get().transactions.filter((txn) => txn.createdAt >= todayStart);
-      },
+      if (!data.success) {
+        set({ error: data.message || "Failed to register member." });
+        return null;
+      }
 
-      getTodayStats: () => {
-        const todayStart = startOfToday();
-        const todayTxns = get().transactions.filter((txn) => txn.createdAt >= todayStart);
-        const newMembersToday = get().members.filter((m) => m.joinedAt >= todayStart).length;
+      await Promise.all([get().fetchMembers(), get().fetchTransactions(), get().fetchDashboard()]);
 
-        return {
-          walkInsToday: todayTxns.length,
-          revenueToday: todayTxns.reduce((sum, txn) => sum + txn.amount, 0),
-          newMembersToday,
-          activeNow: get().activeNow,
-        };
-      },
-    }),
-    {
-      name: "fitfinder-clerk",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+      const plan = get().plans.find((p) => p.id === input.planId);
+      return {
+        id: data.data.id,
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+        email: input.email?.trim() || undefined,
+        plan: plan?.label || "Plan",
+        planPrice: plan?.price || 0,
+        status: "active" as MemberStatus,
+        joinedAt: Date.now(),
+        expiresAt: Date.now() + (plan?.durationDays || 30) * 24 * 60 * 60 * 1000,
+        remainingDays: plan?.durationDays || 30,
+      };
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to register member." });
+      return null;
+    }
+  },
 
+  fetchClosingPreview: async () => {
+    try {
+      const { data } = await api.get("/clerk/sales/closing-preview");
+      if (!data.success) {
+        set({ error: data.message || "Failed to load closing preview." });
+        return null;
+      }
+      return {
+        date: data.data.date,
+        totalTransactions: data.data.totalTransactions ?? 0,
+        totalRevenue: data.data.totalRevenue ?? 0,
+        canClose: Boolean(data.data.canClose),
+        message: data.data.message || "",
+      };
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to load closing preview." });
+      return null;
+    }
+  },
+
+  closeDailySales: async () => {
+    try {
+      const { data } = await api.post("/clerk/sales/close");
+      if (!data.success) {
+        set({ error: data.message || "Failed to close daily sales." });
+        return false;
+      }
+
+      // Reset running counter — open transactions are now linked to the report
+      set({
+        transactions: [],
+        walkInsToday: 0,
+        revenueToday: 0,
+        error: null,
+      });
+      await Promise.all([get().fetchTransactions(), get().fetchDashboard()]);
+      return true;
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to close daily sales." });
+      return false;
+    }
+  },
+}));

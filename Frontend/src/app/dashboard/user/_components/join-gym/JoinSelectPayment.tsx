@@ -51,7 +51,7 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
     [profile.coaches, selectedCoachId],
   );
 
-  const total = selectedPlan?.price ?? 0;
+  const total = (selectedPlan?.price ?? 0) + (selectedCoach?.sessionPrice ?? 0);
 
   function handleConfirm() {
     if (!selectedPlan) return;
@@ -243,8 +243,14 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
         <article className="rounded-xl border border-white/10 bg-[#141414] p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-500">Membership plan</span>
-            <span className="text-white">₱{total.toLocaleString()}</span>
+            <span className="text-white">₱{(selectedPlan?.price ?? 0).toLocaleString()}</span>
           </div>
+          {selectedCoach ? (
+            <div className="mt-2 flex items-center justify-between text-sm">
+              <span className="text-zinc-500">Coach session</span>
+              <span className="text-white">₱{selectedCoach.sessionPrice.toLocaleString()}</span>
+            </div>
+          ) : null}
           <div className="my-3 border-t border-white/10" />
           <div className="flex items-center justify-between">
             <span className="font-semibold text-[#FFD700]">Total</span>

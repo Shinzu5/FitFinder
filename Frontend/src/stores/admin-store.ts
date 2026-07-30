@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import api from "@/lib/api";
 
 export type ActivityTone = "success" | "info" | "warning";
 
@@ -12,55 +12,10 @@ export interface AdminActivity {
   createdAt: number;
 }
 
-const REVENUE_BY_MONTH = [
-  { month: "Jan", value: 22 },
-  { month: "Feb", value: 28 },
-  { month: "Mar", value: 34 },
-  { month: "Apr", value: 38 },
-  { month: "May", value: 42 },
-  { month: "Jun", value: 45.2 },
-] as const;
-
-function hoursAgo(hours: number) {
-  return Date.now() - hours * 60 * 60 * 1000;
+export interface RevenuePoint {
+  month: string;
+  value: number;
 }
-
-function minutesAgo(minutes: number) {
-  return Date.now() - minutes * 60 * 1000;
-}
-
-const DEFAULT_ACTIVITY: AdminActivity[] = [
-  {
-    id: "act-1",
-    message: "Powerhouse Fitness approved",
-    tone: "success",
-    createdAt: minutesAgo(2),
-  },
-  {
-    id: "act-2",
-    message: "New transaction $1,200",
-    tone: "info",
-    createdAt: minutesAgo(15),
-  },
-  {
-    id: "act-3",
-    message: "Elite Fitness Cebu updated profile",
-    tone: "info",
-    createdAt: hoursAgo(1),
-  },
-  {
-    id: "act-4",
-    message: "New gym application: Davao Strength",
-    tone: "warning",
-    createdAt: hoursAgo(3),
-  },
-  {
-    id: "act-5",
-    message: "System backup completed",
-    tone: "success",
-    createdAt: hoursAgo(5),
-  },
-];
 
 export function formatActivityTime(timestamp: number) {
   const diffMs = Date.now() - timestamp;
@@ -73,35 +28,103 @@ export function formatActivityTime(timestamp: number) {
 }
 
 interface AdminState {
-  totalUsersBase: number;
+  totalUsers: number;
+  totalGyms: number;
+  pendingGyms: number;
   platformRevenue: number;
+  revenueStats: {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    total: number;
+  };
   activity: AdminActivity[];
+  revenueTrend: RevenuePoint[];
+  loading: boolean;
+  error: string | null;
+  fetchDashboard: () => Promise<void>;
   addActivity: (message: string, tone: ActivityTone) => void;
-  getRevenueTrend: () => typeof REVENUE_BY_MONTH;
+  getRevenueTrend: () => RevenuePoint[];
 }
 
-export const useAdminStore = create<AdminState>()(
-  persist(
-    (set, get) => ({
-      totalUsersBase: 12450,
-      platformRevenue: 45200,
-      activity: DEFAULT_ACTIVITY,
+function mapTone(tone: string): ActivityTone {
+  const t = String(tone || "info").toLowerCase();
+  if (t === "success") return "success";
+  if (t === "warning") return "warning";
+  return "info";
+}
 
-      addActivity: (message, tone) => {
-        const entry: AdminActivity = {
-          id: `act-${Date.now()}`,
-          message,
-          tone,
-          createdAt: Date.now(),
-        };
-        set({ activity: [entry, ...get().activity].slice(0, 12) });
-      },
+export const useAdminStore = create<AdminState>((set, get) => ({
+  totalUsers: 0,
+  totalGyms: 0,
+  pendingGyms: 0,
+  platformRevenue: 0,
+  revenueStats: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
+  activity: [],
+  revenueTrend: [],
+  loading: false,
+  error: null,
 
-      getRevenueTrend: () => REVENUE_BY_MONTH,
-    }),
-    {
-      name: "fitfinder-admin",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+  fetchDashboard: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { data } = await api.get("/admin/dashboard");
+      if (!data.success) {
+        set({ loading: false, error: data.message || "Failed to load dashboard." });
+        return;
+      }
+
+      const activity = (data.data.activity || []).map((a: any) => ({
+        id: a.id,
+        message: a.message,
+        tone: mapTone(a.tone),
+        createdAt: a.createdAt ? new Date(a.createdAt).getTime() : Date.now(),
+      }));
+
+      const stats = data.data.revenueStats || {
+        today: 0,
+        thisWeek: 0,
+        thisMonth: 0,
+        total: data.data.platformRevenue || 0,
+      };
+
+      // Build a simple trend from available revenue buckets (DB-derived, not hardcoded demo)
+      const revenueTrend: RevenuePoint[] = [
+        { month: "Today", value: Number(stats.today) || 0 },
+        { month: "Week", value: Number(stats.thisWeek) || 0 },
+        { month: "Month", value: Number(stats.thisMonth) || 0 },
+        { month: "Total", value: Number(stats.total) || 0 },
+      ];
+
+      set({
+        totalUsers: data.data.totalUsers ?? 0,
+        totalGyms: data.data.totalGyms ?? 0,
+        pendingGyms: data.data.pendingGyms ?? 0,
+        platformRevenue: data.data.platformRevenue ?? 0,
+        revenueStats: stats,
+        activity,
+        revenueTrend,
+        loading: false,
+        error: null,
+      });
+    } catch (error: any) {
+      set({
+        loading: false,
+        error: error.response?.data?.message || "Failed to load dashboard.",
+      });
+    }
+  },
+
+  addActivity: (message, tone) => {
+    // Optimistic local feed entry; server activities come from AdminActivity table on refresh
+    const entry: AdminActivity = {
+      id: `act-${Date.now()}`,
+      message,
+      tone,
+      createdAt: Date.now(),
+    };
+    set({ activity: [entry, ...get().activity].slice(0, 12) });
+  },
+
+  getRevenueTrend: () => get().revenueTrend,
+}));

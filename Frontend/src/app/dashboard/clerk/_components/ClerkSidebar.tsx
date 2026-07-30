@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardCheck, CreditCard, LayoutGrid, UserPlus, Users } from "lucide-react";
+import { ClipboardCheck, CreditCard, LayoutGrid, MessageSquare, UserPlus, Users } from "lucide-react";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 export const CLERK_NAV_ITEMS = [
@@ -12,13 +13,21 @@ export const CLERK_NAV_ITEMS = [
   { label: "Approvals", href: "/dashboard/clerk/approvals", icon: ClipboardCheck },
   { label: "Register Member", href: "/dashboard/clerk/register", icon: UserPlus },
   { label: "Members", href: "/dashboard/clerk/members", icon: Users },
+  { label: "Messages", href: "/dashboard/clerk/messages", icon: MessageSquare },
 ] as const;
 
 export function ClerkSidebar() {
   const pathname = usePathname();
-  const pendingCount = useWalkInApprovalsStore(
-    (state) => state.requests.filter((req) => req.status === "pending").length,
+  const fetchApprovals = useWalkInApprovalsStore((state) => state.fetchApprovals);
+  const requests = useWalkInApprovalsStore((state) => state.requests);
+  const pendingCount = useMemo(
+    () => requests.filter((req) => req.status === "pending").length,
+    [requests],
   );
+
+  useEffect(() => {
+    void fetchApprovals();
+  }, [fetchApprovals]);
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5">

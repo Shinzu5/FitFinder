@@ -1,10 +1,34 @@
 import { Request, Response } from "express";
 import prisma from "../config/database";
-import { hashPassword, comparePassword, generateVerificationCode } from "../utils/hash";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
+import {
+  hashPassword,
+  comparePassword,
+  generateVerificationCode,
+  hashToken,
+  tokensMatch,
+  generateResetSessionToken,
+} from "../utils/hash";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken, verifyAccessToken } from "../utils/jwt";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service";
 import { AuthRequest } from "../middleware/auth";
+import { env } from "../config/env";
+
+function resetExpiryDate(): Date {
+  return new Date(Date.now() + env.PASSWORD_RESET_EXPIRES_MINUTES * 60 * 1000);
+}
+
+async function clearResetState(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      resetToken: null,
+      resetExpires: null,
+      resetVerified: false,
+      resetAttempts: 0,
+    },
+  });
+}
 
 // POST /api/auth/register
 export async function register(req: Request, res: Response): Promise<void> {
@@ -161,7 +185,13 @@ export async function resendVerification(req: Request, res: Response): Promise<v
 // POST /api/auth/login
 export async function login(req: Request, res: Response): Promise<void> {
   try {
-    const { email, password } = req.body;
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+    if (!email || !password) {
+      sendError(res, "Email and password are required.", 400);
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
@@ -198,6 +228,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
@@ -250,6 +281,7 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -263,70 +295,182 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
   try {
     const { email } = req.body;
+    const normalizedEmail = String(email).toLowerCase().trim();
 
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
-    // Always return success to not reveal if email exists
+    // Always return the same success message (do not reveal whether the email exists).
+    const genericMessage =
+      "If an account exists for this email, a verification code has been sent.";
+
     if (!user) {
-      sendSuccess(res, null, "If an account exists for this email, a reset code has been sent.");
+      sendSuccess(res, { email: normalizedEmail }, genericMessage);
       return;
     }
 
-    const resetToken = generateVerificationCode();
-    const resetExpires = new Date(Date.now() + 15 * 60 * 1000);
+    const resetCode = generateVerificationCode();
+    const resetExpires = resetExpiryDate();
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { resetToken, resetExpires },
+      data: {
+        resetToken: hashToken(resetCode),
+        resetExpires,
+        resetVerified: false,
+        resetAttempts: 0,
+      },
     });
 
-    await sendPasswordResetEmail(user.email, user.fullName, resetToken);
+    try {
+      await sendPasswordResetEmail(user.email, user.fullName, resetCode);
+    } catch (emailError) {
+      console.error("Failed to send password reset email:", emailError);
+    }
 
-    sendSuccess(res, null, "If an account exists for this email, a reset code has been sent.");
+    sendSuccess(res, { email: user.email }, genericMessage);
   } catch (error) {
     console.error("Forgot password error:", error);
     sendError(res, "Failed to process request", 500);
   }
 }
 
-// POST /api/auth/reset-password
-export async function resetPassword(req: Request, res: Response): Promise<void> {
+// POST /api/auth/verify-reset-code
+export async function verifyResetCode(req: Request, res: Response): Promise<void> {
   try {
-    const { email, code, newPassword } = req.body;
+    const { email, code } = req.body;
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const submittedCode = String(code).trim();
 
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
-    if (!user || !user.resetToken || !user.resetExpires) {
-      sendError(res, "Invalid reset request");
+    if (!user || !user.resetToken || !user.resetExpires || user.resetVerified) {
+      sendError(res, "Invalid or expired verification code.", 400);
       return;
     }
 
-    if (user.resetToken !== code) {
-      sendError(res, "Invalid reset code");
+    if (user.resetAttempts >= env.PASSWORD_RESET_MAX_ATTEMPTS) {
+      sendError(
+        res,
+        "Too many failed attempts. Please request a new verification code.",
+        429,
+      );
       return;
     }
 
     if (new Date() > user.resetExpires) {
-      sendError(res, "Reset code has expired. Please request a new one.");
+      await clearResetState(user.id);
+      sendError(res, "Verification code has expired. Please request a new one.", 400);
+      return;
+    }
+
+    if (!tokensMatch(submittedCode, user.resetToken)) {
+      const attempts = user.resetAttempts + 1;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { resetAttempts: attempts },
+      });
+
+      const remaining = env.PASSWORD_RESET_MAX_ATTEMPTS - attempts;
+      if (remaining <= 0) {
+        await clearResetState(user.id);
+        sendError(
+          res,
+          "Too many failed attempts. Please request a new verification code.",
+          429,
+        );
+        return;
+      }
+
+      sendError(
+        res,
+        `Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+        400,
+      );
+      return;
+    }
+
+    // OTP valid — exchange it for a one-time reset session token
+    const sessionToken = generateResetSessionToken();
+    const sessionExpires = resetExpiryDate();
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken: hashToken(sessionToken),
+        resetExpires: sessionExpires,
+        resetVerified: true,
+        resetAttempts: 0,
+      },
+    });
+
+    sendSuccess(
+      res,
+      {
+        email: user.email,
+        resetToken: sessionToken,
+        expiresInMinutes: env.PASSWORD_RESET_EXPIRES_MINUTES,
+      },
+      "Code verified. You can now set a new password.",
+    );
+  } catch (error) {
+    console.error("Verify reset code error:", error);
+    sendError(res, "Verification failed", 500);
+  }
+}
+
+// POST /api/auth/reset-password
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { email, resetToken, newPassword } = req.body;
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const token = String(resetToken || "").trim();
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (
+      !user ||
+      !user.resetToken ||
+      !user.resetExpires ||
+      !user.resetVerified ||
+      !token
+    ) {
+      sendError(res, "Invalid or expired reset session. Please start again.", 400);
+      return;
+    }
+
+    if (new Date() > user.resetExpires) {
+      await clearResetState(user.id);
+      sendError(res, "Reset session has expired. Please request a new verification code.", 400);
+      return;
+    }
+
+    if (!tokensMatch(token, user.resetToken)) {
+      sendError(res, "Invalid or already-used reset session. Please start again.", 400);
       return;
     }
 
     const passwordHash = await hashPassword(newPassword);
 
+    // Invalidate OTP/session immediately and force re-login (clear refresh token)
     await prisma.user.update({
       where: { id: user.id },
       data: {
         passwordHash,
         resetToken: null,
         resetExpires: null,
+        resetVerified: false,
+        resetAttempts: 0,
+        refreshToken: null,
       },
     });
 
-    sendSuccess(res, null, "Password reset successfully. You can now log in.");
+    sendSuccess(res, null, "Password reset successfully. You can now log in with your new password.");
   } catch (error) {
     console.error("Reset password error:", error);
     sendError(res, "Failed to reset password", 500);
@@ -426,16 +570,52 @@ export async function updateMe(req: AuthRequest, res: Response): Promise<void> {
 // POST /api/auth/logout
 export async function logout(req: AuthRequest, res: Response): Promise<void> {
   try {
-    if (req.userId) {
+    // Prefer authenticated userId; fall back to refresh-cookie lookup so logout
+    // still works when the access token is expired.
+    let userId = req.userId;
+
+    if (!userId) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        try {
+          const payload = verifyAccessToken(authHeader.split(" ")[1]);
+          userId = payload.userId;
+        } catch {
+          // expired/invalid access token — try refresh cookie below
+        }
+      }
+    }
+
+    if (!userId && req.cookies?.refreshToken) {
+      try {
+        const payload = verifyRefreshToken(req.cookies.refreshToken);
+        userId = payload.userId;
+      } catch {
+        // ignore invalid refresh cookie
+      }
+    }
+
+    if (userId) {
       await prisma.user.update({
-        where: { id: req.userId },
+        where: { id: userId },
         data: { refreshToken: null },
       });
     }
 
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+    });
     sendSuccess(res, null, "Logged out successfully");
   } catch (error) {
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+    });
     sendSuccess(res, null, "Logged out");
   }
 }

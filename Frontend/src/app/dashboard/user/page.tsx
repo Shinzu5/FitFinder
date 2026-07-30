@@ -7,7 +7,6 @@ import { Plus } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useMembershipStore } from "@/stores/membership-store";
-import { mockGyms } from "@/lib/mock-gyms";
 import { registeredGymToListItem } from "./_lib/gym-profile";
 import { UserGymCard } from "./_components/UserGymCard";
 
@@ -18,11 +17,15 @@ function getFirstName(fullName: string) {
 export default function UserDashboardPage() {
   const { user } = useAuthStore();
   const registeredGym = useCreateGymStore((state) => state.registeredGym);
-  const { joinedGymId, membership } = useMembershipStore();
+  const { joinedGymId, membership, fetchMembership } = useMembershipStore();
   const firstName = getFirstName(user?.fullName ?? "Member");
   const hasMembership = Boolean(joinedGymId);
 
   const [realGyms, setRealGyms] = useState<any[]>([]);
+
+  useEffect(() => {
+    void fetchMembership();
+  }, [fetchMembership]);
 
   useEffect(() => {
     async function fetchGyms() {
@@ -39,7 +42,7 @@ export default function UserDashboardPage() {
   }, []);
 
   const availableGyms = useMemo(() => {
-    const gyms = [...realGyms, ...mockGyms];
+    const gyms = [...realGyms];
     if (registeredGym && !gyms.some((gym) => gym.id === registeredGym.id)) {
       gyms.unshift(registeredGymToListItem(registeredGym));
     }
