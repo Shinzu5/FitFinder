@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import api from "@/lib/api";
 
 export type AdminUserTab = "users" | "owner" | "clerk";
@@ -39,49 +38,41 @@ interface AdminUsersState {
   removeUser: (id: string) => Promise<void>;
 }
 
-export const useAdminUsersStore = create<AdminUsersState>()(
-  persist(
-    (set, get) => ({
-      users: [],
-      loading: false,
+export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
+  users: [],
+  loading: false,
 
-      fetchUsers: async () => {
-        set({ loading: true });
-        try {
-          const { data } = await api.get("/admin/users");
-          if (data.success) {
-            const mapped = data.data
-              .filter((u: any) => u.role !== "ADMIN")
-              .map((u: any) => ({
-                id: u.id,
-                fullName: u.fullName,
-                email: u.email,
-                avatarUrl: u.avatarUrl || "",
-                joinedAt: u.createdAt?.split("T")[0] || "",
-                status: "active" as const,
-                tab: roleToTab(u.role),
-              }));
-            set({ users: mapped, loading: false });
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to fetch users:", error);
-        }
-        set({ loading: false });
-      },
+  fetchUsers: async () => {
+    set({ loading: true });
+    try {
+      const { data } = await api.get("/admin/users");
+      if (data.success) {
+        const mapped = data.data
+          .filter((u: any) => u.role !== "ADMIN")
+          .map((u: any) => ({
+            id: u.id,
+            fullName: u.fullName,
+            email: u.email,
+            avatarUrl: u.avatarUrl || "",
+            joinedAt: u.createdAt?.split("T")[0] || "",
+            status: (u.emailVerified ? "active" : "inactive") as PlatformUserStatus,
+            tab: roleToTab(u.role),
+          }));
+        set({ users: mapped, loading: false });
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+    }
+    set({ loading: false });
+  },
 
-      removeUser: async (id) => {
-        try {
-          await api.delete(`/admin/users/${id}`);
-        } catch (error) {
-          console.error("Failed to remove user:", error);
-        }
-        set({ users: get().users.filter((u) => u.id !== id) });
-      },
-    }),
-    {
-      name: "fitfinder-admin-users",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+  removeUser: async (id) => {
+    try {
+      await api.delete(`/admin/users/${id}`);
+      set({ users: get().users.filter((u) => u.id !== id) });
+    } catch (error) {
+      console.error("Failed to remove user:", error);
+    }
+  },
+}));

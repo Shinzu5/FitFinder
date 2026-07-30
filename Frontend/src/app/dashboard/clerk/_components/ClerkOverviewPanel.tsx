@@ -1,39 +1,29 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
-import { CLERK_GYM_NAME, useClerkStore } from "@/stores/clerk-store";
+import { useClerkStore } from "@/stores/clerk-store";
 import { TransactionsTable } from "./ClerkTransactionsTable";
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 export function ClerkOverviewPanel() {
+  const gymName = useClerkStore((state) => state.gymName);
   const transactions = useClerkStore((state) => state.transactions);
-  const members = useClerkStore((state) => state.members);
+  const walkInsToday = useClerkStore((state) => state.walkInsToday);
+  const revenueToday = useClerkStore((state) => state.revenueToday);
+  const newMembersToday = useClerkStore((state) => state.newMembersToday);
   const activeNow = useClerkStore((state) => state.activeNow);
+  const loading = useClerkStore((state) => state.loading);
+  const fetchAll = useClerkStore((state) => state.fetchAll);
 
-  const stats = useMemo(() => {
-    const todayStart = startOfToday();
-    const todayTxns = transactions.filter((txn) => txn.createdAt >= todayStart);
-    const newMembersToday = members.filter((m) => m.joinedAt >= todayStart).length;
-
-    return {
-      walkInsToday: todayTxns.length,
-      revenueToday: todayTxns.reduce((sum, txn) => sum + txn.amount, 0),
-      newMembersToday,
-      activeNow,
-    };
-  }, [transactions, members, activeNow]);
+  useEffect(() => {
+    void fetchAll();
+  }, [fetchAll]);
 
   const statCards = [
-    { label: "Walk-ins Today", value: String(stats.walkInsToday), highlight: false },
-    { label: "Revenue Today", value: `₱${stats.revenueToday.toLocaleString()}`, highlight: true },
-    { label: "New Members", value: String(stats.newMembersToday), highlight: false },
-    { label: "Active Now", value: String(stats.activeNow), highlight: false },
+    { label: "Walk-ins Today", value: String(walkInsToday), highlight: false },
+    { label: "Revenue Today", value: `₱${revenueToday.toLocaleString()}`, highlight: true },
+    { label: "New Members", value: String(newMembersToday), highlight: false },
+    { label: "Active Now", value: String(activeNow), highlight: false },
   ];
 
   return (
@@ -44,7 +34,7 @@ export function ClerkOverviewPanel() {
           <div>
             <h2 className="text-2xl font-bold text-[#FACC15]">Front Desk Operations</h2>
             <p className="mt-1 text-sm text-[#FACC15]/80">
-              Ready to process walk-ins for {CLERK_GYM_NAME}.
+              Ready to process walk-ins for {gymName || "your gym"}.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -76,7 +66,7 @@ export function ClerkOverviewPanel() {
                 stat.highlight ? "text-[#FACC15]" : "text-white"
               }`}
             >
-              {stat.value}
+              {loading ? "…" : stat.value}
             </p>
           </article>
         ))}

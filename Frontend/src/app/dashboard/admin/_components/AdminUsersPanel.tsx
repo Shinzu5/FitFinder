@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAdminStore } from "@/stores/admin-store";
 import {
   type AdminUserTab,
@@ -18,20 +18,26 @@ const TABS: { id: AdminUserTab; label: string }[] = [
 
 export function AdminUsersPanel() {
   const users = useAdminUsersStore((state) => state.users);
+  const loading = useAdminUsersStore((state) => state.loading);
+  const fetchUsers = useAdminUsersStore((state) => state.fetchUsers);
   const removeUser = useAdminUsersStore((state) => state.removeUser);
   const addActivity = useAdminStore((state) => state.addActivity);
 
   const [activeTab, setActiveTab] = useState<AdminUserTab>("users");
   const [removeTarget, setRemoveTarget] = useState<PlatformUser | null>(null);
 
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
+
   const filteredUsers = useMemo(
     () => users.filter((user) => user.tab === activeTab),
     [users, activeTab],
   );
 
-  function handleConfirmRemove() {
+  async function handleConfirmRemove() {
     if (!removeTarget) return;
-    removeUser(removeTarget.id);
+    await removeUser(removeTarget.id);
     addActivity(`${removeTarget.fullName} removed from platform`, "warning");
     setRemoveTarget(null);
   }

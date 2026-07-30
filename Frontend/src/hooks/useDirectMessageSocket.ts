@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { getSocket } from "@/lib/socket";
 import { useOwnerMessagesStore } from "@/stores/owner-messages-store";
 import { useUserMessagesStore } from "@/stores/user-messages-store";
+import { useClerkMessagesStore } from "@/stores/clerk-messages-store";
 
 interface IncomingMessagePayload {
   message: {
@@ -23,14 +24,14 @@ interface IncomingMessagePayload {
 }
 
 // Keeps a single live socket connection per authenticated session and fans
-// incoming direct messages into whichever role store is active, so chat
-// panels update instantly without a manual refresh.
+// incoming direct messages into whichever role store is active.
 export function useDirectMessageSocket() {
   const accessToken = useAuthStore((state) => state.accessToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const role = useAuthStore((state) => state.role);
   const receiveOwnerMessage = useOwnerMessagesStore((state) => state.receiveMessage);
   const receiveUserMessage = useUserMessagesStore((state) => state.receiveMessage);
+  const receiveClerkMessage = useClerkMessagesStore((state) => state.receiveMessage);
 
   useEffect(() => {
     if (!isAuthenticated || !accessToken) return;
@@ -40,8 +41,9 @@ export function useDirectMessageSocket() {
     function handleReceiveMessage(payload: IncomingMessagePayload) {
       if (role === "OWNER") {
         receiveOwnerMessage(payload.message, payload.sender);
+      } else if (role === "CLERK") {
+        receiveClerkMessage(payload.message, payload.sender);
       } else {
-        // USER, CLERK, ADMIN all currently share the user-side inbox model.
         receiveUserMessage(payload.message, payload.sender);
       }
     }
@@ -51,5 +53,12 @@ export function useDirectMessageSocket() {
     return () => {
       socket.off("receive_message", handleReceiveMessage);
     };
-  }, [accessToken, isAuthenticated, role, receiveOwnerMessage, receiveUserMessage]);
+  }, [
+    accessToken,
+    isAuthenticated,
+    role,
+    receiveOwnerMessage,
+    receiveUserMessage,
+    receiveClerkMessage,
+  ]);
 }

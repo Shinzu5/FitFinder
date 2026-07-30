@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useAdminStore, formatActivityTime } from "@/stores/admin-store";
 import { useAdminGymApprovalsStore } from "@/stores/admin-gym-approvals-store";
@@ -16,33 +17,42 @@ function ActivityDot({ tone }: { tone: "success" | "info" | "warning" }) {
 
 export function AdminOverviewPanel() {
   const platformRevenue = useAdminStore((state) => state.platformRevenue);
-  const totalUsersBase = useAdminStore((state) => state.totalUsersBase);
+  const totalUsers = useAdminStore((state) => state.totalUsers);
+  const totalGyms = useAdminStore((state) => state.totalGyms);
+  const pendingGyms = useAdminStore((state) => state.pendingGyms);
   const activity = useAdminStore((state) => state.activity);
+  const loading = useAdminStore((state) => state.loading);
+  const fetchDashboard = useAdminStore((state) => state.fetchDashboard);
+  const fetchApplications = useAdminGymApprovalsStore((state) => state.fetchApplications);
   const applications = useAdminGymApprovalsStore((state) => state.applications);
 
-  const pendingApprovals = applications.filter((app) => app.status === "pending").length;
-  const approvedApps = applications.filter((app) => app.status === "approved").length;
-  const totalGyms = 139 + approvedApps;
+  useEffect(() => {
+    void fetchDashboard();
+    void fetchApplications();
+  }, [fetchDashboard, fetchApplications]);
+
+  const pendingApprovals =
+    pendingGyms || applications.filter((app) => app.status === "pending").length;
 
   const statCards = [
     {
       label: "Total Gyms",
-      value: String(totalGyms),
-      sub: "+12 this month",
+      value: loading ? "…" : String(totalGyms),
+      sub: "Active gyms on platform",
       highlight: false,
       bordered: false,
     },
     {
       label: "Total Users",
-      value: totalUsersBase.toLocaleString(),
-      sub: "+890 this month",
+      value: loading ? "…" : totalUsers.toLocaleString(),
+      sub: "Registered accounts",
       highlight: false,
       bordered: false,
     },
     {
       label: "Platform Revenue",
-      value: `$${platformRevenue.toLocaleString()}`,
-      sub: "+18% this month",
+      value: loading ? "…" : `₱${platformRevenue.toLocaleString()}`,
+      sub: "Owner subscriptions",
       highlight: false,
       bordered: false,
     },
@@ -100,17 +110,21 @@ export function AdminOverviewPanel() {
         <section className="rounded-2xl border border-zinc-800/70 bg-[#0e0e10] p-5">
           <h2 className="mb-4 text-lg font-bold text-white">Recent Activity</h2>
           <div className="space-y-4">
-            {activity.map((item) => (
-              <div key={item.id} className="flex items-start gap-3">
-                <ActivityDot tone={item.tone} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-zinc-200">{item.message}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    {formatActivityTime(item.createdAt)}
-                  </p>
+            {activity.length === 0 ? (
+              <p className="text-sm text-zinc-500">No recent activity yet.</p>
+            ) : (
+              activity.map((item) => (
+                <div key={item.id} className="flex items-start gap-3">
+                  <ActivityDot tone={item.tone} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-zinc-200">{item.message}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {formatActivityTime(item.createdAt)}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       </div>

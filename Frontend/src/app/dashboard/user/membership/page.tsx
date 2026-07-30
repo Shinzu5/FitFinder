@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { AlertTriangle, Plus } from "lucide-react";
 import type { CompletedMembership } from "@/stores/join-gym-store";
 import { useMembershipStore } from "@/stores/membership-store";
@@ -22,6 +23,11 @@ export default function MembershipPage() {
   const membership = useMembershipStore((state) => state.membership);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const leaveGym = useMembershipStore((state) => state.leaveGym);
+  const fetchMembership = useMembershipStore((state) => state.fetchMembership);
+
+  useEffect(() => {
+    void fetchMembership();
+  }, [fetchMembership]);
 
   if (!membership || !joinedGymId) {
     return (
@@ -46,8 +52,9 @@ export default function MembershipPage() {
   const { daysRemaining, progressPercent } = getMembershipProgress(membership);
 
   function handleCancel() {
-    leaveGym();
-    router.push("/dashboard/user");
+    void leaveGym().then(() => {
+      router.push("/dashboard/user");
+    });
   }
 
   return (

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   register, verifyEmail, resendVerification,
-  login, refreshToken, forgotPassword, resetPassword,
+  login, refreshToken, forgotPassword, verifyResetCode, resetPassword,
   changePassword, getMe, updateMe, logout,
 } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth";
@@ -36,11 +36,22 @@ const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
-const resetPasswordSchema = z.object({
+const verifyResetCodeSchema = z.object({
   email: z.string().email(),
-  code: z.string().length(6),
-  newPassword: z.string().min(8),
+  code: z.string().length(6, "Code must be 6 digits"),
 });
+
+const resetPasswordSchema = z
+  .object({
+    email: z.string().email(),
+    resetToken: z.string().min(32, "Invalid reset session"),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
@@ -53,10 +64,11 @@ router.post("/resend-verification", validate(forgotPasswordSchema), resendVerifi
 router.post("/login", validate(loginSchema), login);
 router.post("/refresh", refreshToken);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
+router.post("/verify-reset-code", validate(verifyResetCodeSchema), verifyResetCode);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 router.put("/change-password", authenticate, validate(changePasswordSchema), changePassword);
 router.get("/me", authenticate, getMe);
 router.put("/me", authenticate, updateMe);
-router.post("/logout", authenticate, logout);
+router.post("/logout", logout);
 
 export default router;

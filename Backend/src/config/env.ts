@@ -15,6 +15,10 @@ export const env = {
   SMTP_USER: process.env.SMTP_USER || "",
   SMTP_PASS: process.env.SMTP_PASS || "",
   SMTP_FROM: process.env.SMTP_FROM || "",
+  /** Password-reset OTP / session token lifetime in minutes */
+  PASSWORD_RESET_EXPIRES_MINUTES: parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES || "10", 10),
+  /** Max failed OTP verification attempts before the code is locked */
+  PASSWORD_RESET_MAX_ATTEMPTS: parseInt(process.env.PASSWORD_RESET_MAX_ATTEMPTS || "5", 10),
   XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || "",
   XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN || "",
 };

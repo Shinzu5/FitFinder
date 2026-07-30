@@ -1,22 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MEMBERSHIP_PLANS, useClerkStore } from "@/stores/clerk-store";
+import { useClerkStore } from "@/stores/clerk-store";
 
 export function RegisterMemberPanel() {
   const router = useRouter();
   const registerMember = useClerkStore((state) => state.registerMember);
+  const plans = useClerkStore((state) => state.plans);
+  const fetchPlans = useClerkStore((state) => state.fetchPlans);
+  const errorFromStore = useClerkStore((state) => state.error);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [planId, setPlanId] = useState("monthly");
+  const [planId, setPlanId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    void fetchPlans();
+  }, [fetchPlans]);
+
+  useEffect(() => {
+    if (!planId && plans.length > 0) {
+      setPlanId(plans[0].id);
+    }
+  }, [plans, planId]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
@@ -25,16 +39,23 @@ export function RegisterMemberPanel() {
       return;
     }
 
-    const member = registerMember({
+    if (!planId) {
+      setError("Please select a membership plan.");
+      return;
+    }
+
+    setSubmitting(true);
+    const member = await registerMember({
       firstName,
       lastName,
       phone,
       email: email || undefined,
       planId,
     });
+    setSubmitting(false);
 
     if (!member) {
-      setError("Could not register member. Please try again.");
+      setError(errorFromStore || "Could not register member. Please try again.");
       return;
     }
 
@@ -43,7 +64,7 @@ export function RegisterMemberPanel() {
     setLastName("");
     setPhone("");
     setEmail("");
-    setPlanId("monthly");
+    setPlanId(plans[0]?.id || "");
 
     window.setTimeout(() => {
       setSuccess(false);
@@ -130,36 +151,43 @@ export function RegisterMemberPanel() {
 
         <div className="mt-6 space-y-3">
           <p className="text-sm font-medium text-zinc-300">Select Plan</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {MEMBERSHIP_PLANS.map((plan) => (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => setPlanId(plan.id)}
-                className={`rounded-xl border px-4 py-4 text-left transition ${
-                  planId === plan.id
-                    ? "border-[#FACC15] bg-[#FACC15]/10"
-                    : "border-zinc-800 bg-[#131315] hover:border-zinc-700"
-                }`}
-              >
-                <p
-                  className={`text-sm font-bold ${
-                    planId === plan.id ? "text-[#FACC15]" : "text-white"
+          {plans.length === 0 ? (
+            <p className="rounded-xl border border-zinc-800 bg-[#131315] px-4 py-4 text-sm text-zinc-500">
+              No membership plans found for this gym. Ask the owner to create plans first.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {plans.map((plan) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setPlanId(plan.id)}
+                  className={`rounded-xl border px-4 py-4 text-left transition ${
+                    planId === plan.id
+                      ? "border-[#FACC15] bg-[#FACC15]/10"
+                      : "border-zinc-800 bg-[#131315] hover:border-zinc-700"
                   }`}
                 >
-                  {plan.label}
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">₱{plan.price.toLocaleString()}</p>
-              </button>
-            ))}
-          </div>
+                  <p
+                    className={`text-sm font-bold ${
+                      planId === plan.id ? "text-[#FACC15]" : "text-white"
+                    }`}
+                  >
+                    {plan.label}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">₱{plan.price.toLocaleString()}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <button
           type="submit"
-          className="mt-8 w-full rounded-xl bg-[#FACC15] py-3.5 text-sm font-bold uppercase tracking-wide text-black transition hover:bg-[#e6c200]"
+          disabled={submitting || plans.length === 0}
+          className="mt-8 w-full rounded-xl bg-[#FACC15] py-3.5 text-sm font-bold uppercase tracking-wide text-black transition hover:bg-[#e6c200] disabled:opacity-60"
         >
-          Register
+          {submitting ? "Registering…" : "Register"}
         </button>
       </form>
     </div>

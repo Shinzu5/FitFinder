@@ -72,8 +72,13 @@ model User {
   emailVerified       Boolean   @default(false)
   verificationCode    String?
   verificationExpires DateTime?
+  /// SHA-256 hash of the password-reset OTP (before verify) or one-time session token (after verify)
   resetToken          String?
   resetExpires        DateTime?
+  /// True after OTP is verified; resetToken then holds the hashed session token
+  resetVerified       Boolean   @default(false)
+  /// Failed OTP verification attempts (brute-force protection)
+  resetAttempts       Int       @default(0)
   refreshToken        String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -86,6 +91,7 @@ model User {
   clerkTransactions   ClerkTransaction[]
   walkInApprovals     WalkInApproval[]
   xenditPayments      XenditPayment[]
+  dailySalesReports   DailySalesReport[] @relation("DailySalesClerk")
   clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id])
   clerkGymId          String?
   sentDirectMessages     DirectMessage[] @relation("SentDirectMessages")
@@ -138,6 +144,7 @@ model Gym {
   conversations      Conversation[]
   clerkTransactions  ClerkTransaction[]
   walkInApprovals    WalkInApproval[]
+  dailySalesReports  DailySalesReport[]
   clerks             User[]              @relation("GymClerks")
 
   @@map("gyms")
@@ -293,20 +300,42 @@ model Message {
 }
 
 model ClerkTransaction {
-  id         String          @id @default(uuid())
-  gymId      String
-  clerkId    String
-  type       TransactionType
-  memberName String
-  amount     Float
-  method     PaymentMethod
-  notes      String          @default("")
-  createdAt  DateTime        @default(now())
+  id                String          @id @default(uuid())
+  gymId             String
+  clerkId           String
+  type              TransactionType
+  memberName        String
+  amount            Float
+  method            PaymentMethod
+  notes             String          @default("")
+  createdAt         DateTime        @default(now())
+  dailySalesReportId String?
 
-  gym   Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  clerk User @relation(fields: [clerkId], references: [id], onDelete: Cascade)
+  gym              Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  clerk            User             @relation(fields: [clerkId], references: [id], onDelete: Cascade)
+  dailySalesReport DailySalesReport? @relation(fields: [dailySalesReportId], references: [id], onDelete: SetNull)
 
+  @@index([gymId, createdAt])
+  @@index([dailySalesReportId])
   @@map("clerk_transactions")
+}
+
+model DailySalesReport {
+  id                String   @id @default(uuid())
+  gymId             String
+  clerkId           String
+  reportDate        DateTime @db.Date
+  totalTransactions Int
+  totalRevenue      Float
+  closedAt          DateTime @default(now())
+
+  gym          Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  clerk        User               @relation("DailySalesClerk", fields: [clerkId], references: [id], onDelete: Cascade)
+  transactions ClerkTransaction[]
+
+  @@index([gymId, reportDate])
+  @@index([clerkId])
+  @@map("daily_sales_reports")
 }
 
 model WalkInApproval {

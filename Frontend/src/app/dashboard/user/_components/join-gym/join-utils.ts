@@ -32,7 +32,7 @@ export function buildCompletedMembership({
     coachSessionPrice: coach?.sessionPrice ?? 0,
     paymentMethod,
     paymentRef,
-    totalPaid: plan.price,
+    totalPaid: plan.price + (coach?.sessionPrice ?? 0),
     joinedAt: new Date().toISOString(),
     durationDays: parseDurationDays(plan.durationLabel),
   };

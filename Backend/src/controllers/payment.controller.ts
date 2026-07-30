@@ -43,16 +43,16 @@ export async function createGcashPaymentHandler(
 
     const frontendUrl = env.FRONTEND_URL;
 
-    // Build return URLs based on payment type
+    // Build return URLs based on payment type (use known referenceId — never a placeholder)
     let successUrl: string;
     let failureUrl: string;
 
     if (type === "SUBSCRIPTION") {
-      successUrl = `${frontendUrl}/dashboard/user/create-gym/done?payment_id=PAYMENT_ID_PLACEHOLDER`;
+      successUrl = `${frontendUrl}/dashboard/user/create-gym/done?payment_id=${encodeURIComponent(referenceId)}`;
       failureUrl = `${frontendUrl}/dashboard/user/create-gym/payment?payment_failed=true`;
     } else {
       const gymId = metadata?.gymId || "";
-      successUrl = `${frontendUrl}/dashboard/user/gym/${gymId}/join/gcash/success?payment_id=PAYMENT_ID_PLACEHOLDER`;
+      successUrl = `${frontendUrl}/dashboard/user/gym/${gymId}/join/gcash/success?payment_id=${encodeURIComponent(referenceId)}`;
       failureUrl = `${frontendUrl}/dashboard/user/gym/${gymId}/join/gcash?payment_failed=true`;
     }
 
@@ -309,11 +309,27 @@ async function activatePayment(payment: {
     const planId = meta.planId as string;
     const coachId = (meta.coachId as string) || null;
 
+    if (!gymId || !planId) {
+      console.error("activatePayment MEMBERSHIP missing gymId/planId", meta);
+      return;
+    }
+
+    // Idempotent: do not create duplicate active memberships
+    const existing = await prisma.gymMembership.findFirst({
+      where: {
+        userId: payment.userId,
+        gymId,
+        status: { in: ["ACTIVE", "EXPIRING"] },
+      },
+    });
+
+    if (existing) return;
+
     const plan = await prisma.membershipPlan.findUnique({
       where: { id: planId },
     });
 
-    if (plan && gymId) {
+    if (plan) {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
 

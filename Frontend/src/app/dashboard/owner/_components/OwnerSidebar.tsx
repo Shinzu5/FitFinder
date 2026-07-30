@@ -7,6 +7,7 @@ import {
   Building2,
   CreditCard,
   Dumbbell,
+  FileText,
   LayoutGrid,
   MessageSquare,
   Settings,
@@ -25,6 +26,7 @@ export const OWNER_NAV_ITEMS = [
   { label: "Equipment", href: "/dashboard/owner/equipment", icon: Wrench },
   { label: "Coaches", href: "/dashboard/owner/coaches", icon: UserCircle2 },
   { label: "Shop", href: "/dashboard/owner/shop", icon: ShoppingBag },
+  { label: "Reports", href: "/dashboard/owner/reports", icon: FileText },
   { label: "Messages", href: "/dashboard/owner/messages", icon: MessageSquare },
   { label: "Payment Settings", href: "/dashboard/owner/payment-settings", icon: Settings },
 ] as const;

@@ -3,27 +3,40 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
-import {
-  approvalToMembership,
-  useWalkInApprovalsStore,
-} from "@/stores/walk-in-approvals-store";
+import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
+/** Polls DB for walk-in status and refreshes membership when payment is completed. */
 export function useWalkInApprovalSync() {
   const user = useAuthStore((state) => state.user);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
-  const joinGym = useMembershipStore((state) => state.joinGym);
+  const fetchMembership = useMembershipStore((state) => state.fetchMembership);
+  const fetchUserStatus = useWalkInApprovalsStore((state) => state.fetchUserStatus);
   const requests = useWalkInApprovalsStore((state) => state.requests);
-  const markConsumed = useWalkInApprovalsStore((state) => state.markConsumed);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void fetchMembership();
+    void fetchUserStatus();
+  }, [user?.id, fetchMembership, fetchUserStatus]);
 
   useEffect(() => {
     if (!user?.id || joinedGymId) return;
 
-    const approved = requests.find(
-      (req) => req.userId === user.id && req.status === "approved" && !req.consumedAt,
+    // Membership unlocks only after clerk Done (consumedAt), not on Approve alone.
+    const paid = requests.some(
+      (req) => req.userId === user.id && req.status === "approved" && Boolean(req.consumedAt),
     );
-    if (!approved) return;
+    if (!paid) return;
 
-    joinGym(approvalToMembership(approved));
-    markConsumed(approved.id);
-  }, [user?.id, joinedGymId, requests, joinGym, markConsumed]);
+    void fetchMembership();
+  }, [user?.id, joinedGymId, requests, fetchMembership]);
+
+  useEffect(() => {
+    if (!user?.id || joinedGymId) return;
+    const id = window.setInterval(() => {
+      void fetchUserStatus();
+      void fetchMembership();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [user?.id, joinedGymId, fetchUserStatus, fetchMembership]);
 }
