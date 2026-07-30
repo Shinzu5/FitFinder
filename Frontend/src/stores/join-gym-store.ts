@@ -26,14 +26,16 @@ interface JoinGymFlowState {
   selectedPlanId: string | null;
   paymentMethod: JoinPaymentMethod;
   selectedCoachId: string | null;
-  gcashNumber: string;
-  gcashName: string;
+  xenditPaymentId: string | null;
+  paymentLoading: boolean;
+  paymentError: string | null;
   initJoin: (gymId: string, defaultPlanId: string) => void;
   setPlanId: (planId: string) => void;
   setPaymentMethod: (method: JoinPaymentMethod) => void;
   setCoachId: (coachId: string | null) => void;
-  setGcashNumber: (value: string) => void;
-  setGcashName: (value: string) => void;
+  setXenditPaymentId: (id: string | null) => void;
+  setPaymentLoading: (loading: boolean) => void;
+  setPaymentError: (error: string | null) => void;
   resetJoin: () => void;
 }
 
@@ -61,8 +63,9 @@ export const useJoinGymStore = create<JoinGymFlowState>()(
       selectedPlanId: null,
       paymentMethod: "cashless",
       selectedCoachId: null,
-      gcashNumber: "",
-      gcashName: "",
+      xenditPaymentId: null,
+      paymentLoading: false,
+      paymentError: null,
 
       initJoin: (gymId, defaultPlanId) =>
         set({
@@ -70,15 +73,17 @@ export const useJoinGymStore = create<JoinGymFlowState>()(
           selectedPlanId: defaultPlanId,
           paymentMethod: "cashless",
           selectedCoachId: null,
-          gcashNumber: "",
-          gcashName: "",
+          xenditPaymentId: null,
+          paymentLoading: false,
+          paymentError: null,
         }),
 
       setPlanId: (planId) => set({ selectedPlanId: planId }),
       setPaymentMethod: (method) => set({ paymentMethod: method }),
       setCoachId: (coachId) => set({ selectedCoachId: coachId }),
-      setGcashNumber: (value) => set({ gcashNumber: value }),
-      setGcashName: (value) => set({ gcashName: value }),
+      setXenditPaymentId: (id) => set({ xenditPaymentId: id }),
+      setPaymentLoading: (loading) => set({ paymentLoading: loading }),
+      setPaymentError: (error) => set({ paymentError: error }),
 
       resetJoin: () =>
         set({
@@ -86,8 +91,9 @@ export const useJoinGymStore = create<JoinGymFlowState>()(
           selectedPlanId: null,
           paymentMethod: "cashless",
           selectedCoachId: null,
-          gcashNumber: "",
-          gcashName: "",
+          xenditPaymentId: null,
+          paymentLoading: false,
+          paymentError: null,
         }),
     }),
     {

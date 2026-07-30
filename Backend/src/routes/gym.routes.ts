@@ -10,8 +10,8 @@ router.get("/", listGyms);
 router.get("/:id", getGym);
 
 // Authenticated owner routes
-router.post("/", authenticate, requireRole("OWNER", "ADMIN"), createGym);
-router.put("/:id", authenticate, requireRole("OWNER", "ADMIN"), updateGym);
-router.delete("/:id", authenticate, requireRole("OWNER", "ADMIN"), deleteGym);
+router.post("/", authenticate, requireRole("USER", "OWNER", "ADMIN"), createGym);
+router.put("/:id", authenticate, requireRole("USER", "OWNER", "ADMIN"), updateGym);
+router.delete("/:id", authenticate, requireRole("USER", "OWNER", "ADMIN"), deleteGym);
 
 export default router;

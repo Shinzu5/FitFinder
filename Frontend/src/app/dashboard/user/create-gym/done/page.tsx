@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Building2,
   CalendarDays,
   Check,
   CreditCard,
   Hash,
+  Loader2,
   Receipt,
   User,
   Users,
+  XCircle,
 } from "lucide-react";
 import { CreateGymShell } from "@/components/features/create-gym/CreateGymShell";
 import { formatPlanPrice, getOwnerPlan } from "@/lib/owner-plans";
@@ -19,20 +21,114 @@ import { useCreateGymStore } from "@/stores/create-gym-store";
 
 export default function CreateGymDonePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
-  const { selectedPlanId, paymentComplete, referenceNo, validUntil, accountName } =
-    useCreateGymStore();
+  const {
+    selectedPlanId,
+    paymentComplete,
+    referenceNo,
+    validUntil,
+    xenditPaymentId,
+    checkPaymentStatus,
+  } = useCreateGymStore();
   const plan = getOwnerPlan(selectedPlanId);
 
+  const [verifying, setVerifying] = useState(!paymentComplete && !!xenditPaymentId);
+  const [failed, setFailed] = useState(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const pollCountRef = useRef(0);
+
+  // On mount, if we have a xenditPaymentId but payment isn't complete, poll for status
   useEffect(() => {
-    if (!paymentComplete) {
+    if (paymentComplete || !xenditPaymentId) return;
+
+    setVerifying(true);
+
+    async function poll() {
+      pollCountRef.current += 1;
+      const status = await checkPaymentStatus();
+
+      if (status === "SUCCEEDED") {
+        setVerifying(false);
+        return;
+      }
+
+      if (status === "FAILED" || pollCountRef.current >= 30) {
+        setVerifying(false);
+        setFailed(true);
+        return;
+      }
+
+      // Poll every 2 seconds
+      pollRef.current = setTimeout(poll, 2000);
+    }
+
+    poll();
+
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [paymentComplete, xenditPaymentId, checkPaymentStatus]);
+
+  // If no payment in progress and not complete, redirect to plan selection
+  useEffect(() => {
+    if (!paymentComplete && !xenditPaymentId) {
       router.replace("/dashboard/user/create-gym");
     }
-  }, [paymentComplete, router]);
+  }, [paymentComplete, xenditPaymentId, router]);
+
+  // Loading/verifying state
+  if (verifying) {
+    return (
+      <CreateGymShell step={3} backHref="/dashboard/user" backLabel="Processing payment">
+        <div className="mx-auto max-w-xl py-20 text-center">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-[#FFD700]" />
+          <h2 className="mt-6 text-xl font-bold text-white">Verifying payment...</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            We&apos;re confirming your GCash payment. This usually takes a few seconds.
+          </p>
+        </div>
+      </CreateGymShell>
+    );
+  }
+
+  // Failed state
+  if (failed) {
+    return (
+      <CreateGymShell step={3} backHref="/dashboard/user/create-gym/payment" backLabel="Back to payment">
+        <div className="mx-auto max-w-xl py-20 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/20">
+            <XCircle className="h-8 w-8 text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold text-red-400">Payment not confirmed</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400">
+            We couldn&apos;t verify your payment. If you completed the payment in GCash,
+            it may take a moment — please wait and refresh, or try again.
+          </p>
+          <div className="mt-8 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-xl border border-white/10 bg-[#1a1a1a] py-3 text-sm font-bold text-[#FFD700] transition hover:bg-[#222]"
+            >
+              Refresh Status
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/user/create-gym/payment")}
+              className="rounded-xl border border-white/10 bg-[#1a1a1a] py-3 text-sm font-bold text-white transition hover:bg-[#222]"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </CreateGymShell>
+    );
+  }
 
   if (!paymentComplete) return null;
 
-  const ownerName = accountName || user?.fullName || "Gym Owner";
+  const ownerName = user?.fullName || "Gym Owner";
 
   return (
     <CreateGymShell step={3} backHref="/dashboard/user" backLabel="Payment complete">

@@ -1,26 +1,32 @@
 "use client";
 
+import { useEffect } from "react";
 import { useAdminStore } from "@/stores/admin-store";
 import { useAdminGymApprovalsStore } from "@/stores/admin-gym-approvals-store";
 import { GymApprovalCard } from "./GymApprovalCard";
 
 export function GymApprovalsPanel() {
   const applications = useAdminGymApprovalsStore((state) => state.applications);
+  const fetchApplications = useAdminGymApprovalsStore((state) => state.fetchApplications);
   const approveApplication = useAdminGymApprovalsStore((state) => state.approveApplication);
   const declineApplication = useAdminGymApprovalsStore((state) => state.declineApplication);
   const addActivity = useAdminStore((state) => state.addActivity);
 
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
+
   const pending = applications.filter((app) => app.status === "pending");
   const reviewed = applications.filter((app) => app.status !== "pending");
 
-  function handleApprove(id: string) {
-    const approved = approveApplication(id);
+  async function handleApprove(id: string) {
+    const approved = await approveApplication(id);
     if (!approved) return;
     addActivity(`${approved.gymName} approved`, "success");
   }
 
-  function handleDecline(id: string) {
-    const declined = declineApplication(id);
+  async function handleDecline(id: string) {
+    const declined = await declineApplication(id);
     if (!declined) return;
     addActivity(`${declined.gymName} application declined`, "warning");
   }

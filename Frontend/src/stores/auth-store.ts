@@ -278,6 +278,14 @@ export const useAuthStore = create<AuthState>()(
           await api.post("/auth/logout");
         } catch {}
 
+        // Clear other persisted stores to prevent state leakage between accounts
+        localStorage.removeItem("fitfinder-create-gym");
+        localStorage.removeItem("fitfinder-membership");
+        localStorage.removeItem("fitfinder-owner-coaches");
+        localStorage.removeItem("fitfinder-owner-equipment");
+        localStorage.removeItem("fitfinder-owner-plans");
+        localStorage.removeItem("fitfinder-admin-gym-approvals-v2");
+
         set({
           user: null,
           role: null,

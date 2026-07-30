@@ -2,18 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap } from "lucide-react";
+import { Loader2, Smartphone, Zap } from "lucide-react";
 import type { PublicGymProfile } from "../../_lib/gym-profile";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  makeXenditRef,
   useJoinGymStore,
 } from "@/stores/join-gym-store";
-import { useMembershipStore } from "@/stores/membership-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { JoinGymHeader } from "./JoinGymHeader";
-import { buildCompletedMembership } from "./join-utils";
+import api from "@/lib/api";
 
 interface GcashPaymentViewProps {
   profile: PublicGymProfile;
@@ -22,18 +18,13 @@ interface GcashPaymentViewProps {
 export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const joinGym = useMembershipStore((state) => state.joinGym);
   const {
     selectedPlanId,
     selectedCoachId,
-    gcashNumber,
-    gcashName,
-    setGcashNumber,
-    setGcashName,
+    setXenditPaymentId,
   } = useJoinGymStore();
 
-  const [number, setNumber] = useState(gcashNumber);
-  const [name, setName] = useState(gcashName || user?.fullName || "");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedPlan =
@@ -42,31 +33,44 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
     profile.coaches.find((coach) => coach.id === selectedCoachId) ?? null;
   const total = selectedPlan?.price ?? 0;
 
-  function handleSend() {
-    const cleanNumber = number.replace(/\s+/g, "");
-    if (!/^09\d{9}$/.test(cleanNumber)) {
-      setError("Enter a valid GCash mobile number (09XXXXXXXXX).");
-      return;
-    }
-    if (name.trim().length < 2) {
-      setError("Enter your full name as shown on GCash.");
-      return;
-    }
+  // Check if returned from Xendit with failure
+  const isFailed =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("payment_failed") === "true";
 
+  async function handlePayViaGcash() {
     setError(null);
-    setGcashNumber(cleanNumber);
-    setGcashName(name.trim());
+    setLoading(true);
 
-    const paymentRef = makeXenditRef();
-    const details = buildCompletedMembership({
-      profile,
-      plan: selectedPlan,
-      coach: selectedCoach,
-      paymentMethod: "cashless",
-      paymentRef,
-    });
-    joinGym(details);
-    router.push(`/dashboard/user/gym/${profile.id}/join/gcash/success`);
+    try {
+      const { data } = await api.post("/payments/create-gcash", {
+        type: "MEMBERSHIP",
+        amount: total,
+        description: `${profile.name} — ${selectedPlan?.name} Membership`,
+        metadata: {
+          gymId: profile.id,
+          gymName: profile.name,
+          planId: selectedPlan?.id,
+          planName: selectedPlan?.name,
+          coachId: selectedCoach?.id || null,
+          coachName: selectedCoach?.name || null,
+        },
+      });
+
+      if (data.success && data.data.redirectUrl) {
+        setXenditPaymentId(data.data.xenditPaymentId);
+        // Redirect to GCash
+        window.location.href = data.data.redirectUrl;
+        return;
+      }
+
+      setError("Failed to create payment. Please try again.");
+    } catch (err) {
+      console.error("GCash payment error:", err);
+      setError("Could not create payment. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -83,7 +87,7 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
           </div>
           <div>
             <p className="text-lg font-semibold text-white">Pay via GCash</p>
-            <p className="text-sm text-zinc-500">Powered by Xendit — auto-sent to gym</p>
+            <p className="text-sm text-zinc-500">Powered by Xendit — secure redirect</p>
           </div>
         </div>
 
@@ -98,34 +102,22 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
           </div>
         </article>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="gcash-number" className="text-white">
-              GCash Mobile Number
-            </Label>
-            <Input
-              id="gcash-number"
-              value={number}
-              onChange={(e) => setNumber(e.target.value)}
-              placeholder="09XX XXX XXXX"
-              className="border-0 bg-white text-black placeholder:text-zinc-400"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="gcash-name" className="text-white">
-              Your Full Name
-            </Label>
-            <Input
-              id="gcash-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Full name as on GCash"
-              className="border-0 bg-white text-black placeholder:text-zinc-400"
-            />
+        {/* How it works */}
+        <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+          <div className="flex items-start gap-3 text-sm text-sky-200">
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+            <p>
+              You&apos;ll be redirected to GCash to authorize the payment securely.
+              No need to enter your phone number — just confirm in the GCash app.
+            </p>
           </div>
         </div>
 
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        {(error || isFailed) ? (
+          <p className="text-sm text-red-400">
+            {error || "Payment was cancelled or failed. Please try again."}
+          </p>
+        ) : null}
 
         <div className="flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
           <Zap className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
@@ -137,10 +129,24 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
 
         <button
           type="button"
-          onClick={handleSend}
-          className="w-full rounded-xl border border-white/10 bg-[#1A1A1A] py-4 text-sm font-bold text-[#FFD700] transition hover:bg-[#222222]"
+          onClick={handlePayViaGcash}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#007DFE] py-4 text-sm font-bold text-white transition hover:bg-[#0066CC] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Send Mobile Payment →
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating payment...
+            </>
+          ) : (
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" fill="white" />
+                <text x="12" y="16" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#007DFE">G</text>
+              </svg>
+              Pay ₱{total.toLocaleString()} via GCash
+            </>
+          )}
         </button>
 
         <button

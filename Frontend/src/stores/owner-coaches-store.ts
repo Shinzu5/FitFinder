@@ -18,6 +18,7 @@ export interface GymCoach {
 export type GymCoachInput = Omit<GymCoach, "id">;
 
 export interface CoachSchedule {
+  [key: string]: string;
   monday: string;
   tuesday: string;
   wednesday: string;
