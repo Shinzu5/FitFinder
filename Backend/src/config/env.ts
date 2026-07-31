@@ -21,4 +21,11 @@ export const env = {
   PASSWORD_RESET_MAX_ATTEMPTS: parseInt(process.env.PASSWORD_RESET_MAX_ATTEMPTS || "5", 10),
   XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || "",
   XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN || "",
+  
+  // AI Assistant (Gemini)
+  AI_PROVIDER: process.env.AI_PROVIDER || "gemini",
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+  GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-flash-latest",
+  AI_TEMPERATURE: parseFloat(process.env.AI_TEMPERATURE || "0.7"),
+  AI_MAX_TOKENS: parseInt(process.env.AI_MAX_TOKENS || "1024", 10),
 };
