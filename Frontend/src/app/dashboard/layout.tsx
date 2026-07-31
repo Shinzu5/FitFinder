@@ -19,14 +19,19 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useWalkInApprovalSync } from "@/hooks/useWalkInApprovalSync";
+import { useOwnerRepurchaseSync } from "@/hooks/useOwnerRepurchaseSync";
+import { useAccountDeletedSync } from "@/hooks/useAccountDeletedSync";
 import { useDirectMessageSocket } from "@/hooks/useDirectMessageSocket";
+import { useMembersListSync } from "@/hooks/useMembersListSync";
+import { useMemberGymContentSync } from "@/hooks/useMemberGymContentSync";
+import { useSalesSync } from "@/hooks/useSalesSync";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
-import api from "@/lib/api";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard/user", icon: Home, unlockRequired: false },
-  { label: "My Membership", href: "/dashboard/user/membership", icon: CreditCard, unlockRequired: true },
+  // Membership stays reachable while Pending — other features need ACTIVE membership
+  { label: "My Membership", href: "/dashboard/user/membership", icon: CreditCard, unlockRequired: false },
   { label: "Exercises", href: "/dashboard/user/exercises", icon: Dumbbell, unlockRequired: true },
   { label: "Equipment", href: "/dashboard/user/equipment", icon: Wrench, unlockRequired: true },
   { label: "Shop", href: "/dashboard/user/shop", icon: ShoppingBag, unlockRequired: true },
@@ -39,12 +44,31 @@ const CREATE_GYM_PREFIX = "/dashboard/user/create-gym";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, role, logout, isAuthenticated, hasHydrated } = useAuthStore();
+  const { user, role, logout, isAuthenticated, hasHydrated, syncSessionFromServer } =
+    useAuthStore();
   const fetchOwnedGymStatus = useCreateGymStore((state) => state.fetchOwnedGymStatus);
   const [ready, setReady] = useState(false);
   const gatedRoleRef = useRef<string | null>(null);
+  const sessionSyncedRef = useRef(false);
 
   useDirectMessageSocket();
+  useOwnerRepurchaseSync();
+  useMembersListSync();
+  useMemberGymContentSync();
+  useSalesSync();
+
+  // Reconcile persisted localStorage role with Neon after hydrate / login
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (!isAuthenticated) {
+      sessionSyncedRef.current = false;
+      return;
+    }
+    if (sessionSyncedRef.current) return;
+    sessionSyncedRef.current = true;
+    void syncSessionFromServer();
+  }, [hasHydrated, isAuthenticated, syncSessionFromServer]);
+  useAccountDeletedSync();
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {
@@ -72,8 +96,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       // Fast path: same role already allowed — only correct path, no full-screen reload
       if (alreadyGated) {
         if (role === "OWNER") {
-          if (isCreateGymPath) {
+          const owned = useCreateGymStore.getState().hasOwnedGym === true;
+          if (isCreateGymPath && owned) {
             router.replace("/dashboard/owner/payment-settings");
+            return;
+          }
+          // Paid owner still registering a gym — stay on create-gym, no loading flash
+          if (isCreateGymPath && !owned) {
             return;
           }
           if (!pathname.startsWith(rolePath)) {
@@ -93,46 +122,74 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return;
       }
 
-      setReady(false);
-
       if (role === "OWNER") {
-        const cached = useCreateGymStore.getState().hasOwnedGym;
-        const hasGym = cached === true ? true : await fetchOwnedGymStatus();
+        const createGym = useCreateGymStore.getState();
+        const cached = createGym.hasOwnedGym;
+
+        // Instant unlock when gym already registered — never flash "Checking access..."
+        if (cached === true) {
+          gatedRoleRef.current = "OWNER";
+          if (isCreateGymPath) {
+            router.replace("/dashboard/owner/payment-settings");
+          } else if (!pathname.startsWith(rolePath)) {
+            router.replace(rolePath);
+          }
+          setReady(true);
+          return;
+        }
+
+        // Paid but gym not created yet — keep create-gym flow ready (no stuck loader)
+        if (createGym.paymentComplete && (isCreateGymPath || cached === false)) {
+          gatedRoleRef.current = "OWNER";
+          if (!isCreateGymPath) {
+            router.replace(`${CREATE_GYM_PREFIX}/register`);
+          }
+          setReady(true);
+          return;
+        }
+
+        if (!alreadyGated) setReady(false);
+
+        const hasGym = await fetchOwnedGymStatus();
         if (cancelled) return;
 
         if (!hasGym) {
+          const createGym = useCreateGymStore.getState();
           useAuthStore.getState().demoteToUser();
-          gatedRoleRef.current = null;
+          gatedRoleRef.current = "USER";
+          setReady(true);
+
+          // Paid + no gym yet → register. Plan wiped (gym deleted) → plan payment.
+          if (createGym.paymentComplete) {
+            if (!pathname.startsWith(CREATE_GYM_PREFIX)) {
+              router.replace(`${CREATE_GYM_PREFIX}/register`);
+            }
+            return;
+          }
+
           if (!pathname.startsWith(CREATE_GYM_PREFIX)) {
             router.replace(CREATE_GYM_PREFIX);
             return;
           }
           if (pathname.startsWith(`${CREATE_GYM_PREFIX}/plans`)) {
             router.replace(CREATE_GYM_PREFIX);
-            return;
           }
-          gatedRoleRef.current = "USER";
-          setReady(true);
-          return;
-        }
-
-        if (isCreateGymPath) {
-          gatedRoleRef.current = "OWNER";
-          router.replace("/dashboard/owner/payment-settings");
-          return;
-        }
-
-        if (!pathname.startsWith(rolePath)) {
-          router.replace(rolePath);
-          gatedRoleRef.current = "OWNER";
-          setReady(true);
           return;
         }
 
         gatedRoleRef.current = "OWNER";
         setReady(true);
+        if (isCreateGymPath) {
+          router.replace("/dashboard/owner/payment-settings");
+          return;
+        }
+        if (!pathname.startsWith(rolePath)) {
+          router.replace(rolePath);
+        }
         return;
       }
+
+      if (!alreadyGated) setReady(false);
 
       if (isCreateGymPath && role !== "USER") {
         router.replace(rolePath);
@@ -165,7 +222,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     async function kickIfGymGone() {
       const hasGym = await fetchOwnedGymStatus();
       if (cancelled || hasGym) return;
+
+      const createGym = useCreateGymStore.getState();
+      // Active plan + no gym = still onboarding (register). No plan = must pay again.
+      if (createGym.paymentComplete) {
+        gatedRoleRef.current = "USER";
+        useAuthStore.getState().demoteToUser();
+        if (!pathname.startsWith(CREATE_GYM_PREFIX)) {
+          router.replace(`${CREATE_GYM_PREFIX}/register`);
+        }
+        return;
+      }
+
       gatedRoleRef.current = null;
+      createGym.resetFlow();
       useAuthStore.getState().demoteToUser();
       router.replace(CREATE_GYM_PREFIX);
     }
@@ -179,39 +249,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       window.removeEventListener("focus", onFocus);
       window.clearInterval(id);
     };
-  }, [hasHydrated, isAuthenticated, role, router, fetchOwnedGymStatus]);
+  }, [hasHydrated, isAuthenticated, pathname, role, router, fetchOwnedGymStatus]);
 
-  // Clerks: check assignment on focus + every 60s (was 5s)
-  useEffect(() => {
-    if (!hasHydrated || !isAuthenticated || role !== "CLERK") return;
-
-    let cancelled = false;
-
-    async function kickIfUnassigned() {
-      try {
-        const { data } = await api.get("/clerk/dashboard");
-        if (cancelled) return;
-        if (data.success && data.data) return;
-      } catch {
-        // 403/404 — gym gone or role demoted
-      }
-      if (cancelled) return;
-      gatedRoleRef.current = null;
-      useAuthStore.getState().demoteToUser();
-      router.replace("/dashboard/user");
-    }
-
-    void kickIfUnassigned();
-    const onFocus = () => void kickIfUnassigned();
-    window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => void kickIfUnassigned(), 60000);
-
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", onFocus);
-      window.clearInterval(id);
-    };
-  }, [hasHydrated, isAuthenticated, role, router]);
+  // Clerks: never rewrite role to Gymer. Hard removal uses ACCOUNT_DELETED / socket logout.
+  // Soft dashboard 404/5xx/network blips must not change the Neon role in localStorage.
 
   if (!hasHydrated || !ready || !user || !role) {
     return (
@@ -297,6 +338,7 @@ function UserDashboardFrame({
         (req) =>
           req.userId === user.id &&
           (req.status === "pending" ||
+            // Brief window after Approve before membership_updated lands
             (req.status === "approved" && !req.consumedAt)),
       ),
   );
@@ -365,7 +407,7 @@ function UserDashboardFrame({
               <div className="hidden max-w-md items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
                 <span className="text-[#FFD700]">⚠</span>
                 {pendingWalkIn
-                  ? "Membership pending — waiting for Owner/Clerk Approve & Done"
+                  ? "Membership pending — waiting for Owner/Clerk approval"
                   : "Dashboard locked — join a gym and complete payment to unlock"}
               </div>
             ) : null}

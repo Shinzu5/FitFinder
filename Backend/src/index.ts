@@ -3,7 +3,6 @@ import http from "http";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-import rateLimit from "express-rate-limit";
 import path from "path";
 
 import { env } from "./config/env";
@@ -11,6 +10,10 @@ import { verifyEmailConfig } from "./config/email";
 import { setEmailEnabled } from "./services/email.service";
 import { errorHandler } from "./middleware/errorHandler";
 import { initSocket } from "./socket";
+import {
+  backfillMissingPlanSnapshots,
+  expireOverdueMemberships,
+} from "./services/membershipAccess.service";
 
 // Routes
 import authRoutes from "./routes/auth.routes";
@@ -43,16 +46,11 @@ app.use(cookieParser());
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// Rate limiting for auth endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
-  message: { success: false, message: "Too many attempts, please try again later." },
-});
-
 // ─── Routes ───────────────────────────────────────────────────────────────────
+// Auth brute-force limiter is applied only on login/register/password routes
+// (see auth.routes.ts) — not on /refresh or /me, which run on every session.
 
-app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/gyms", gymRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/owner", ownerRoutes);
@@ -77,6 +75,15 @@ async function start() {
   try {
     const emailOk = await verifyEmailConfig();
     setEmailEnabled(emailOk);
+
+    // Safe one-time-ish backfill + periodic membership expiry (Neon)
+    void backfillMissingPlanSnapshots().catch((err) =>
+      console.error("Plan snapshot backfill failed:", err),
+    );
+    void expireOverdueMemberships();
+    setInterval(() => {
+      void expireOverdueMemberships();
+    }, 60_000);
 
     server.listen(env.PORT, () => {
       console.log(`\n🚀 FitFinder API running on http://localhost:${env.PORT}`);

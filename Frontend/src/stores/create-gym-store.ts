@@ -18,7 +18,6 @@ export interface RegisteredGym {
   websiteOrSlug: string;
   coverPhotoName: string | null;
   coverImageUrl: string;
-  membershipPrice: number;
   schedule: string;
   memberCount: number;
   createdAt: string;
@@ -32,10 +31,9 @@ export type GymProfileUpdate = Partial<
 
 export type RegisterGymPayload = Omit<
   RegisteredGym,
-  "id" | "createdAt" | "coverImageUrl" | "membershipPrice" | "schedule" | "memberCount"
+  "id" | "createdAt" | "coverImageUrl" | "schedule" | "memberCount"
 > & {
   coverImageUrl?: string;
-  membershipPrice?: number;
   schedule?: string;
   memberCount?: number;
 };
@@ -57,7 +55,7 @@ interface CreateGymState {
   checkingOwnedGym: boolean;
   setSelectedPlanId: (id: OwnerPlanId) => void;
   initiateGcashPayment: () => Promise<string | null>;
-  checkPaymentStatus: () => Promise<"PENDING" | "SUCCEEDED" | "FAILED">;
+  checkPaymentStatus: (paymentIdOverride?: string | null) => Promise<"PENDING" | "SUCCEEDED" | "FAILED">;
   fetchOwnedGymStatus: (opts?: { full?: boolean }) => Promise<boolean>;
   registerGym: (gym: RegisterGymPayload) => Promise<boolean>;
   updateGymProfile: (updates: GymProfileUpdate) => Promise<boolean>;
@@ -75,7 +73,6 @@ function mapApiGymToRegistered(gym: any): RegisteredGym {
     websiteOrSlug: gym.website || gym.websiteOrSlug || "",
     coverPhotoName: null,
     coverImageUrl: gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE,
-    membershipPrice: gym.pricePerMonth || gym.membershipPrice || 799,
     schedule: gym.schedule || "Mon-Sun: 6AM - 10PM",
     memberCount: gym.memberCount ?? gym._count?.gymMemberships ?? 0,
     createdAt: gym.createdAt || new Date().toISOString(),
@@ -83,10 +80,21 @@ function mapApiGymToRegistered(gym: any): RegisteredGym {
   };
 }
 
+/** True when OwnerSubscription.validUntil is still in the future. */
+async function hasActiveOwnerPlan(): Promise<boolean> {
+  try {
+    const { data } = await api.get("/subscriptions/my-plan");
+    if (!data.success || !data.data?.validUntil) return false;
+    return new Date(data.data.validUntil).getTime() > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 export const useCreateGymStore = create<CreateGymState>()(
   persist(
     (set, get) => ({
-      selectedPlanId: "standard",
+      selectedPlanId: "popular",
       paymentComplete: false,
       referenceNo: null,
       paidAt: null,
@@ -134,14 +142,26 @@ export const useCreateGymStore = create<CreateGymState>()(
             return true;
           }
 
-          get().resetFlow();
+          // No gym — keep payment only if an active platform plan still exists
+          const hasActivePlan = await hasActiveOwnerPlan();
           set({ hasOwnedGym: false, registeredGym: null, checkingOwnedGym: false });
+          if (!hasActivePlan) {
+            get().resetFlow();
+          } else if (!get().paymentComplete) {
+            set({ paymentComplete: true });
+          }
           return false;
         } catch (error: any) {
           const status = error?.response?.status;
           if (status === 401 || status === 403 || status === 404) {
-            get().resetFlow();
+            const hasActivePlan = await hasActiveOwnerPlan();
             set({ hasOwnedGym: false, registeredGym: null, checkingOwnedGym: false });
+            if (!hasActivePlan) {
+              // Gym deleted (or role demoted) and plan wiped → must pay again
+              get().resetFlow();
+            } else if (!get().paymentComplete) {
+              set({ paymentComplete: true });
+            }
             return false;
           }
           // 500 / network / Neon blip — keep last known ownership (do not kick owner)
@@ -162,11 +182,12 @@ export const useCreateGymStore = create<CreateGymState>()(
           const { data } = await api.post("/payments/create-gcash", {
             type: "SUBSCRIPTION",
             amount: plan.price,
-            description: `FitFinder ${plan.name} Plan — ${plan.months} month${plan.months > 1 ? "s" : ""}`,
+            description: `FitFinder ${plan.name} Plan — ${plan.days} days`,
             metadata: {
               planId: plan.id,
               planName: plan.name,
-              months: plan.months,
+              days: plan.days,
+              durationDays: plan.days,
               price: plan.price,
             },
           });
@@ -196,8 +217,8 @@ export const useCreateGymStore = create<CreateGymState>()(
       /**
        * Check payment status by polling the backend (which checks Xendit).
        */
-      checkPaymentStatus: async () => {
-        const paymentId = get().xenditPaymentId;
+      checkPaymentStatus: async (paymentIdOverride) => {
+        const paymentId = paymentIdOverride || get().xenditPaymentId;
         if (!paymentId) return "PENDING";
 
         try {
@@ -208,12 +229,42 @@ export const useCreateGymStore = create<CreateGymState>()(
 
             if (status === "SUCCEEDED") {
               const plan = getOwnerPlan(get().selectedPlanId);
+              const sub = data.data.subscription;
+              const validUntilIso = sub?.validUntil as string | undefined;
+
               set({
                 paymentComplete: true,
                 paidAt: data.data.paidAt || new Date().toISOString(),
-                validUntil: getAccessUntilDate(plan.months),
+                validUntil: validUntilIso
+                  ? new Date(validUntilIso).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : getAccessUntilDate(plan.days),
                 referenceNo: data.data.referenceId || get().referenceNo,
+                subscriptionId: sub?.id || get().subscriptionId,
               });
+
+              // Apply OWNER auth immediately — no refresh required
+              if (data.data.accessToken && data.data.user) {
+                setMemoryAccessToken(data.data.accessToken);
+                useAuthStore.setState({
+                  accessToken: data.data.accessToken,
+                  user: {
+                    id: data.data.user.id,
+                    fullName: data.data.user.fullName,
+                    email: data.data.user.email,
+                    role: data.data.user.role,
+                    avatarUrl: data.data.user.avatarUrl || undefined,
+                  },
+                  role: data.data.user.role,
+                  isAuthenticated: true,
+                });
+              } else {
+                useAuthStore.getState().promoteToOwner();
+              }
+
               return "SUCCEEDED";
             }
 
@@ -240,7 +291,6 @@ export const useCreateGymStore = create<CreateGymState>()(
             websiteOrSlug: gym.websiteOrSlug,
             coverImageUrl: gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE,
             schedule: gym.schedule || "Mon-Sun: 6AM - 10PM",
-            pricePerMonth: gym.membershipPrice || 799,
             subscriptionId: get().subscriptionId,
           });
 
@@ -262,6 +312,12 @@ export const useCreateGymStore = create<CreateGymState>()(
               });
             }
 
+            // New gym = empty slate (never inherit prior gym's client caches)
+            const { clearOwnerGymLocalState } = await import(
+              "@/lib/clear-owner-gym-state"
+            );
+            clearOwnerGymLocalState();
+
             set({
               registeredGym: {
                 id: data.data.id,
@@ -272,7 +328,6 @@ export const useCreateGymStore = create<CreateGymState>()(
                 websiteOrSlug: data.data.website,
                 coverPhotoName: gym.coverPhotoName,
                 coverImageUrl: data.data.coverImageUrl || DEFAULT_GYM_COVER_IMAGE,
-                membershipPrice: data.data.pricePerMonth || 799,
                 schedule: data.data.schedule || "Mon-Sun: 6AM - 10PM",
                 memberCount: 0,
                 createdAt: data.data.createdAt,
@@ -303,7 +358,6 @@ export const useCreateGymStore = create<CreateGymState>()(
             websiteOrSlug: updates.websiteOrSlug ?? gym.websiteOrSlug,
             coverImageUrl: updates.coverImageUrl ?? gym.coverImageUrl,
             schedule: updates.schedule ?? gym.schedule,
-            membershipPrice: updates.membershipPrice ?? gym.membershipPrice,
           };
 
           const { data } = await api.put(`/gyms/${gym.id}`, payload);
@@ -318,7 +372,6 @@ export const useCreateGymStore = create<CreateGymState>()(
                 description: data.data.description,
                 websiteOrSlug: data.data.website,
                 coverImageUrl: data.data.coverImageUrl || gym.coverImageUrl,
-                membershipPrice: data.data.pricePerMonth ?? gym.membershipPrice,
                 schedule: data.data.schedule || gym.schedule,
               },
             });
@@ -338,15 +391,18 @@ export const useCreateGymStore = create<CreateGymState>()(
             await api.delete(`/gyms/${gym.id}`);
           } catch (error) {
             console.error("Failed to delete gym:", error);
+            throw error;
           }
         }
+        const { clearOwnerGymLocalState } = await import("@/lib/clear-owner-gym-state");
+        clearOwnerGymLocalState();
         get().resetFlow();
         set({ hasOwnedGym: false });
       },
 
       resetFlow: () =>
         set({
-          selectedPlanId: "standard",
+          selectedPlanId: "popular",
           paymentComplete: false,
           referenceNo: null,
           paidAt: null,

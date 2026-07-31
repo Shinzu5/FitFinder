@@ -8,7 +8,6 @@ import {
   Dumbbell,
   Globe,
   MapPin,
-  MessageSquare,
   Phone,
   Star,
   Target,
@@ -103,13 +102,6 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-400">
                   {profile.owner.bio}
                 </p>
-                <button
-                  type="button"
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  Message Owner
-                </button>
               </div>
             </div>
             <div className="rounded-xl border border-white/10 bg-[#0A0A0A] px-4 py-3 text-sm">
@@ -141,44 +133,54 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
             Membership Plans
           </h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {profile.plans.map((plan) => (
-              <article
-                key={plan.id}
-                className={`relative flex flex-col rounded-2xl border bg-[#141414] p-5 ${
-                  plan.popular ? "border-[#FFD700]" : "border-white/10"
-                }`}
-              >
-                {plan.popular ? (
-                  <span className="absolute -top-3 left-4 rounded bg-[#FFD700] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
-                    Popular
-                  </span>
-                ) : null}
-                <h3 className="font-semibold text-white">{plan.name}</h3>
-                <p className="mt-3 text-2xl font-bold text-[#FFD700]">
-                  ₱{plan.price.toLocaleString()}
-                  <span className="text-sm font-medium text-zinc-500">{plan.periodLabel}</span>
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">{plan.durationLabel}</p>
-                <ul className="mt-4 flex-1 space-y-2 text-sm text-zinc-400">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-[#FFD700]" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className={`mt-5 w-full rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                    plan.popular
-                      ? "bg-[#FFD700] text-black hover:bg-[#e6c200]"
-                      : "border border-white/15 bg-transparent text-zinc-300 hover:border-[#FFD700]/40 hover:text-[#FFD700]"
+            {profile.plans.length === 0 ? (
+              <article className="col-span-full rounded-2xl border border-white/10 bg-[#141414] p-6 md:col-span-2 xl:col-span-3">
+                <p className="text-sm text-zinc-400">No membership plans available.</p>
+              </article>
+            ) : (
+              profile.plans.map((plan) => (
+                <article
+                  key={plan.id}
+                  className={`relative flex flex-col rounded-2xl border bg-[#141414] p-5 ${
+                    plan.popular ? "border-[#FFD700]" : "border-white/10"
                   }`}
                 >
-                  Select Plan
-                </button>
-              </article>
-            ))}
+                  {plan.popular ? (
+                    <span className="absolute -top-3 left-4 rounded bg-[#FFD700] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
+                      Popular
+                    </span>
+                  ) : null}
+                  <h3 className="font-semibold text-white">{plan.name}</h3>
+                  <p className="mt-3 text-2xl font-bold text-[#FFD700]">
+                    ₱{plan.price.toLocaleString()}
+                    <span className="text-sm font-medium text-zinc-500">{plan.periodLabel}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">{plan.durationLabel}</p>
+                  {plan.features.length > 0 ? (
+                    <ul className="mt-4 flex-1 space-y-2 text-sm text-zinc-400">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2">
+                          <Check className="h-4 w-4 shrink-0 text-[#FFD700]" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="mt-4 flex-1" />
+                  )}
+                  <button
+                    type="button"
+                    className={`mt-5 w-full rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      plan.popular
+                        ? "bg-[#FFD700] text-black hover:bg-[#e6c200]"
+                        : "border border-white/15 bg-transparent text-zinc-300 hover:border-[#FFD700]/40 hover:text-[#FFD700]"
+                    }`}
+                  >
+                    Select Plan
+                  </button>
+                </article>
+              ))
+            )}
 
             <article className="flex flex-col rounded-2xl border border-white/10 bg-[#141414] p-5">
               <h3 className="font-semibold text-white">Contact</h3>
@@ -200,13 +202,6 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
                   {profile.socialHandle}
                 </li>
               </ul>
-              <button
-                type="button"
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:border-[#FFD700]/40 hover:text-[#FFD700]"
-              >
-                <MessageSquare className="h-4 w-4" />
-                Message Owner
-              </button>
             </article>
           </div>
         </section>
@@ -279,14 +274,20 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
           <button
             type="button"
             onClick={handleJoin}
-            disabled={isJoined}
+            disabled={isJoined || profile.plans.length === 0}
             className={`rounded-xl px-8 py-3 text-sm font-bold transition ${
               isJoined
                 ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                : "bg-[#FFD700] text-black hover:bg-[#e6c200]"
+                : profile.plans.length === 0
+                  ? "cursor-not-allowed border border-white/10 bg-zinc-800 text-zinc-500"
+                  : "bg-[#FFD700] text-black hover:bg-[#e6c200]"
             }`}
           >
-            {isJoined ? "Joined" : "Join This Gym"}
+            {isJoined
+              ? "Joined"
+              : profile.plans.length === 0
+                ? "No plans available"
+                : "Join This Gym"}
           </button>
         </div>
       </div>

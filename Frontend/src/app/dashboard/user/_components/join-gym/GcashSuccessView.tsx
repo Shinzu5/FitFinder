@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Loader2, XCircle } from "lucide-react";
+import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import { useJoinGymStore } from "@/stores/join-gym-store";
+import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 import { JoinGymHeader } from "./JoinGymHeader";
 import api from "@/lib/api";
 
@@ -15,10 +17,24 @@ interface GcashSuccessViewProps {
 export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isRenewalFlow = searchParams.get("renew") === "1";
+  const userId = useAuthStore((state) => state.user?.id);
   const membership = useMembershipStore((state) => state.membership);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const fetchMembership = useMembershipStore((state) => state.fetchMembership);
+  const fetchUserStatus = useWalkInApprovalsStore((state) => state.fetchUserStatus);
+  const requests = useWalkInApprovalsStore((state) => state.requests);
   const { xenditPaymentId, setXenditPaymentId, resetJoin } = useJoinGymStore();
+
+  const pendingApproval = requests.find(
+    (req) =>
+      req.userId === userId &&
+      req.gymId === gymId &&
+      req.status === "pending" &&
+      !req.consumedAt,
+  );
+  const pendingRenewal = pendingApproval && pendingApproval.isRenewal ? pendingApproval : null;
+  const pendingNewJoin = pendingApproval && !pendingApproval.isRenewal ? pendingApproval : null;
 
   const urlPaymentId = searchParams.get("payment_id");
   const paymentLookupId = xenditPaymentId || urlPaymentId;
@@ -41,15 +57,21 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
 
   useEffect(() => {
     void fetchMembership();
-  }, [fetchMembership]);
+    void fetchUserStatus();
+  }, [fetchMembership, fetchUserStatus]);
 
-  // Already active for this gym — skip waiting
+  // Only skip waiting once ACTIVE membership exists (after staff approval/completion)
   useEffect(() => {
+    if (pendingApproval) {
+      setVerifying(false);
+      setFailed(false);
+      return;
+    }
     if (joinedGymId === gymId && membership?.gymId === gymId) {
       setVerifying(false);
       setFailed(false);
     }
-  }, [joinedGymId, membership, gymId]);
+  }, [joinedGymId, membership, gymId, pendingApproval]);
 
   useEffect(() => {
     if (!paymentLookupId) {
@@ -73,28 +95,35 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
               status: "SUCCEEDED",
             });
 
-            // Activate membership then unlock dashboard only when membership is live
             await fetchMembership();
-            const activeGymId = useMembershipStore.getState().joinedGymId;
-            const membershipActive = Boolean(data.data.membershipActive) || activeGymId === gymId;
+            await fetchUserStatus();
 
-            if (membershipActive && (activeGymId === gymId || useMembershipStore.getState().membership)) {
-              await fetchMembership();
-              if (useMembershipStore.getState().joinedGymId === gymId) {
-                setVerifying(false);
-                return;
-              }
+            // New join + renewal: payment OK → wait for Owner/Clerk (no instant access)
+            const latestPending = useWalkInApprovalsStore
+              .getState()
+              .requests.find(
+                (req) =>
+                  req.userId === userId &&
+                  req.gymId === gymId &&
+                  req.status === "pending" &&
+                  !req.consumedAt,
+              );
+            if (isRenewalFlow || latestPending || data.data.membershipActive === false) {
+              setVerifying(false);
+              setFailed(false);
+              return;
             }
 
-            // Payment succeeded but membership not visible yet — keep polling briefly
+            const activeGymId = useMembershipStore.getState().joinedGymId;
+            if (activeGymId === gymId) {
+              setVerifying(false);
+              return;
+            }
+
+            // Payment succeeded but approval/membership not visible yet — keep polling briefly
             if (pollCountRef.current >= 30) {
               setVerifying(false);
-              // Show success UI if payment cleared; membership may still sync on Done
-              if (data.data.membershipActive) {
-                setFailed(false);
-              } else {
-                setFailed(true);
-              }
+              setFailed(false);
               return;
             }
 
@@ -121,7 +150,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [paymentLookupId, fetchMembership, gymId]);
+  }, [paymentLookupId, fetchMembership, fetchUserStatus, gymId, isRenewalFlow]);
 
   if (verifying) {
     return (
@@ -129,10 +158,54 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
         <JoinGymHeader title="GCash Payment" backHref={`/dashboard/user/gym/${gymId}/join/gcash`} />
         <div className="mx-auto max-w-xl py-20 text-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-[#FFD700]" />
-          <h2 className="mt-6 text-xl font-bold text-white">Activating membership...</h2>
+          <h2 className="mt-6 text-xl font-bold text-white">Confirming GCash payment...</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            We&apos;re confirming your GCash payment and unlocking your Gymer dashboard.
+            We&apos;re confirming your payment. Membership access unlocks only after Owner/Clerk
+            approval.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if ((isRenewalFlow || pendingRenewal || pendingNewJoin || paymentDetails) &&
+      !(joinedGymId === gymId && membership?.gymId === gymId) &&
+      paymentDetails) {
+    return (
+      <div className="min-h-screen bg-black text-white">
+        <JoinGymHeader title="GCash Payment" backHref="/dashboard/user/membership" />
+        <div className="mx-auto max-w-xl space-y-6 px-4 py-8 text-center">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/20">
+            <Check className="h-10 w-10 text-amber-400" strokeWidth={3} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-amber-400">Payment Received</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              {isRenewalFlow || pendingRenewal
+                ? "Your renewal payment was recorded. Days are extended only after the gym Owner or Clerk approves your request."
+                : "Your payment was recorded. Status is Pending Approval — member features stay locked until the Owner or Clerk approves."}
+            </p>
+          </div>
+          <article className="rounded-2xl border border-white/10 bg-[#141414] p-5 text-left text-sm">
+            <DetailRow
+              label="Total Paid"
+              value={`₱${paymentDetails.amount.toLocaleString()}`}
+              highlight
+            />
+            <DetailRow label="Via" value="GCash / Xendit" />
+            <DetailRow label="Status" value="Waiting for Owner/Clerk Approval" />
+            <DetailRow label="Ref" value={paymentDetails.referenceId} />
+          </article>
+          <button
+            type="button"
+            onClick={() => {
+              resetJoin();
+              router.push("/dashboard/user/membership");
+            }}
+            className="w-full rounded-xl border border-[#FFD700]/40 py-4 text-sm font-bold text-[#FFD700] transition hover:bg-[#FFD700]/10"
+          >
+            Back to My Membership
+          </button>
         </div>
       </div>
     );

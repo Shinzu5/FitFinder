@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, XCircle } from "lucide-react";
 import type { PublicGymProfile } from "../../_lib/gym-profile";
 import { makeWalkInRef, useJoinGymStore } from "@/stores/join-gym-store";
@@ -16,14 +16,19 @@ interface WalkInRegistrationViewProps {
 }
 
 /**
- * Walk-in flow:
- * 1) Proceed → record payment + create pending approval in Neon
- * 2) Button becomes disabled "Waiting for Approval"
- * 3) Owner/Clerk Approve → button becomes enabled "Done"
- * 4) Done → Gymer dashboard (onboarding complete)
+ * Walk-in flow (new join):
+ * 1) Proceed → pending approval
+ * 2) Owner/Clerk Approve → Done → Gymer home
+ *
+ * Renewal flow (?renew=1):
+ * 1) Proceed → pending renewal approval
+ * 2) Return to Membership page (never Home)
+ * 3) Approval extends days via Socket.IO on Membership
  */
 export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isRenewalFlow = searchParams.get("renew") === "1";
   const user = useAuthStore((state) => state.user);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const resetJoin = useJoinGymStore((state) => state.resetJoin);
@@ -34,7 +39,7 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
   const fetchUserStatus = useWalkInApprovalsStore((state) => state.fetchUserStatus);
   const fetchMembership = useMembershipStore((state) => state.fetchMembership);
 
-  const [referenceNo] = useState(() => makeWalkInRef(profile.name));
+  const [referenceNo, setReferenceNo] = useState(() => makeWalkInRef(profile.name));
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,64 +52,99 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     () => profile.coaches.find((coach) => coach.id === selectedCoachId) ?? null,
     [profile.coaches, selectedCoachId],
   );
-  const total =
-    (selectedPlan?.price ?? 0) + (selectedCoach?.sessionPrice ?? 0);
+  const total = (selectedPlan?.price ?? 0) + (selectedCoach?.sessionPrice ?? 0);
 
   const userRequest = useMemo(() => {
     if (!user?.id) return null;
-    // Prefer open (not consumed) request for this gym
+
+    // Open pending / approved-not-consumed only — declined must not block retry
     const open = requests.find(
       (req) =>
         req.userId === user.id &&
         req.gymId === profile.id &&
         !req.consumedAt &&
-        req.status !== "declined",
+        (req.status === "pending" || req.status === "approved"),
     );
     if (open) return open;
+
+    // Renewals: show latest renewal (incl. declined) so Membership can display status
+    if (isRenewalFlow) {
+      return (
+        requests
+          .filter(
+            (req) =>
+              req.userId === user.id &&
+              req.gymId === profile.id &&
+              Boolean(req.isRenewal),
+          )
+          .sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null
+      );
+    }
+
+    return null;
+  }, [requests, user?.id, profile.id, isRenewalFlow]);
+
+  const latestDeclined = useMemo(() => {
+    if (!user?.id) return null;
     return (
-      requests.find((req) => req.userId === user.id && req.gymId === profile.id) ?? null
+      requests
+        .filter(
+          (req) =>
+            req.userId === user.id &&
+            req.gymId === profile.id &&
+            req.status === "declined",
+        )
+        .sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null
     );
   }, [requests, user?.id, profile.id]);
 
   const isPending = userRequest?.status === "pending";
-  const isApproved =
-    userRequest?.status === "approved" ||
-    (joinedGymId === profile.id && userRequest?.status !== "declined");
-  const isRejected = userRequest?.status === "declined";
-  const onboardingDone = Boolean(userRequest?.consumedAt);
+  // Never treat "already a member" as approved — that broke renewals (instant Done → Home)
+  const isApproved = userRequest?.status === "approved" && !userRequest.consumedAt;
+  const isRejected = Boolean(latestDeclined) && !userRequest && !isRenewalFlow;
+  const onboardingDone = Boolean(userRequest?.consumedAt) && !userRequest?.isRenewal;
 
-  // Socket handles live updates; slow poll only as safety net while waiting
   useEffect(() => {
     void fetchUserStatus();
-    const id = window.setInterval(() => {
-      void fetchUserStatus();
-      if (useMembershipStore.getState().joinedGymId) return;
-      void fetchMembership();
-    }, 30000);
-    return () => window.clearInterval(id);
-  }, [fetchUserStatus, fetchMembership]);
+  }, [fetchUserStatus]);
 
-  // Already finished onboarding — never show this screen again
+  // New-join only: finished onboarding → home. Renewals never auto-redirect to Home.
   useEffect(() => {
+    if (isRenewalFlow) return;
     if (onboardingDone && joinedGymId === profile.id) {
       resetJoin();
       router.replace("/dashboard/user");
     }
-  }, [onboardingDone, joinedGymId, profile.id, resetJoin, router]);
+  }, [isRenewalFlow, onboardingDone, joinedGymId, profile.id, resetJoin, router]);
+
+  // Pending / rejected requests belong on My Membership (not join shell / Home)
+  useEffect(() => {
+    if (isPending || (isRejected && isRenewalFlow)) {
+      resetJoin();
+      router.replace("/dashboard/user/membership");
+    }
+  }, [isPending, isRejected, isRenewalFlow, resetJoin, router]);
 
   const handleProceed = useCallback(async () => {
-    if (!user?.id || !selectedPlan || submitting || isPending || isApproved) return;
+    if (!user?.id || !selectedPlan || submitting || isPending) return;
+    // Block re-submit only for open approved new-join (not renewals)
+    if (isApproved && !isRenewalFlow) return;
 
-    if (!selectedPlan.id || selectedPlan.id === "plan-default") {
-      // Still allow proceed — backend will create a real MembershipPlan
+    if (!selectedPlan?.id) {
+      setError("No membership plans available.");
+      return;
     }
+
+    // Fresh reference on every submit so a prior rejection never blocks repay
+    const paymentRef = makeWalkInRef(profile.name);
+    setReferenceNo(paymentRef);
 
     const details = buildCompletedMembership({
       profile,
       plan: selectedPlan,
       coach: selectedCoach,
       paymentMethod: "walk-in",
-      paymentRef: referenceNo,
+      paymentRef,
     });
 
     setSubmitting(true);
@@ -125,7 +165,12 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
       setError(msg);
       return;
     }
+
     void fetchUserStatus();
+
+    // Always return to My Membership while Pending — never unlock Home features
+    resetJoin();
+    router.replace("/dashboard/user/membership");
   }, [
     user,
     selectedPlan,
@@ -133,14 +178,17 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     submitting,
     isPending,
     isApproved,
+    isRenewalFlow,
     profile,
     referenceNo,
     submitRequest,
     fetchUserStatus,
+    resetJoin,
+    router,
   ]);
 
   const handleDone = useCallback(async () => {
-    if (!userRequest?.id || !isApproved || completing) return;
+    if (!userRequest?.id || !isApproved || completing || isRenewalFlow) return;
     setCompleting(true);
     setError(null);
     const ok = await completeOnboarding(userRequest.id);
@@ -156,81 +204,94 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     userRequest?.id,
     isApproved,
     completing,
+    isRenewalFlow,
     completeOnboarding,
     fetchMembership,
     resetJoin,
     router,
   ]);
 
-  if (isRejected) {
-    return (
-      <div className="min-h-screen bg-black text-white">
-        <JoinGymHeader
-          title="Walk-in Membership"
-          backHref={`/dashboard/user/gym/${profile.id}/join`}
-        />
-        <div className="mx-auto max-w-md px-4 py-16 text-center">
-          <XCircle className="mx-auto h-14 w-14 text-red-400" />
-          <h2 className="mt-4 text-2xl font-bold text-white">Request Rejected</h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            {userRequest?.rejectionReason ||
-              "Your walk-in membership request was rejected by the gym."}
-          </p>
-          <p className="mt-4 text-xs text-zinc-500">
-            Contact {profile.name} or purchase another membership plan.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push(`/dashboard/user/gym/${profile.id}/join`)}
-            className="mt-8 w-full rounded-xl bg-[#FFD700] py-3.5 text-sm font-bold text-black"
-          >
-            Choose another plan
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const buttonLabel = submitting
     ? "Processing…"
     : completing
       ? "Opening dashboard…"
-      : isApproved
+      : isApproved && !isRenewalFlow
         ? "Done"
         : isPending
           ? "Waiting for Approval"
-          : "Proceed";
+          : isRenewalFlow
+            ? "Submit Renewal"
+            : isRejected
+              ? "Submit again"
+              : "Proceed";
 
-  const buttonEnabled = !submitting && !completing && (isApproved || (!isPending && !isApproved));
-  const showAsWaiting = isPending && !isApproved;
+  const buttonEnabled =
+    !submitting &&
+    !completing &&
+    ((isApproved && !isRenewalFlow) || (!isPending && !isApproved));
+  const showAsWaiting = isPending;
 
   return (
     <div className="min-h-screen bg-black text-white">
       <JoinGymHeader
-        title="Walk-in Membership"
-        backHref={`/dashboard/user/gym/${profile.id}/join`}
+        title={isRenewalFlow ? "Renew Membership" : "Walk-in Membership"}
+        backHref={
+          isRenewalFlow
+            ? "/dashboard/user/membership"
+            : `/dashboard/user/gym/${profile.id}/join`
+        }
       />
 
       <div className="mx-auto max-w-md space-y-6 px-4 py-10">
+        {isRejected && latestDeclined ? (
+          <article className="rounded-2xl border border-red-500/30 bg-[#141414] px-6 py-6 text-center">
+            <XCircle className="mx-auto h-12 w-12 text-red-400" />
+            <h2 className="mt-3 text-xl font-bold text-white">Request Rejected</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              {latestDeclined.rejectionReason ||
+                "Your walk-in membership request was rejected by the gym."}
+            </p>
+            <p className="mt-3 text-xs text-zinc-500">
+              Rejection is not permanent. Choose another plan or submit again below to pay and
+              request approval.
+            </p>
+            <button
+              type="button"
+              onClick={() => router.push(`/dashboard/user/gym/${profile.id}/join`)}
+              className="mt-5 w-full rounded-xl border border-[#FFD700]/40 py-3 text-sm font-bold text-[#FFD700] transition hover:bg-[#FFD700]/10"
+            >
+              Choose another plan
+            </button>
+          </article>
+        ) : null}
+
         <article className="rounded-2xl border border-white/10 bg-[#141414] px-6 py-8 text-center">
-          {isApproved ? (
+          {isApproved && !isRenewalFlow ? (
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
           ) : (
             <Clock3 className="mx-auto h-12 w-12 text-[#FFD700]" />
           )}
           <h2 className="mt-4 text-xl font-bold text-white">
-            {isApproved
+            {isApproved && !isRenewalFlow
               ? "Membership Approved"
               : isPending
                 ? "Waiting for Approval"
-                : "Confirm Walk-in Payment"}
+                : isRenewalFlow
+                  ? "Confirm Renewal"
+                  : isRejected
+                    ? "Submit a new request"
+                    : "Confirm Walk-in Payment"}
           </h2>
           <p className="mt-2 text-sm text-zinc-400">
-            {isApproved
+            {isApproved && !isRenewalFlow
               ? "Your membership is active. Tap Done to open your Gymer dashboard."
               : isPending
                 ? "Payment recorded. Waiting for the Gym Owner or Clerk to approve."
-                : `Confirm walk-in for ${profile.name}. After Proceed, staff must approve before you can continue.`}
+                : isRenewalFlow
+                  ? `Submit renewal for ${profile.name}. You will return to My Membership while staff approve.`
+                  : isRejected
+                    ? `You can pay again for ${profile.name}. A new request will be sent for Owner/Clerk approval.`
+                    : `Confirm walk-in for ${profile.name}. After Proceed, staff must approve before you can continue.`}
           </p>
 
           <div className="mt-6 rounded-xl border border-white/10 bg-black/40 px-4 py-4">
@@ -239,7 +300,9 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
               {userRequest?.paymentRef ?? referenceNo}
             </p>
             <p className="mt-3 text-sm text-zinc-400">
-              {selectedPlan?.name} · ₱{total.toLocaleString()}
+              {selectedPlan?.name}
+              {selectedPlan?.durationLabel ? ` · ${selectedPlan.durationLabel}` : ""} · ₱
+              {total.toLocaleString()}
             </p>
           </div>
         </article>
@@ -249,13 +312,13 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
         <button
           type="button"
           onClick={() => {
-            if (isApproved) void handleDone();
+            if (isApproved && !isRenewalFlow) void handleDone();
             else if (!isPending) void handleProceed();
           }}
           disabled={!buttonEnabled || showAsWaiting}
           aria-disabled={!buttonEnabled || showAsWaiting}
           className={`w-full rounded-xl py-4 text-sm font-bold transition ${
-            isApproved
+            isApproved && !isRenewalFlow
               ? "bg-[#FFD700] text-black hover:bg-[#e6c200]"
               : showAsWaiting
                 ? "cursor-not-allowed border border-white/10 bg-[#1a1a1a] text-zinc-500"

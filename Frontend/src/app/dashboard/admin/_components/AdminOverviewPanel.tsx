@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useAdminStore, formatActivityTime } from "@/stores/admin-store";
+import { useAdminRealtimeSync } from "@/hooks/useAdminRealtimeSync";
 import { AdminRevenueChart } from "./AdminRevenueChart";
 
 function ActivityDot({ tone }: { tone: "success" | "info" | "warning" }) {
@@ -17,6 +18,7 @@ export function AdminOverviewPanel() {
   const platformRevenue = useAdminStore((state) => state.platformRevenue);
   const totalUsers = useAdminStore((state) => state.totalUsers);
   const totalGyms = useAdminStore((state) => state.totalGyms);
+  const activeGyms = useAdminStore((state) => state.activeGyms);
   const activity = useAdminStore((state) => state.activity);
   const loading = useAdminStore((state) => state.loading);
   const fetchDashboard = useAdminStore((state) => state.fetchDashboard);
@@ -25,12 +27,24 @@ export function AdminOverviewPanel() {
     void fetchDashboard();
   }, [fetchDashboard]);
 
+  const onRealtime = useCallback(() => {
+    void fetchDashboard({ silent: true });
+  }, [fetchDashboard]);
+
+  useAdminRealtimeSync(onRealtime);
+
   const statCards = [
     {
       label: "Total Gyms",
       value: loading ? "…" : String(totalGyms),
-      sub: "Active gyms on platform",
+      sub: "Published gyms on platform",
       highlight: false,
+    },
+    {
+      label: "Active Gyms",
+      value: loading ? "…" : String(activeGyms),
+      sub: "Gyms with a valid owner plan",
+      highlight: true,
     },
     {
       label: "Total Users",
@@ -41,14 +55,8 @@ export function AdminOverviewPanel() {
     {
       label: "Platform Revenue",
       value: loading ? "…" : `₱${platformRevenue.toLocaleString()}`,
-      sub: "Owner subscriptions",
+      sub: "Successful owner subscriptions",
       highlight: false,
-    },
-    {
-      label: "Active Gyms",
-      value: loading ? "…" : String(totalGyms),
-      sub: "Published automatically after Owner plan purchase",
-      highlight: true,
     },
   ];
 

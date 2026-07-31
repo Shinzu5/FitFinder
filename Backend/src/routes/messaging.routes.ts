@@ -4,6 +4,8 @@ import {
   getConversations,
   getThread,
   sendDirectMessage,
+  markThreadRead,
+  hideConversation,
 } from "../controllers/messaging.controller";
 import { authenticate } from "../middleware/auth";
 
@@ -16,6 +18,8 @@ router.use(authenticate);
 router.get("/search", searchUsers);
 router.get("/conversations", getConversations);
 router.get("/thread/:userId", getThread);
+router.post("/thread/:userId/read", markThreadRead);
+router.delete("/conversations/:userId", hideConversation);
 router.post("/", sendDirectMessage);
 
 export default router;

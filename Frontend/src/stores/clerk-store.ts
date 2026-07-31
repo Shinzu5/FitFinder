@@ -22,12 +22,18 @@ export interface ClerkMember {
   firstName: string;
   lastName: string;
   email?: string;
+  fullName?: string;
   plan: string;
   planPrice: number;
   status: MemberStatus;
   joinedAt: number;
   expiresAt: number;
+  startsAt?: number;
   remainingDays: number;
+  memberType?: "Walk-in" | "Online";
+  registeredBy?: "Owner" | "Clerk" | "Self";
+  totalPaid?: number;
+  registrationDate?: number;
 }
 
 export interface MembershipPlanOption {
@@ -106,6 +112,14 @@ interface RegisterMemberInput {
   planId: string;
 }
 
+export interface RevenueMonthPoint {
+  month: string;
+  /** Chart axis value in ₱ thousands */
+  value: number;
+  /** Raw peso total for the month */
+  total: number;
+}
+
 interface ClerkState {
   gymName: string;
   transactions: ClerkTransaction[];
@@ -113,6 +127,8 @@ interface ClerkState {
   plans: MembershipPlanOption[];
   walkInsToday: number;
   revenueToday: number;
+  monthlyRevenue: number;
+  revenueByMonth: RevenueMonthPoint[];
   newMembersToday: number;
   activeNow: number;
   loading: boolean;
@@ -121,6 +137,7 @@ interface ClerkState {
   fetchTransactions: () => Promise<void>;
   fetchMembers: () => Promise<void>;
   fetchPlans: () => Promise<void>;
+  setPlans: (plans: MembershipPlanOption[]) => void;
   fetchAll: () => Promise<void>;
   recordPayment: (input: RecordPaymentInput) => Promise<boolean>;
   registerMember: (input: RegisterMemberInput) => Promise<ClerkMember | null>;
@@ -141,6 +158,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
   plans: [],
   walkInsToday: 0,
   revenueToday: 0,
+  monthlyRevenue: 0,
+  revenueByMonth: [],
   newMembersToday: 0,
   activeNow: 0,
   loading: false,
@@ -150,10 +169,19 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
     try {
       const { data } = await api.get("/clerk/dashboard");
       if (!data.success) return;
+      const months = Array.isArray(data.data.revenueByMonth)
+        ? (data.data.revenueByMonth as RevenueMonthPoint[]).map((row) => ({
+            month: String(row.month || ""),
+            value: Number(row.value) || 0,
+            total: Number(row.total) || 0,
+          }))
+        : [];
       set({
         gymName: data.data.gymName || "",
         walkInsToday: data.data.walkInsToday ?? 0,
         revenueToday: data.data.revenueToday ?? 0,
+        monthlyRevenue: Number(data.data.monthlyRevenue) || 0,
+        revenueByMonth: months,
         newMembersToday: data.data.newMembersToday ?? 0,
         activeNow: data.data.activeNow ?? 0,
         error: null,
@@ -180,26 +208,47 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
     try {
       const { data } = await api.get("/clerk/members");
       if (!data.success) return;
-      const members = (data.data || []).map((m: any) => ({
-        id: m.id,
-        firstName: m.firstName || "",
-        lastName: m.lastName || "",
-        email: m.email,
-        plan: m.plan,
-        planPrice: m.planPrice,
-        status: (m.status || "active") as MemberStatus,
-        joinedAt: typeof m.joinedAt === "number" ? m.joinedAt : new Date(m.joinedAt).getTime(),
-        expiresAt:
+      const members = (data.data || []).map((m: any) => {
+        const joinedAt =
+          typeof m.joinedAt === "number"
+            ? m.joinedAt
+            : m.joinedAt
+              ? new Date(m.joinedAt).getTime()
+              : 0;
+        const expiresAt =
           typeof m.expiresAt === "number"
             ? m.expiresAt
             : m.expiresAt
               ? new Date(m.expiresAt).getTime()
-              : 0,
-        remainingDays:
-          typeof m.remainingDays === "number"
-            ? m.remainingDays
-            : 0,
-      }));
+              : 0;
+        const startsAt =
+          typeof m.startsAt === "number"
+            ? m.startsAt
+            : m.startsAt
+              ? new Date(m.startsAt).getTime()
+              : joinedAt;
+        return {
+          id: m.id,
+          firstName: m.firstName || "",
+          lastName: m.lastName || "",
+          fullName: m.fullName || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
+          email: m.email,
+          plan: m.plan || m.planName || "Plan",
+          planPrice: Number(m.planPrice) || 0,
+          status: (m.status || "active") as MemberStatus,
+          joinedAt,
+          expiresAt,
+          startsAt,
+          remainingDays: typeof m.remainingDays === "number" ? m.remainingDays : 0,
+          memberType: m.memberType === "Online" ? "Online" : "Walk-in",
+          registeredBy:
+            m.registeredBy === "Owner" || m.registeredBy === "Clerk"
+              ? m.registeredBy
+              : "Self",
+          totalPaid: Number(m.totalPaid) || 0,
+          registrationDate: joinedAt,
+        } as ClerkMember;
+      });
       set({ members, error: null });
     } catch (error: any) {
       set({ error: error.response?.data?.message || "Failed to load members." });
@@ -215,6 +264,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       set({ error: error.response?.data?.message || "Failed to load plans." });
     }
   },
+
+  setPlans: (plans) => set({ plans, error: null }),
 
   fetchAll: async () => {
     set({ loading: true, error: null });

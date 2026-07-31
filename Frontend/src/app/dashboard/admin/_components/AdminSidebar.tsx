@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  ClipboardList,
   Dumbbell,
   LayoutGrid,
   MessageSquare,
@@ -18,7 +17,6 @@ export const ADMIN_NAV_ITEMS = [
   { label: "Overview", href: "/dashboard/admin", icon: LayoutGrid },
   { label: "Gyms", href: "/dashboard/admin/gyms", icon: Dumbbell },
   { label: "Users", href: "/dashboard/admin/users", icon: User },
-  { label: "Walk-in Approvals", href: "/dashboard/admin/walk-in-approvals", icon: ClipboardList },
   { label: "Transactions", href: "/dashboard/admin/transactions", icon: Wallet },
   { label: "Analytics", href: "/dashboard/admin/analytics", icon: BarChart3 },
   { label: "Messages", href: "/dashboard/admin/messages", icon: MessageSquare },

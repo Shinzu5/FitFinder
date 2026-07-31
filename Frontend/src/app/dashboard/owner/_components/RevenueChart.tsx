@@ -1,30 +1,47 @@
 "use client";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May"];
-const VALUES = [210, 285, 360, 470, 580];
-const Y_TICKS = [0, 150, 300, 450, 600];
+import type { RevenueMonthPoint } from "@/stores/clerk-store";
 
 const CHART_WIDTH = 560;
 const CHART_HEIGHT = 200;
 const PADDING = { top: 12, right: 16, bottom: 28, left: 40 };
 
-function scaleY(value: number) {
-  const max = 600;
-  const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
-  return PADDING.top + innerHeight - (value / max) * innerHeight;
+interface RevenueChartProps {
+  points: RevenueMonthPoint[];
 }
 
-function scaleX(index: number) {
-  const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
-  return PADDING.left + (index / (MONTHS.length - 1)) * innerWidth;
+function buildYTicks(maxValue: number): number[] {
+  if (maxValue <= 0) return [0, 1, 2, 3, 4];
+  const niceMax = Math.max(1, Math.ceil(maxValue / 4) * 4);
+  const step = niceMax / 4;
+  return [0, step, step * 2, step * 3, niceMax].map((n) =>
+    Number.isInteger(step) ? n : Math.round(n * 10) / 10,
+  );
 }
 
-export function RevenueChart() {
-  const points = VALUES.map((value, index) => `${scaleX(index)},${scaleY(value)}`).join(" ");
+export function RevenueChart({ points }: RevenueChartProps) {
+  const months = points.length > 0 ? points.map((p) => p.month) : ["—"];
+  const values = points.length > 0 ? points.map((p) => p.value) : [0];
+  const maxValue = Math.max(...values, 0);
+  const yTicks = buildYTicks(maxValue);
+  const chartMax = yTicks[yTicks.length - 1] || 1;
+
+  function scaleY(value: number) {
+    const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+    return PADDING.top + innerHeight - (value / chartMax) * innerHeight;
+  }
+
+  function scaleX(index: number) {
+    const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
+    if (months.length <= 1) return PADDING.left + innerWidth / 2;
+    return PADDING.left + (index / (months.length - 1)) * innerWidth;
+  }
+
+  const linePoints = values.map((value, index) => `${scaleX(index)},${scaleY(value)}`).join(" ");
   const areaPoints = [
     `${scaleX(0)},${scaleY(0)}`,
-    ...VALUES.map((value, index) => `${scaleX(index)},${scaleY(value)}`),
-    `${scaleX(MONTHS.length - 1)},${scaleY(0)}`,
+    ...values.map((value, index) => `${scaleX(index)},${scaleY(value)}`),
+    `${scaleX(months.length - 1)},${scaleY(0)}`,
   ].join(" ");
 
   return (
@@ -34,7 +51,7 @@ export function RevenueChart() {
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         className="h-auto w-full"
         role="img"
-        aria-label="Revenue chart from January to May"
+        aria-label="Monthly revenue chart from completed payments"
       >
         <defs>
           <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
@@ -43,7 +60,7 @@ export function RevenueChart() {
           </linearGradient>
         </defs>
 
-        {Y_TICKS.map((tick) => (
+        {yTicks.map((tick) => (
           <g key={tick}>
             <line
               x1={PADDING.left}
@@ -66,7 +83,7 @@ export function RevenueChart() {
 
         <polygon points={areaPoints} fill="url(#revenueFill)" />
         <polyline
-          points={points}
+          points={linePoints}
           fill="none"
           stroke="#FFD700"
           strokeWidth="2.5"
@@ -74,13 +91,19 @@ export function RevenueChart() {
           strokeLinejoin="round"
         />
 
-        {VALUES.map((value, index) => (
-          <circle key={MONTHS[index]} cx={scaleX(index)} cy={scaleY(value)} r="4" fill="#FFD700" />
+        {values.map((value, index) => (
+          <circle
+            key={`${months[index]}-${index}`}
+            cx={scaleX(index)}
+            cy={scaleY(value)}
+            r="4"
+            fill="#FFD700"
+          />
         ))}
 
-        {MONTHS.map((month, index) => (
+        {months.map((month, index) => (
           <text
-            key={month}
+            key={`${month}-${index}`}
             x={scaleX(index)}
             y={CHART_HEIGHT - 8}
             textAnchor="middle"

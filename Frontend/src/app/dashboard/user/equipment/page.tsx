@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Dumbbell } from "lucide-react";
 import {
   getEquipmentStatusLabel,
   type EquipmentStatus,
@@ -54,13 +55,6 @@ export default function EquipmentPage() {
       return;
     }
     void fetchEquipment();
-    const onFocus = () => void fetchEquipment();
-    window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => void fetchEquipment(), 15000);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.clearInterval(id);
-    };
   }, [ready, joinedGymId, fetchEquipment, router]);
 
   if (!ready || !joinedGymId) {
@@ -77,7 +71,7 @@ export default function EquipmentPage() {
 
       <section className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[400px] text-left text-sm">
+          <table className="w-full min-w-[480px] text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800/80 bg-[#131315] text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 <th className="px-6 py-4 font-semibold">Equipment</th>
@@ -107,7 +101,23 @@ export default function EquipmentPage() {
               ) : (
                 equipment.map((item) => (
                   <tr key={item.id} className="border-b border-zinc-800/50 last:border-0">
-                    <td className="px-6 py-4 font-medium text-white">{item.name}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-[#131315]">
+                          {item.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Dumbbell className="h-5 w-5 text-zinc-600" />
+                          )}
+                        </div>
+                        <span className="font-medium text-white">{item.name}</span>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-zinc-400">{item.quantity}</td>
                     <td className="px-6 py-4">
                       <StatusBadge status={item.status} />

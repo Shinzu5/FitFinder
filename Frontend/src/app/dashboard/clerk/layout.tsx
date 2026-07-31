@@ -1,9 +1,12 @@
 "use client";
 
+import { useClerkMembershipPlansSync } from "@/hooks/useClerkMembershipPlansSync";
 import { ClerkHeader } from "./_components/ClerkHeader";
 import { ClerkSidebar } from "./_components/ClerkSidebar";
 
 export default function ClerkLayout({ children }: { children: React.ReactNode }) {
+  useClerkMembershipPlansSync();
+
   return (
     <div className="flex min-h-screen bg-black text-white">
       <ClerkSidebar />

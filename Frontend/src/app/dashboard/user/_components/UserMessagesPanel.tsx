@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import {
@@ -11,6 +11,7 @@ import {
   type UserSearchContact,
   useUserMessagesStore,
 } from "@/stores/user-messages-store";
+import { DeleteConversationModal } from "@/components/messages/DeleteConversationModal";
 import { UserNewMessageModal } from "./UserNewMessageModal";
 
 function ThreadAvatar({ thread, size = "md" }: { thread: GymMessageThread; size?: "sm" | "md" }) {
@@ -83,17 +84,20 @@ export function UserMessagesPanel() {
   const setActiveThread = useUserMessagesStore((state) => state.setActiveThread);
   const openThreadWithContact = useUserMessagesStore((state) => state.openThreadWithContact);
   const sendMessage = useUserMessagesStore((state) => state.sendMessage);
+  const deleteConversation = useUserMessagesStore((state) => state.deleteConversation);
   const syncJoinedGym = useUserMessagesStore((state) => state.syncJoinedGym);
 
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
   const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (authUser?.id) {
       setCurrentUserId(authUser.id);
-      fetchThreads();
+      void fetchThreads();
     }
   }, [authUser?.id, setCurrentUserId, fetchThreads]);
 
@@ -102,7 +106,7 @@ export function UserMessagesPanel() {
   }, [joinedGymId, membership?.gymName, syncJoinedGym]);
 
   function handleSelectContact(contact: UserSearchContact) {
-    openThreadWithContact(contact);
+    void openThreadWithContact(contact);
   }
 
   const filteredThreads = useMemo(() => {
@@ -119,6 +123,14 @@ export function UserMessagesPanel() {
   }, [search, threads]);
 
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? threads[0];
+
+  // Mirror Admin: select the first thread without forcing a getThread reload on mount.
+  // Reloading here races Socket.IO and wipes live messages (Owner/Clerk/Gymer bug).
+  useEffect(() => {
+    if (!activeThreadId && activeThread?.id) {
+      useUserMessagesStore.setState({ activeThreadId: activeThread.id });
+    }
+  }, [activeThreadId, activeThread?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -203,17 +215,19 @@ export function UserMessagesPanel() {
             <div className="flex items-center gap-3 border-b border-zinc-800/70 px-5 py-4">
               <div className="relative">
                 <OwnerAvatar thread={activeThread} />
-                {activeThread.isOnline ? (
-                  <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-[#0a0a0b] bg-emerald-400" />
-                ) : null}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-white">{activeThread.ownerName}</p>
-                <p className="text-xs text-zinc-500">
-                  {activeThread.gymName}
-                  {activeThread.isOnline ? " · Active now" : ""}
-                </p>
+                <p className="text-xs text-zinc-500">{activeThread.gymName}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </button>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
@@ -262,6 +276,24 @@ export function UserMessagesPanel() {
       open={newMessageOpen}
       onClose={() => setNewMessageOpen(false)}
       onSelectContact={handleSelectContact}
+    />
+    <DeleteConversationModal
+      open={deleteOpen}
+      busy={deleteBusy}
+      onClose={() => {
+        if (!deleteBusy) setDeleteOpen(false);
+      }}
+      onConfirm={() => {
+        if (!activeThread) {
+          setDeleteOpen(false);
+          return;
+        }
+        setDeleteBusy(true);
+        void deleteConversation(activeThread.id).finally(() => {
+          setDeleteBusy(false);
+          setDeleteOpen(false);
+        });
+      }}
     />
     </>
   );

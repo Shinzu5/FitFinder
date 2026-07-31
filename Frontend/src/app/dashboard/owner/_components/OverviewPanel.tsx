@@ -1,28 +1,83 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
+import { useClerkStore } from "@/stores/clerk-store";
+import { useOwnerMessagesStore } from "@/stores/owner-messages-store";
 import { getClerkInitials, useOwnerStaffStore } from "@/stores/owner-staff-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { AddClerkModal } from "./AddClerkModal";
 import { RevenueChart } from "./RevenueChart";
 
-const STATS = [
-  { label: "Active Members", value: "142", highlight: false },
-  { label: "Monthly Revenue", value: "₱180,000", highlight: false },
-  { label: "Walk-ins Today", value: "12", highlight: false },
-  { label: "Unread Messages", value: "3", highlight: true },
-] as const;
-
 export function OverviewPanel() {
   const clerks = useOwnerStaffStore((state) => state.clerks);
+  const fetchStaff = useOwnerStaffStore((state) => state.fetchStaff);
   const removeClerk = useOwnerStaffStore((state) => state.removeClerk);
+
+  const activeNow = useClerkStore((state) => state.activeNow);
+  const monthlyRevenue = useClerkStore((state) => state.monthlyRevenue);
+  const walkInsToday = useClerkStore((state) => state.walkInsToday);
+  const revenueByMonth = useClerkStore((state) => state.revenueByMonth);
+  const dashboardLoading = useClerkStore((state) => state.loading);
+  const fetchDashboard = useClerkStore((state) => state.fetchDashboard);
+
+  const contacts = useOwnerMessagesStore((state) => state.contacts);
+  const fetchConversations = useOwnerMessagesStore((state) => state.fetchConversations);
+  const setCurrentUserId = useOwnerMessagesStore((state) => state.setCurrentUserId);
+  const authUserId = useAuthStore((state) => state.user?.id);
+
   const [modalOpen, setModalOpen] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (authUserId) setCurrentUserId(authUserId);
+  }, [authUserId, setCurrentUserId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.all([fetchStaff(), fetchDashboard(), fetchConversations()]);
+      if (!cancelled) setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchStaff, fetchDashboard, fetchConversations]);
+
+  const unreadMessages = useMemo(
+    () => contacts.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+    [contacts],
+  );
+
+  const stats = [
+    {
+      label: "Active Members",
+      value: ready || !dashboardLoading ? String(activeNow) : "…",
+      highlight: false,
+    },
+    {
+      label: "Monthly Revenue",
+      value:
+        ready || !dashboardLoading ? `₱${Math.round(monthlyRevenue).toLocaleString()}` : "…",
+      highlight: false,
+    },
+    {
+      label: "Walk-ins Today",
+      value: ready || !dashboardLoading ? String(walkInsToday) : "…",
+      highlight: false,
+    },
+    {
+      label: "Unread Messages",
+      value: ready ? String(unreadMessages) : "…",
+      highlight: true,
+    },
+  ];
 
   return (
     <>
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {STATS.map((stat) => (
+          {stats.map((stat) => (
             <article
               key={stat.label}
               className="rounded-2xl border border-white/10 bg-[#141414] px-5 py-4"
@@ -39,7 +94,7 @@ export function OverviewPanel() {
           ))}
         </div>
 
-        <RevenueChart />
+        <RevenueChart points={revenueByMonth} />
 
         <section className="rounded-2xl border border-white/10 bg-[#141414] p-5">
           <div className="mb-4 flex items-center justify-between gap-4">

@@ -8,6 +8,9 @@ export interface SalesReportListItem {
   date: string;
   clerkId: string;
   clerkName: string;
+  closedByRole?: "OWNER" | "CLERK" | string;
+  closedByLabel?: string;
+  referenceNo?: string;
   totalTransactions: number;
   totalRevenue: number;
   closedAt: string;
@@ -32,6 +35,9 @@ export interface SalesReportReceipt {
   date: string;
   clerkId: string;
   clerkName: string;
+  closedByRole?: "OWNER" | "CLERK" | string;
+  closedByLabel?: string;
+  referenceNo?: string;
   totalTransactions: number;
   totalRevenue: number;
   closedAt: string;

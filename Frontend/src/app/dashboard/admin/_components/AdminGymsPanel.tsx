@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Eye, Search, Trash2 } from "lucide-react";
 import { useAdminStore } from "@/stores/admin-store";
 import { type AdminActiveGym, useAdminGymsStore } from "@/stores/admin-gyms-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { getSocket } from "@/lib/socket";
 import { resolveMediaUrl } from "@/lib/media";
 import { AdminDeleteGymModal } from "./AdminDeleteGymModal";
 import { AdminGymViewModal } from "./AdminGymViewModal";
 
 export function AdminGymsPanel() {
+  const accessToken = useAuthStore((state) => state.accessToken);
   const gyms = useAdminGymsStore((state) => state.gyms);
   const loading = useAdminGymsStore((state) => state.loading);
   const error = useAdminGymsStore((state) => state.error);
@@ -24,14 +27,27 @@ export function AdminGymsPanel() {
 
   useEffect(() => {
     void fetchGyms();
-    const onFocus = () => void fetchGyms();
+    const onFocus = () => void fetchGyms({ silent: true });
     window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => void fetchGyms(), 15000);
+    const id = window.setInterval(() => void fetchGyms({ silent: true }), 30000);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(id);
     };
   }, [fetchGyms]);
+
+  // Live updates when any owner buys a plan / gym is created / members join
+  useEffect(() => {
+    if (!accessToken) return;
+    const socket = getSocket(accessToken);
+    const onUpdated = () => {
+      void fetchGyms({ silent: true });
+    };
+    socket.on("admin_gyms_updated", onUpdated);
+    return () => {
+      socket.off("admin_gyms_updated", onUpdated);
+    };
+  }, [accessToken, fetchGyms]);
 
   const filteredGyms = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -82,12 +98,14 @@ export function AdminGymsPanel() {
 
         <section className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-800/80 bg-[#131315] text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <th className="px-5 py-4">Gym Name</th>
                   <th className="px-5 py-4">Location</th>
                   <th className="px-5 py-4">Members</th>
+                  <th className="px-5 py-4">Owner Plan</th>
+                  <th className="px-5 py-4">Days Left</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Actions</th>
                 </tr>
@@ -95,13 +113,13 @@ export function AdminGymsPanel() {
               <tbody>
                 {loading && gyms.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-zinc-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
                       Loading gyms…
                     </td>
                   </tr>
                 ) : filteredGyms.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-zinc-500">
+                    <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
                       No active gyms found.
                     </td>
                   </tr>
@@ -123,10 +141,56 @@ export function AdminGymsPanel() {
                       </td>
                       <td className="px-5 py-4 text-zinc-400">{gym.location}</td>
                       <td className="px-5 py-4 font-medium text-white">{gym.members}</td>
+                      <td className="px-5 py-4 text-zinc-300">
+                        {gym.planLabel !== "No plan" ? (
+                          <span>
+                            {gym.planLabel}
+                            {typeof gym.planPrice === "number" ? (
+                              <span className="block text-xs text-zinc-400">
+                                ₱{gym.planPrice.toLocaleString("en-PH")}
+                              </span>
+                            ) : null}
+                            {gym.planMonths ? (
+                              <span className="block text-xs text-zinc-500">
+                                {gym.planMonths} day{gym.planMonths === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-500">—</span>
+                        )}
+                      </td>
                       <td className="px-5 py-4">
-                        <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                          Active
-                        </span>
+                        {gym.planDaysLeft === null ? (
+                          <span className="text-zinc-500">—</span>
+                        ) : gym.planExpired || gym.planDaysLeft === 0 ? (
+                          <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-400">
+                            Expired
+                          </span>
+                        ) : gym.planDaysLeft <= 7 ? (
+                          <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+                            {gym.planDaysLeft} day{gym.planDaysLeft === 1 ? "" : "s"}
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-[#FACC15]">
+                            {gym.planDaysLeft} days
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        {gym.status === "active" ? (
+                          <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                            Active
+                          </span>
+                        ) : gym.status === "expired" ? (
+                          <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-400">
+                            Expired
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
+                            Pending
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">

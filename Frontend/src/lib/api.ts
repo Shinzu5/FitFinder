@@ -75,6 +75,34 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Account deleted / clerk removed — do not refresh; force login with notice
+    if (error.response?.data?.code === "ACCOUNT_DELETED") {
+      setMemoryAccessToken(null);
+      if (typeof window !== "undefined") {
+        const message =
+          error.response?.data?.message ||
+          "Your account has been removed. Please sign in again.";
+        sessionStorage.setItem("fitfinder-account-removed", message);
+        localStorage.removeItem("fitfinder-auth-v2");
+        try {
+          const { useAuthStore } = await import("@/stores/auth-store");
+          useAuthStore.getState().clearSession();
+        } catch {
+          // ignore
+        }
+        try {
+          const { disconnectSocket } = await import("@/lib/socket");
+          disconnectSocket();
+        } catch {
+          // ignore
+        }
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login?removed=1";
+        }
+      }
+      return Promise.reject(error);
+    }
+
     originalRequest._retry = true;
 
     try {
@@ -85,6 +113,7 @@ api.interceptors.response.use(
       );
 
       const newToken = data?.data?.accessToken;
+      const refreshedUser = data?.data?.user;
       if (!newToken) {
         return Promise.reject(error);
       }
@@ -99,14 +128,42 @@ api.interceptors.response.use(
             ...parsed.state,
             accessToken: newToken,
             isAuthenticated: true,
+            ...(refreshedUser?.role
+              ? {
+                  user: {
+                    ...(parsed.state?.user || {}),
+                    id: refreshedUser.id,
+                    fullName: refreshedUser.fullName,
+                    email: refreshedUser.email,
+                    role: refreshedUser.role,
+                    avatarUrl: refreshedUser.avatarUrl || undefined,
+                  },
+                  role: refreshedUser.role,
+                }
+              : {}),
           };
           localStorage.setItem("fitfinder-auth-v2", JSON.stringify(parsed));
         }
 
-        // Keep Zustand in sync when available
+        // Keep Zustand in sync when available — restore DB role, never invent one
         try {
           const { useAuthStore } = await import("@/stores/auth-store");
-          useAuthStore.setState({ accessToken: newToken, isAuthenticated: true });
+          if (refreshedUser?.role) {
+            useAuthStore.setState({
+              accessToken: newToken,
+              isAuthenticated: true,
+              user: {
+                id: refreshedUser.id,
+                fullName: refreshedUser.fullName,
+                email: refreshedUser.email,
+                role: refreshedUser.role,
+                avatarUrl: refreshedUser.avatarUrl || undefined,
+              },
+              role: refreshedUser.role,
+            });
+          } else {
+            useAuthStore.setState({ accessToken: newToken, isAuthenticated: true });
+          }
         } catch {
           // ignore circular import timing
         }
@@ -114,8 +171,13 @@ api.interceptors.response.use(
 
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return api(originalRequest);
-    } catch (refreshError) {
+    } catch (refreshError: unknown) {
       setMemoryAccessToken(null);
+
+      const refreshData = (
+        refreshError as { response?: { data?: { code?: string } } }
+      )?.response?.data;
+      const deleted = refreshData?.code === "ACCOUNT_DELETED";
 
       if (typeof window !== "undefined") {
         localStorage.removeItem("fitfinder-auth-v2");
@@ -131,8 +193,15 @@ api.interceptors.response.use(
           // ignore
         }
 
-        // Avoid redirect loops on the login page itself
-        if (!window.location.pathname.startsWith("/login")) {
+        if (deleted) {
+          sessionStorage.setItem(
+            "fitfinder-account-removed",
+            "Your account has been removed. Please sign in again.",
+          );
+          if (!window.location.pathname.startsWith("/login")) {
+            window.location.href = "/login?removed=1";
+          }
+        } else if (!window.location.pathname.startsWith("/login")) {
           window.location.href = "/login";
         }
       }

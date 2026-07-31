@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import api from "@/lib/api";
 import type { OwnerPlanId } from "@/lib/owner-plans";
 import { getOwnerPlan } from "@/lib/owner-plans";
 
@@ -13,126 +13,29 @@ export interface OwnerPlanTransaction {
   ownerId: string;
   ownerName: string;
   ownerEmail: string;
-  planId: OwnerPlanId;
+  planId: OwnerPlanId | string;
   planName: string;
   type: "Owner Plan";
   amount: number;
-  method: OwnerPlanPaymentMethod;
+  method: OwnerPlanPaymentMethod | string;
   referenceNo: string;
   createdAt: string;
+  validUntil?: string;
+  daysLeft?: number;
+  months?: number;
 }
-
-function makeTransactionId() {
-  const stamp = Date.now().toString().slice(-6);
-  const rand = Math.floor(Math.random() * 900 + 100);
-  return `TRX-${stamp}${rand}`;
-}
-
-function formatTransactionDate(isoDate: string) {
-  return new Date(isoDate).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-const DEFAULT_STATS = {
-  today: 45000,
-  thisWeek: 312000,
-  thisMonth: 1200000,
-  total: 14500000,
-};
-
-const DEFAULT_TRANSACTIONS: OwnerPlanTransaction[] = [
-  {
-    id: "TRX-884201",
-    gymName: "Powerhouse Fitness",
-    ownerId: "po-2",
-    ownerName: "Liza Gomez",
-    ownerEmail: "liza@powerhouse.fit",
-    planId: "standard",
-    planName: "Standard",
-    type: "Owner Plan",
-    amount: 699,
-    method: "Xendit",
-    referenceNo: "XDT-8842011",
-    createdAt: "2026-05-25T10:30:00.000Z",
-  },
-  {
-    id: "TRX-884202",
-    gymName: "Powerhouse Fitness",
-    ownerId: "po-2",
-    ownerName: "Liza Gomez",
-    ownerEmail: "liza@powerhouse.fit",
-    planId: "standard",
-    planName: "Standard",
-    type: "Owner Plan",
-    amount: 699,
-    method: "Xendit",
-    referenceNo: "XDT-8842022",
-    createdAt: "2026-05-25T09:15:00.000Z",
-  },
-  {
-    id: "TRX-884203",
-    gymName: "Abbsy Mini Gym",
-    ownerId: "po-1",
-    ownerName: "Renz Aballe",
-    ownerEmail: "renz@example.com",
-    planId: "pro",
-    planName: "Pro",
-    type: "Owner Plan",
-    amount: 1499,
-    method: "Xendit",
-    referenceNo: "XDT-8842033",
-    createdAt: "2026-05-24T16:45:00.000Z",
-  },
-  {
-    id: "TRX-884204",
-    gymName: "The Iron Den",
-    ownerId: "po-4",
-    ownerName: "Marcus Lee",
-    ownerEmail: "marcus@ironden.fit",
-    planId: "starter",
-    planName: "Starter",
-    type: "Owner Plan",
-    amount: 299,
-    method: "Xendit",
-    referenceNo: "XDT-8842044",
-    createdAt: "2026-05-23T11:20:00.000Z",
-  },
-  {
-    id: "TRX-884205",
-    gymName: "The Zone Fitness",
-    ownerId: "po-5",
-    ownerName: "Carla Mendoza",
-    ownerEmail: "carla@thezone.fit",
-    planId: "standard",
-    planName: "Standard",
-    type: "Owner Plan",
-    amount: 699,
-    method: "Xendit",
-    referenceNo: "XDT-8842055",
-    createdAt: "2026-05-22T08:00:00.000Z",
-  },
-  {
-    id: "TRX-884206",
-    gymName: "Flex Fitness Studio",
-    ownerId: "po-6",
-    ownerName: "Alex Cruz",
-    ownerEmail: "alex.cruz@example.com",
-    planId: "standard",
-    planName: "Standard",
-    type: "Owner Plan",
-    amount: 699,
-    method: "Xendit",
-    referenceNo: "XDT-8842066",
-    createdAt: "2026-05-21T14:10:00.000Z",
-  },
-];
 
 interface OwnerPlanTransactionsState {
   transactions: OwnerPlanTransaction[];
-  stats: typeof DEFAULT_STATS;
+  stats: {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    total: number;
+  };
+  loading: boolean;
+  error: string | null;
+  fetchTransactions: () => Promise<void>;
   recordPlanPurchase: (input: {
     ownerId: string;
     ownerName: string;
@@ -155,61 +58,114 @@ interface OwnerPlanTransactionsState {
   };
 }
 
-export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>()(
-  persist(
-    (set, get) => ({
-      transactions: DEFAULT_TRANSACTIONS,
-      stats: DEFAULT_STATS,
+const EMPTY_STATS = { today: 0, thisWeek: 0, thisMonth: 0, total: 0 };
 
-      recordPlanPurchase: (input) => {
-        const plan = getOwnerPlan(input.planId);
-        const txn: OwnerPlanTransaction = {
-          id: makeTransactionId(),
-          gymName: input.gymName ?? "Pending setup",
-          ownerId: input.ownerId,
-          ownerName: input.ownerName,
-          ownerEmail: input.ownerEmail,
-          planId: input.planId,
-          planName: plan.name,
-          type: "Owner Plan",
-          amount: plan.price,
-          method: "Xendit",
-          referenceNo: input.referenceNo,
-          createdAt: input.createdAt ?? new Date().toISOString(),
-        };
-        const stats = get().stats;
-        set({
-          transactions: [txn, ...get().transactions],
-          stats: {
-            today: stats.today + plan.price,
-            thisWeek: stats.thisWeek + plan.price,
-            thisMonth: stats.thisMonth + plan.price,
-            total: stats.total + plan.price,
-          },
-        });
+export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>((set, get) => ({
+  transactions: [],
+  stats: EMPTY_STATS,
+  loading: false,
+  error: null,
+
+  fetchTransactions: async () => {
+    set({ loading: true, error: null });
+    try {
+      const { data } = await api.get("/admin/transactions");
+      if (!data.success) {
+        set({ loading: false, error: data.message || "Failed to load transactions." });
+        return;
+      }
+
+      // Support both new { transactions, stats } and legacy array payloads
+      const payload = data.data;
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.transactions)
+          ? payload.transactions
+          : [];
+
+      const transactions: OwnerPlanTransaction[] = list.map((txn: any) => ({
+        id: txn.id,
+        gymName: txn.gymName || "Pending setup",
+        ownerId: txn.ownerId,
+        ownerName: txn.ownerName || "Owner",
+        ownerEmail: txn.ownerEmail || "",
+        planId: txn.planId || "standard",
+        planName: txn.planName || "Plan",
+        type: "Owner Plan" as const,
+        amount: Number(txn.amount) || 0,
+        method: txn.method || "Xendit",
+        referenceNo: txn.referenceNo || "",
+        createdAt: txn.createdAt,
+        validUntil: txn.validUntil,
+        daysLeft: typeof txn.daysLeft === "number" ? txn.daysLeft : undefined,
+        months: typeof txn.months === "number" ? txn.months : undefined,
+      }));
+
+      const stats = !Array.isArray(payload) && payload?.stats
+        ? {
+            today: Number(payload.stats.today) || 0,
+            thisWeek: Number(payload.stats.thisWeek) || 0,
+            thisMonth: Number(payload.stats.thisMonth) || 0,
+            total: Number(payload.stats.total) || 0,
+          }
+        : EMPTY_STATS;
+
+      set({ transactions, stats, loading: false, error: null });
+    } catch (error: any) {
+      set({
+        loading: false,
+        error: error.response?.data?.message || "Failed to load transactions.",
+      });
+    }
+  },
+
+  recordPlanPurchase: (input) => {
+    const plan = getOwnerPlan(input.planId);
+    const txn: OwnerPlanTransaction = {
+      id: `local-${Date.now()}`,
+      gymName: input.gymName ?? "Pending setup",
+      ownerId: input.ownerId,
+      ownerName: input.ownerName,
+      ownerEmail: input.ownerEmail,
+      planId: input.planId,
+      planName: plan.name,
+      type: "Owner Plan",
+      amount: plan.price,
+      method: "Xendit",
+      referenceNo: input.referenceNo,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+    const stats = get().stats;
+    set({
+      transactions: [txn, ...get().transactions],
+      stats: {
+        today: stats.today + plan.price,
+        thisWeek: stats.thisWeek + plan.price,
+        thisMonth: stats.thisMonth + plan.price,
+        total: stats.total + plan.price,
       },
+    });
+  },
 
-      attachGymToLatestPurchase: ({ ownerId, referenceNo, gymName }) => {
-        set({
-          transactions: get().transactions.map((txn) =>
-            txn.ownerId === ownerId && txn.referenceNo === referenceNo
-              ? { ...txn, gymName }
-              : txn,
-          ),
-        });
-      },
+  attachGymToLatestPurchase: ({ ownerId, referenceNo, gymName }) => {
+    set({
+      transactions: get().transactions.map((txn) =>
+        txn.ownerId === ownerId && txn.referenceNo === referenceNo
+          ? { ...txn, gymName }
+          : txn,
+      ),
+    });
+  },
 
-      getStats: () => get().stats,
-    }),
-    {
-      name: "fitfinder-owner-plan-transactions",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+  getStats: () => get().stats,
+}));
 
 export function formatOwnerPlanTransactionDate(isoDate: string) {
-  return formatTransactionDate(isoDate);
+  return new Date(isoDate).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function formatPesoAmount(amount: number, compact = false) {

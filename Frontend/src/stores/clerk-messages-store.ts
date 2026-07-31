@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { mergeChatMessages } from "@/lib/merge-chat-messages";
+import { useAuthStore } from "@/stores/auth-store";
 
 export type MessageSender = "me" | "contact";
 
@@ -13,7 +15,7 @@ export interface ChatMessage {
   createdAt: number;
 }
 
-export type ContactType = "member" | "ai";
+export type ContactType = "member";
 
 export interface MessageContact {
   id: string;
@@ -22,7 +24,7 @@ export interface MessageContact {
   avatarUrl?: string;
   type: ContactType;
   isOnline?: boolean;
-  geminiTag?: boolean;
+  unreadCount?: number;
 }
 
 export interface Conversation {
@@ -30,28 +32,6 @@ export interface Conversation {
   contactId: string;
   messages: ChatMessage[];
 }
-
-const AI_CONTACT: MessageContact = {
-  id: "contact-ai",
-  name: "Fitness AI",
-  subtitle: "Your AI assistant",
-  type: "ai",
-  geminiTag: true,
-};
-
-const AI_CONVERSATION: Conversation = {
-  id: "conv-ai",
-  contactId: "contact-ai",
-  messages: [
-    {
-      id: "msg-ai-1",
-      sender: "contact",
-      text: "Hi! I'm your Fitness AI assistant. Ask me about workouts, nutrition, or gym policies.",
-      time: "9:00 AM",
-      createdAt: Date.now(),
-    },
-  ],
-};
 
 function roleLabel(role: string): string {
   switch (role) {
@@ -71,6 +51,7 @@ function toContact(user: {
   fullName: string;
   role: string;
   avatarUrl?: string | null;
+  unreadCount?: number;
 }): MessageContact {
   return {
     id: user.id,
@@ -78,6 +59,7 @@ function toContact(user: {
     subtitle: roleLabel(user.role),
     avatarUrl: user.avatarUrl || undefined,
     type: "member",
+    unreadCount: user.unreadCount ?? 0,
   };
 }
 
@@ -89,7 +71,10 @@ export function formatMessageTime(date = new Date()) {
   });
 }
 
-export function getConversationPreview(conversation: Conversation): string {
+export function getConversationPreview(
+  conversation: Conversation,
+  _contactName: string,
+): string {
   const last = conversation.messages[conversation.messages.length - 1];
   if (!last) return "No messages yet";
   const prefix = last.sender === "me" ? "You: " : "";
@@ -128,6 +113,7 @@ interface ClerkMessagesState {
   setActiveConversation: (id: string) => void;
   openConversationWithContact: (contact: MessageContact) => Promise<string>;
   sendMessage: (conversationId: string, text: string) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
   receiveMessage: (
     raw: RawDirectMessage,
     sender: { id: string; fullName: string; role: string; avatarUrl?: string | null },
@@ -147,8 +133,8 @@ function toChatMessage(raw: RawDirectMessage, currentUserId: string): ChatMessag
 
 export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => ({
   currentUserId: null,
-  contacts: [AI_CONTACT],
-  conversations: [AI_CONVERSATION],
+  contacts: [],
+  conversations: [],
   activeConversationId: "",
   loadingConversations: false,
   searchQuery: "",
@@ -163,36 +149,60 @@ export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => 
       const { data } = await api.get("/messages/conversations");
       if (data.success) {
         const currentUserId = get().currentUserId;
-        const dbContacts: MessageContact[] = data.data.map((row: any) => toContact(row.user));
-        const dbConversations: Conversation[] = data.data.map((row: any) => {
-          const previewMessage: ChatMessage | null = currentUserId
-            ? toChatMessage(
-                {
-                  id: `preview-${row.user.id}`,
-                  senderId: row.lastSenderId,
-                  receiverId: currentUserId,
-                  text: row.lastMessage,
-                  createdAt: row.lastMessageAt,
-                },
-                currentUserId,
-              )
-            : null;
-          return {
-            id: row.user.id,
-            contactId: row.user.id,
-            messages: previewMessage ? [previewMessage] : [],
-          };
+        const dbContacts: MessageContact[] = data.data.map(
+          (row: {
+            user: { id: string; fullName: string; role: string; avatarUrl?: string | null };
+            unreadCount?: number;
+          }) => toContact({ ...row.user, unreadCount: row.unreadCount }),
+        );
+        const dbConversations: Conversation[] = data.data.map(
+          (row: {
+            user: { id: string };
+            lastMessage: string;
+            lastMessageAt: string;
+            lastSenderId: string;
+          }) => {
+            const previewMessage: ChatMessage | null = currentUserId
+              ? toChatMessage(
+                  {
+                    id: `preview-${row.user.id}`,
+                    senderId: row.lastSenderId,
+                    receiverId: currentUserId,
+                    text: row.lastMessage,
+                    createdAt: row.lastMessageAt,
+                  },
+                  currentUserId,
+                )
+              : null;
+            return {
+              id: row.user.id,
+              contactId: row.user.id,
+              messages: previewMessage ? [previewMessage] : [],
+            };
+          },
+        );
+
+        const conversations = dbConversations.map((conv) => {
+          const existing = get().conversations.find((c) => c.id === conv.id);
+          const keepLive =
+            existing &&
+            existing.messages.length > 0 &&
+            (existing.messages.length > 1 ||
+              existing.messages.some((m) => !m.id.startsWith("preview-")));
+          return keepLive ? { ...conv, messages: existing.messages } : conv;
         });
 
+        // Mirror Admin: select first conversation without forcing a getThread reload.
+        const prevActive = get().activeConversationId;
+        const activeConversationId =
+          prevActive && conversations.some((c) => c.id === prevActive)
+            ? prevActive
+            : conversations[0]?.id ?? "";
+
         set({
-          contacts: [AI_CONTACT, ...dbContacts],
-          conversations: [
-            AI_CONVERSATION,
-            ...dbConversations.map((conv) => {
-              const existing = get().conversations.find((c) => c.id === conv.id);
-              return existing && existing.messages.length > 1 ? existing : conv;
-            }),
-          ],
+          contacts: dbContacts,
+          conversations,
+          activeConversationId,
           loadingConversations: false,
         });
         return;
@@ -225,42 +235,110 @@ export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => 
 
   clearSearch: () => set({ searchQuery: "", searchResults: [] }),
 
-  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setActiveConversation: (id) => {
+    set({ activeConversationId: id });
+    const contact = get().contacts.find((c) => c.id === id);
+    if (contact) void get().openConversationWithContact(contact);
+  },
 
   receiveMessage: (raw, sender) => {
-    const currentUserId = get().currentUserId;
+    const currentUserId = get().currentUserId || useAuthStore.getState().user?.id || null;
     if (!currentUserId) return;
+    if (get().currentUserId !== currentUserId) set({ currentUserId });
 
-    const contactId = raw.senderId === currentUserId ? raw.receiverId : raw.senderId;
+    const senderId = String(raw.senderId);
+    const receiverId = String(raw.receiverId);
+    const messageId = String(raw.id);
+    const contactId = senderId === currentUserId ? receiverId : senderId;
+    if (!contactId) return;
+
+    const existingConversation = get().conversations.find((conv) => conv.id === contactId);
+    if (existingConversation?.messages.some((m) => m.id === messageId)) return;
+
+    if (senderId === currentUserId && existingConversation) {
+      const optimistic = existingConversation.messages.find(
+        (m) => m.id.startsWith("msg-") && m.text === raw.text,
+      );
+      if (optimistic) {
+        const confirmed = toChatMessage(
+          { ...raw, id: messageId, senderId, receiverId },
+          currentUserId,
+        );
+        set({
+          conversations: get().conversations.map((conv) =>
+            conv.id === contactId
+              ? {
+                  ...conv,
+                  messages: conv.messages.map((m) =>
+                    m.id === optimistic.id ? confirmed : m,
+                  ),
+                }
+              : conv,
+          ),
+        });
+        return;
+      }
+    }
 
     const contactExists = get().contacts.some((c) => c.id === contactId);
     if (!contactExists) {
-      set({ contacts: [...get().contacts, toContact(sender)] });
+      set({
+        contacts: [
+          ...get().contacts,
+          toContact({ ...sender, id: String(sender.id) || contactId }),
+        ],
+      });
     }
 
-    const message = toChatMessage(raw, currentUserId);
-    const existingConversation = get().conversations.find((conv) => conv.id === contactId);
+    const message = toChatMessage(
+      { ...raw, id: messageId, senderId, receiverId },
+      currentUserId,
+    );
+    const active = get().activeConversationId === contactId;
 
     if (existingConversation) {
-      if (existingConversation.messages.some((m) => m.id === message.id)) return;
+      const withoutPreview = existingConversation.messages.filter(
+        (m) => !(m.id.startsWith("preview-") && m.text === message.text),
+      );
       set({
         conversations: get().conversations.map((conv) =>
-          conv.id === contactId ? { ...conv, messages: [...conv.messages, message] } : conv,
+          conv.id === contactId
+            ? { ...conv, messages: [...withoutPreview, message] }
+            : conv,
         ),
+        contacts: get().contacts.map((c) =>
+          c.id === contactId && !active && senderId !== currentUserId
+            ? { ...c, unreadCount: (c.unreadCount || 0) + 1 }
+            : c,
+        ),
+        activeConversationId: get().activeConversationId || contactId,
       });
     } else {
       set({
-        conversations: [...get().conversations, { id: contactId, contactId, messages: [message] }],
+        conversations: [
+          { id: contactId, contactId, messages: [message] },
+          ...get().conversations,
+        ],
+        contacts: contactExists
+          ? get().contacts
+          : [
+              toContact({
+                ...sender,
+                id: String(sender.id) || contactId,
+                unreadCount: senderId === currentUserId ? 0 : 1,
+              }),
+              ...get().contacts,
+            ],
+        activeConversationId: get().activeConversationId || contactId,
       });
+    }
+
+    if (active && senderId !== currentUserId) {
+      void api.post(`/messages/thread/${contactId}/read`).catch(() => undefined);
     }
   },
 
   openConversationWithContact: async (contact) => {
-    if (contact.type === "ai") {
-      set({ activeConversationId: AI_CONVERSATION.id });
-      return AI_CONVERSATION.id;
-    }
-
     const currentUserId = get().currentUserId;
     const existingContact = get().contacts.some((c) => c.id === contact.id);
     if (!existingContact) {
@@ -275,19 +353,26 @@ export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => 
 
     set({ activeConversationId: contact.id });
 
-    // Load full thread history ("back-read") from PostgreSQL
     try {
       const { data } = await api.get(`/messages/thread/${contact.id}`);
       if (data.success && currentUserId) {
-        const messages = data.data.messages.map((m: RawDirectMessage) =>
+        const fromServer = data.data.messages.map((m: RawDirectMessage) =>
           toChatMessage(m, currentUserId),
         );
+        // Merge so in-flight socket messages are not wiped (Admin realtime behavior).
+        const local =
+          get().conversations.find((conv) => conv.id === contact.id)?.messages ?? [];
+        const messages = mergeChatMessages(local, fromServer);
         set({
           conversations: get().conversations.map((conv) =>
             conv.id === contact.id ? { ...conv, messages } : conv,
           ),
+          contacts: get().contacts.map((c) =>
+            c.id === contact.id ? { ...c, unreadCount: 0 } : c,
+          ),
         });
       }
+      void api.post(`/messages/thread/${contact.id}/read`).catch(() => undefined);
     } catch (error) {
       console.error("Failed to load conversation thread:", error);
     }
@@ -298,37 +383,6 @@ export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => 
   sendMessage: async (conversationId, text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-
-    if (conversationId === AI_CONVERSATION.id) {
-      const message: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        sender: "me",
-        text: trimmed,
-        time: formatMessageTime(),
-        createdAt: Date.now(),
-      };
-      set({
-        conversations: get().conversations.map((conv) =>
-          conv.id === conversationId ? { ...conv, messages: [...conv.messages, message] } : conv,
-        ),
-      });
-
-      window.setTimeout(() => {
-        const reply: ChatMessage = {
-          id: `msg-ai-reply-${Date.now()}`,
-          sender: "contact",
-          text: "Thanks for your message! I can help with workout plans, nutrition tips, and gym FAQs. What would you like to know?",
-          time: formatMessageTime(),
-          createdAt: Date.now(),
-        };
-        set({
-          conversations: get().conversations.map((conv) =>
-            conv.id === conversationId ? { ...conv, messages: [...conv.messages, reply] } : conv,
-          ),
-        });
-      }, 900);
-      return;
-    }
 
     const optimisticMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -371,6 +425,35 @@ export const useClerkMessagesStore = create<ClerkMessagesState>()((set, get) => 
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+      set({
+        conversations: get().conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.filter((m) => m.id !== optimisticMessage.id),
+              }
+            : conv,
+        ),
+      });
+    }
+  },
+
+  deleteConversation: async (conversationId) => {
+    try {
+      await api.delete(`/messages/conversations/${conversationId}`);
+      const remainingConversations = get().conversations.filter(
+        (c) => c.id !== conversationId,
+      );
+      set({
+        conversations: remainingConversations,
+        contacts: get().contacts.filter((c) => c.id !== conversationId),
+        activeConversationId:
+          get().activeConversationId === conversationId
+            ? remainingConversations[0]?.id ?? ""
+            : get().activeConversationId,
+      });
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
     }
   },
 }));

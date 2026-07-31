@@ -8,6 +8,7 @@ import type { Gym } from "@/lib/mock-gyms";
 import { resolveMediaUrl } from "@/lib/media";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
+import { getSocket } from "@/lib/socket";
 import { UserGymCard } from "./_components/UserGymCard";
 
 function getFirstName(fullName: string) {
@@ -15,6 +16,10 @@ function getFirstName(fullName: string) {
 }
 
 function mapApiGymToListItem(gym: any): Gym {
+  const hasActivePlans =
+    typeof gym.hasActivePlans === "boolean"
+      ? gym.hasActivePlans
+      : gym.pricePerMonth != null;
   return {
     id: gym.id,
     name: gym.name,
@@ -23,7 +28,8 @@ function mapApiGymToListItem(gym: any): Gym {
     hours: gym.hours || gym.schedule || "",
     website: gym.website || "",
     members: gym.members ?? 0,
-    pricePerMonth: Number(gym.pricePerMonth ?? 0),
+    pricePerMonth: hasActivePlans ? Number(gym.pricePerMonth) : null,
+    hasActivePlans,
     image: resolveMediaUrl(gym.image || gym.coverImageUrl),
     status: "ACTIVE",
   };
@@ -59,12 +65,44 @@ export default function UserDashboardPage() {
     void fetchGyms();
     const onFocus = () => void fetchGyms();
     window.addEventListener("focus", onFocus);
-    const id = window.setInterval(() => void fetchGyms(), 15000);
     return () => {
       window.removeEventListener("focus", onFocus);
-      window.clearInterval(id);
     };
   }, [fetchGyms]);
+
+  // Plan add/edit/delete → home cards update (starting price / join availability)
+  const accessToken = useAuthStore((state) => state.accessToken);
+  useEffect(() => {
+    if (!accessToken) return;
+    const socket = getSocket(accessToken);
+
+    function onCatalogUpdated(payload: {
+      gymId?: string;
+      hasActivePlans?: boolean;
+      startingPrice?: number | null;
+    }) {
+      if (!payload?.gymId) return;
+      setRealGyms((prev) =>
+        prev.map((gym) =>
+          gym.id === payload.gymId
+            ? {
+                ...gym,
+                hasActivePlans: Boolean(payload.hasActivePlans),
+                pricePerMonth:
+                  payload.hasActivePlans && payload.startingPrice != null
+                    ? Number(payload.startingPrice)
+                    : null,
+              }
+            : gym,
+        ),
+      );
+    }
+
+    socket.on("gym_plans_catalog_updated", onCatalogUpdated);
+    return () => {
+      socket.off("gym_plans_catalog_updated", onCatalogUpdated);
+    };
+  }, [accessToken]);
 
   const availableGyms = useMemo(() => {
     const gyms = [...realGyms];

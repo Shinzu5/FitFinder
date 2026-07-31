@@ -24,18 +24,22 @@ export function useWalkInApprovalSync() {
     void fetchUserStatus();
   }, [user?.id, fetchMembership, fetchUserStatus]);
 
+  // When staff completes activation, approved+consumed requests must unlock via membership fetch
   useEffect(() => {
     if (!user?.id || joinedGymId) return;
 
-    const approved = requests.some(
-      (req) => req.userId === user.id && req.status === "approved",
+    const activated = requests.some(
+      (req) =>
+        req.userId === user.id &&
+        req.status === "approved" &&
+        Boolean(req.consumedAt),
     );
-    if (!approved) return;
+    if (!activated) return;
 
     void fetchMembership();
   }, [user?.id, joinedGymId, requests, fetchMembership]);
 
-  // Primary: realtime socket events
+  // Realtime only — no polling
   useEffect(() => {
     if (!user?.id || !accessToken) return;
 
@@ -47,6 +51,7 @@ export function useWalkInApprovalSync() {
       } else {
         void fetchUserStatus();
       }
+      // Pending must not unlock — GET /membership returns null until ACTIVE exists
       void fetchMembership();
     }
 
@@ -56,7 +61,6 @@ export function useWalkInApprovalSync() {
     }
 
     function onApprovalsUpdated() {
-      // Owner/Clerk badge + list — USER can ignore; store handles both roles
       const role = useAuthStore.getState().role;
       if (role === "OWNER" || role === "CLERK") {
         void useWalkInApprovalsStore.getState().fetchApprovals();
@@ -80,13 +84,18 @@ export function useWalkInApprovalSync() {
     fetchUserStatus,
   ]);
 
-  // Slow fallback poll only while waiting (no membership yet)
+  // Revoke gym access automatically at expiresAt without a manual refresh
+  const membership = useMembershipStore((state) => state.membership);
   useEffect(() => {
-    if (!user?.id || joinedGymId) return;
-    const id = window.setInterval(() => {
-      void fetchUserStatus();
+    if (!user?.id || !membership?.expiresAt) return;
+    const ms = new Date(membership.expiresAt).getTime() - Date.now();
+    if (ms <= 0) {
       void fetchMembership();
-    }, 30000);
-    return () => window.clearInterval(id);
-  }, [user?.id, joinedGymId, fetchUserStatus, fetchMembership]);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      void fetchMembership();
+    }, Math.min(ms + 250, 2_147_000_000));
+    return () => window.clearTimeout(id);
+  }, [user?.id, membership?.expiresAt, fetchMembership]);
 }

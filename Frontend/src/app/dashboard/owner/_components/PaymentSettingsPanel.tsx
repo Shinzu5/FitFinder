@@ -55,7 +55,7 @@ export function PaymentSettingsPanel() {
     setSaving(false);
     setMessage(
       ok
-        ? "API key saved. Cashless payments (GCash, Maya & Xendit methods) are enabled."
+        ? "API key saved. Cashless is on — use Turn Off anytime to hide it from members."
         : "Could not save API key. Try again.",
     );
   }
@@ -75,21 +75,21 @@ export function PaymentSettingsPanel() {
     setMessage("Connection successful. Xendit is ready to receive cashless payments.");
   }
 
-  async function handleToggle() {
+  async function handleSetEnabled(next: boolean) {
     if (!hasApiKey) {
-      setMessage("Save a valid Xendit API key before enabling cashless payments.");
+      setMessage("Save a valid Xendit API key before publishing cashless payments.");
       return;
     }
+    if (next === xenditEnabled) return;
     setSaving(true);
-    const next = !xenditEnabled;
     const ok = await setXenditEnabled(next);
     setSaving(false);
     setMessage(
       ok
         ? next
-          ? "Cashless payments enabled."
-          : "Cashless payments disabled. Members can still use Walk-in."
-        : "Could not update cashless toggle.",
+          ? "Xendit cashless is published. Members can pay with GCash and other methods."
+          : "Xendit cashless is off. Members will only see Walk-in."
+        : "Could not update Xendit publish setting.",
     );
   }
 
@@ -129,11 +129,11 @@ export function PaymentSettingsPanel() {
               <span className="text-zinc-400">Loading Xendit status…</span>
             ) : cashlessEnabled ? (
               <span className="text-emerald-400">
-                Cashless (Xendit) is <strong>enabled</strong>
+                Cashless (Xendit) is <strong>published</strong> to members
               </span>
             ) : hasApiKey ? (
               <span className="text-amber-400">
-                API key saved — cashless is <strong>disabled</strong> (use the toggle below)
+                API key saved — cashless is <strong>off</strong> (not shown to members)
               </span>
             ) : (
               <span className="text-zinc-400">
@@ -144,32 +144,47 @@ export function PaymentSettingsPanel() {
           </p>
         </div>
 
-        {hasApiKey ? (
-          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3">
+        <div className="mt-4 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-white">Enable cashless (Xendit)</p>
-              <p className="text-xs text-zinc-500">
-                Turn off anytime — members will only see Walk-in.
+              <p className="text-sm font-medium text-white">Publish Xendit to members</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Turn cashless on or off anytime. When off, members only see Walk-in.
               </p>
             </div>
-            <button
-              type="button"
-              disabled={saving || loading}
-              onClick={() => void handleToggle()}
-              className={`relative h-8 w-14 shrink-0 rounded-full transition ${
-                xenditEnabled ? "bg-[#FFD700]" : "bg-zinc-700"
-              }`}
-              aria-pressed={xenditEnabled}
-              aria-label="Toggle cashless payments"
-            >
-              <span
-                className={`absolute top-1 h-6 w-6 rounded-full bg-black transition ${
-                  xenditEnabled ? "left-7" : "left-1"
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                disabled={saving || loading || !hasApiKey || xenditEnabled}
+                onClick={() => void handleSetEnabled(true)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  xenditEnabled
+                    ? "bg-[#FFD700] text-black"
+                    : "border border-[#FFD700]/50 text-[#FFD700] hover:bg-[#FFD700]/10"
                 }`}
-              />
-            </button>
+              >
+                Turn On
+              </button>
+              <button
+                type="button"
+                disabled={saving || loading || !hasApiKey || !xenditEnabled}
+                onClick={() => void handleSetEnabled(false)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                  !xenditEnabled && hasApiKey
+                    ? "bg-zinc-600 text-white"
+                    : "border border-white/20 text-zinc-300 hover:bg-white/5"
+                }`}
+              >
+                Turn Off
+              </button>
+            </div>
           </div>
-        ) : null}
+          {!hasApiKey ? (
+            <p className="mt-3 text-xs text-zinc-500">
+              Save a valid Xendit API key below first — then you can publish cashless.
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <div className="flex items-start gap-3 rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/5 px-4 py-3 text-sm text-[#FFD700]">
@@ -302,8 +317,9 @@ export function PaymentSettingsPanel() {
           <li className="flex gap-3">
             <span className="font-semibold text-[#FFD700]">4.</span>
             <span>
-              Paste it above and click <strong className="text-white">Save API key</strong>.
-              Cashless options appear for members when the toggle is on.
+              Paste it above and click <strong className="text-white">Save API key</strong>,
+              then use <strong className="text-white">Turn On / Turn Off</strong> to publish
+              cashless for members anytime.
             </span>
           </li>
         </ol>

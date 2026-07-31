@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
+  formatMemberDate,
   getMemberInitials,
   getMembershipProgress,
   type GymMember,
@@ -12,6 +13,13 @@ import {
 import { ManageMemberModal } from "./ManageMemberModal";
 
 function StatusBadge({ status }: { status: GymMember["status"] }) {
+  if (status === "expired") {
+    return (
+      <span className="rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-medium text-red-400">
+        expired
+      </span>
+    );
+  }
   if (status === "expiring") {
     return (
       <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-400">
@@ -46,19 +54,20 @@ function MemberCard({
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold text-white">{member.fullName}</h3>
               <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+                {member.memberType}
+              </span>
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
                 {member.billingCycle}
               </span>
             </div>
             <p className="mt-1 truncate text-sm text-zinc-500">{member.email}</p>
-            {member.addedByClerk ? (
-              <span className="mt-2 inline-block rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-400">
-                Added by Clerk
-              </span>
-            ) : null}
+            <span className="mt-2 inline-block rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-400">
+              Registered by {member.registeredBy}
+            </span>
           </div>
         </div>
 
-        <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-xl">
+        <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-2xl lg:grid-cols-3">
           <div>
             <p className="text-xs text-zinc-500">Plan</p>
             <p className="mt-1 text-sm font-medium text-white">{member.planName}</p>
@@ -71,6 +80,26 @@ function MemberCard({
                 style={{ width: `${progress}%` }}
               />
             </div>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Total payment</p>
+            <p className="mt-1 text-sm font-medium text-[#FFD700]">
+              ₱{member.totalPaid.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Start date</p>
+            <p className="mt-1 text-sm text-zinc-300">{formatMemberDate(member.startsAt)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Expiration date</p>
+            <p className="mt-1 text-sm text-zinc-300">{formatMemberDate(member.expiresAt)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Registration date</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {formatMemberDate(member.registrationDate)}
+            </p>
           </div>
         </div>
 
@@ -100,9 +129,15 @@ function MemberCard({
 
 export function MembersPanel() {
   const members = useOwnerMembersStore((state) => state.members);
+  const loading = useOwnerMembersStore((state) => state.loading);
+  const fetchMembers = useOwnerMembersStore((state) => state.fetchMembers);
   const removeMember = useOwnerMembersStore((state) => state.removeMember);
   const [query, setQuery] = useState("");
   const [selectedMember, setSelectedMember] = useState<GymMember | null>(null);
+
+  useEffect(() => {
+    void fetchMembers();
+  }, [fetchMembers]);
 
   const filteredMembers = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
@@ -111,13 +146,15 @@ export function MembersPanel() {
       (member) =>
         member.fullName.toLowerCase().includes(trimmed) ||
         member.email.toLowerCase().includes(trimmed) ||
-        member.planName.toLowerCase().includes(trimmed),
+        member.planName.toLowerCase().includes(trimmed) ||
+        member.memberType.toLowerCase().includes(trimmed) ||
+        member.registeredBy.toLowerCase().includes(trimmed),
     );
   }, [members, query]);
 
   function handleDelete() {
     if (!selectedMember) return;
-    removeMember(selectedMember.id);
+    void removeMember(selectedMember.id);
     setSelectedMember(null);
   }
 
@@ -137,7 +174,11 @@ export function MembersPanel() {
         </div>
 
         <div className="space-y-4">
-          {filteredMembers.length === 0 ? (
+          {loading && members.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
+              Loading members…
+            </p>
+          ) : filteredMembers.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
               {members.length === 0
                 ? "No members yet."

@@ -3,6 +3,17 @@ import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
+import {
+  linkOwnerSubscriptionToGym,
+  syncLatestOwnerSubscriptions,
+} from "../services/ownerSubscription.service";
+import {
+  emitAdminGymsUpdated,
+  emitAdminUsersUpdated,
+  emitMembershipUpdated,
+} from "../services/realtime.service";
+import { kickUserSession, purgeUserRecords } from "../services/accountRemoval.service";
+import { emitToUser } from "../socket";
 
 function isValidXenditKey(key: string): boolean {
   return key.startsWith("xnd_production_") || key.startsWith("xnd_development_");
@@ -46,7 +57,7 @@ export async function listGyms(req: Request, res: Response): Promise<void> {
       where,
       include: {
         _count: { select: { gymMemberships: true } },
-        membershipPlans: { take: 1, orderBy: { price: "asc" } },
+        membershipPlans: { where: { isActive: true }, take: 1, orderBy: { price: "asc" } },
         owner: { select: { fullName: true, email: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -60,7 +71,8 @@ export async function listGyms(req: Request, res: Response): Promise<void> {
       hours: gym.schedule,
       website: gym.website,
       members: gym._count.gymMemberships,
-      pricePerMonth: gym.membershipPlans[0]?.price ?? gym.pricePerMonth,
+      pricePerMonth: gym.membershipPlans[0]?.price ?? null,
+      hasActivePlans: gym.membershipPlans.length > 0,
       image: gym.coverImageUrl,
       status: gym.status,
       ownerName: gym.owner.fullName,
@@ -82,8 +94,8 @@ export async function getGym(req: Request, res: Response): Promise<void> {
       where: { id: req.params.id as string },
       include: {
         owner: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
-        membershipPlans: { orderBy: { price: "asc" } },
-        coaches: true,
+        membershipPlans: { where: { isActive: true }, orderBy: { price: "asc" } },
+        coaches: { where: { isActive: true }, orderBy: { createdAt: "asc" } },
         equipment: true,
         // Exercises are member-only — served via GET /api/user/exercises
         shopProducts: true,
@@ -117,6 +129,20 @@ export async function createGym(req: AuthRequest, res: Response): Promise<void> 
       coverImageUrl, schedule, pricePerMonth, subscriptionId,
     } = req.body;
 
+    // Never attach a "new" gym to leftover data — owner must delete first
+    const existingGym = await prisma.gym.findFirst({
+      where: { ownerId: req.userId! },
+      select: { id: true, name: true },
+    });
+    if (existingGym) {
+      sendError(
+        res,
+        "You already have a gym. Delete it before creating a new one.",
+        409,
+      );
+      return;
+    }
+
     const gym = await prisma.gym.create({
       data: {
         name,
@@ -133,13 +159,10 @@ export async function createGym(req: AuthRequest, res: Response): Promise<void> 
       },
     });
 
-    // Link subscription to gym if provided
-    if (subscriptionId) {
-      await prisma.ownerSubscription.update({
-        where: { id: subscriptionId },
-        data: { gymId: gym.id },
-      });
-    }
+    // Ensure paid plans exist in DB, then link the owner's plan to this gym
+    await syncLatestOwnerSubscriptions();
+    await linkOwnerSubscriptionToGym(req.userId!, gym.id, subscriptionId || null);
+    void emitAdminGymsUpdated();
 
     // Ensure the account is OWNER in PostgreSQL (covers USER → first gym, and OWNER signup)
     const owner = await prisma.user.update({
@@ -221,8 +244,7 @@ export async function updateGym(req: AuthRequest, res: Response): Promise<void> 
     // Map frontend field names → Prisma columns
     if (typeof body.websiteOrSlug === "string") data.website = body.websiteOrSlug;
     else if (typeof body.website === "string") data.website = body.website;
-    if (typeof body.membershipPrice === "number") data.pricePerMonth = body.membershipPrice;
-    else if (typeof body.pricePerMonth === "number") data.pricePerMonth = body.pricePerMonth;
+    // Pricing comes only from Membership Plans — ignore legacy base price fields
 
     const updated = await prisma.gym.update({
       where: { id: req.params.id as string },
@@ -254,37 +276,107 @@ export async function deleteGym(req: AuthRequest, res: Response): Promise<void> 
     const ownerId = gym.ownerId;
     const isAdminDelete = req.userRole === "ADMIN";
 
-    await prisma.$transaction(async (tx) => {
-      // Which gyms will be removed?
-      // Admin delete: remove ALL gyms for this owner (app is 1-owner → onboarding again).
-      // Owner self-delete: remove only this gym.
-      const gymsToRemove = isAdminDelete
-        ? await tx.gym.findMany({ where: { ownerId }, select: { id: true } })
-        : [{ id: gym.id }];
-      const gymIds = gymsToRemove.map((g) => g.id);
+    let mustRepurchase = false;
+    let kickedClerkIds: string[] = [];
+    let memberUserIds: string[] = [];
 
-      // Unassign + demote clerks tied to any of these gyms
+    // Resolve gym scope before the transaction so we can kick sessions first
+    const gymsToRemove = isAdminDelete
+      ? await prisma.gym.findMany({ where: { ownerId }, select: { id: true } })
+      : [{ id: gym.id }];
+    const gymIds = gymsToRemove.map((g) => g.id);
+
+    const [clerks, memberships] = await Promise.all([
+      prisma.user.findMany({
+        where: { clerkGymId: { in: gymIds }, role: "CLERK" },
+        select: { id: true },
+      }),
+      prisma.gymMembership.findMany({
+        where: { gymId: { in: gymIds } },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+    ]);
+
+    kickedClerkIds = clerks.map((c) => c.id);
+    memberUserIds = memberships.map((m) => m.userId);
+
+    // Realtime logout before rows disappear
+    for (const clerkId of kickedClerkIds) {
+      kickUserSession(
+        clerkId,
+        "Your account has been removed because the gym was deleted.",
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Detach then permanently remove clerks (no orphan CLERK accounts)
       await tx.user.updateMany({
-        where: { clerkGymId: { in: gymIds } },
-        data: { clerkGymId: null, role: "USER" },
+        where: { clerkGymId: { in: gymIds }, role: "CLERK" },
+        data: { clerkGymId: null, refreshToken: null },
       });
 
-      // Wipe owner platform subscriptions so they must pay again on onboarding
-      await tx.ownerSubscription.deleteMany({ where: { ownerId } });
+      for (const clerkId of kickedClerkIds) {
+        const stillThere = await tx.user.findUnique({
+          where: { id: clerkId },
+          select: { id: true },
+        });
+        if (stillThere) {
+          await purgeUserRecords(tx, clerkId);
+        }
+      }
 
-      // Delete gyms (children cascade via Prisma schema)
+      // Explicit gym-scoped cleanup (cascade also covers children)
+      await tx.walkInApproval.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.gymMembership.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.clerkTransaction.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.dailySalesReport.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.message.deleteMany({
+        where: { conversation: { gymId: { in: gymIds } } },
+      });
+      await tx.conversation.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.membershipPlan.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.coach.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.equipment.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.exercise.deleteMany({ where: { gymId: { in: gymIds } } });
+      await tx.shopProduct.deleteMany({ where: { gymId: { in: gymIds } } });
+
       await tx.gym.deleteMany({ where: { id: { in: gymIds } } });
 
       const remaining = await tx.gym.count({ where: { ownerId } });
       if (remaining === 0) {
+        // Expire plan access (keep rows for revenue history) + demote to USER
+        await tx.ownerSubscription.updateMany({
+          where: { ownerId },
+          data: { gymId: null, validUntil: new Date() },
+        });
         await tx.user.update({
           where: { id: ownerId },
           data: { role: "USER" },
         });
+        mustRepurchase = true;
       }
     });
 
-    sendSuccess(res, null, "Gym deleted");
+    for (const userId of memberUserIds) {
+      emitMembershipUpdated(userId);
+    }
+
+    // Owner UI must drop every cached clerk/plan/coach/etc. immediately
+    emitToUser(ownerId, "owner_gym_cleared", {
+      gymIds,
+      removedClerks: kickedClerkIds.length,
+    });
+
+    if (mustRepurchase) {
+      emitToUser(ownerId, "owner_must_repurchase", {
+        reason: isAdminDelete ? "admin_deleted_gym" : "owner_deleted_gym",
+      });
+    }
+    void emitAdminUsersUpdated();
+    void emitAdminGymsUpdated();
+
+    sendSuccess(res, { mustRepurchase, removedClerks: kickedClerkIds.length }, "Gym deleted");
   } catch (error) {
     console.error("Delete gym error:", error);
     sendError(res, "Failed to delete gym", 500);

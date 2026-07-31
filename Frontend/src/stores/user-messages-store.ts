@@ -2,6 +2,8 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { mergeChatMessages } from "@/lib/merge-chat-messages";
+import { useAuthStore } from "@/stores/auth-store";
 
 export type UserMessageSender = "member" | "gym";
 
@@ -89,11 +91,19 @@ interface RawDirectMessage {
   createdAt: string;
 }
 
+function resolveCurrentUserId(fallback?: string | null): string | null {
+  return fallback || useAuthStore.getState().user?.id || null;
+}
+
+function normalizeId(id: string | number | null | undefined): string {
+  return id == null ? "" : String(id);
+}
+
 function toChatMessage(raw: RawDirectMessage, currentUserId: string): UserChatMessage {
   const date = new Date(raw.createdAt);
   return {
-    id: raw.id,
-    sender: raw.senderId === currentUserId ? "member" : "gym",
+    id: normalizeId(raw.id),
+    sender: normalizeId(raw.senderId) === currentUserId ? "member" : "gym",
     text: raw.text,
     time: formatUserMessageTime(date),
     createdAt: date.getTime(),
@@ -128,6 +138,7 @@ interface UserMessagesState {
   setActiveThread: (id: string) => void;
   openThreadWithContact: (contact: UserSearchContact) => Promise<string>;
   sendMessage: (threadId: string, text: string) => Promise<void>;
+  deleteConversation: (threadId: string) => Promise<void>;
   syncJoinedGym: (gymId: string | null, gymName: string | null) => void;
   receiveMessage: (
     raw: RawDirectMessage,
@@ -151,7 +162,11 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
     try {
       const { data } = await api.get("/messages/conversations");
       if (data.success) {
-        const currentUserId = get().currentUserId;
+        const currentUserId = resolveCurrentUserId(get().currentUserId);
+        if (currentUserId && get().currentUserId !== currentUserId) {
+          set({ currentUserId });
+        }
+        const previous = get().threads;
         const dbThreads: GymMessageThread[] = data.data.map((row: any) => {
           const previewMessage: UserChatMessage | null = currentUserId
             ? toChatMessage(
@@ -169,11 +184,33 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
           return { ...thread, messages: previewMessage ? [previewMessage] : [] };
         });
 
+        const threads = dbThreads.map((thread) => {
+          const existing = previous.find((t) => t.id === thread.id);
+          const keepLive =
+            existing &&
+            existing.messages.length > 0 &&
+            (existing.messages.length > thread.messages.length ||
+              existing.messages.some((m) => !m.id.startsWith("preview-")));
+          if (keepLive) {
+            return {
+              ...thread,
+              messages: existing.messages,
+              isOnline: existing.isOnline,
+            };
+          }
+          return thread;
+        });
+
+        // Mirror Admin: select first thread without forcing getThread.
+        const prevActive = get().activeThreadId;
+        const activeThreadId =
+          prevActive && threads.some((t) => t.id === prevActive)
+            ? prevActive
+            : threads[0]?.id ?? "";
+
         set({
-          threads: dbThreads.map((thread) => {
-            const existing = get().threads.find((t) => t.id === thread.id);
-            return existing && existing.messages.length > 1 ? existing : thread;
-          }),
+          threads,
+          activeThreadId,
           loadingThreads: false,
         });
         return;
@@ -206,26 +243,100 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
 
   clearSearch: () => set({ searchQuery: "", searchResults: [] }),
 
-  setActiveThread: (id) => set({ activeThreadId: id }),
+  setActiveThread: (id) => {
+    // Select immediately (Admin-style). Load history with merge so sockets aren't wiped.
+    set({ activeThreadId: id });
+    const thread = get().threads.find((t) => t.id === id);
+    if (!thread) return;
+    void get().openThreadWithContact({
+      id: thread.id,
+      name: thread.ownerName,
+      subtitle: thread.gymName,
+      avatarUrl: thread.ownerAvatarUrl,
+    });
+  },
 
   receiveMessage: (raw, sender) => {
-    const currentUserId = get().currentUserId;
+    const currentUserId = resolveCurrentUserId(get().currentUserId);
     if (!currentUserId) return;
+    if (get().currentUserId !== currentUserId) {
+      set({ currentUserId });
+    }
 
-    const contactId = raw.senderId === currentUserId ? raw.receiverId : raw.senderId;
-    const message = toChatMessage(raw, currentUserId);
+    const senderId = normalizeId(raw.senderId);
+    const receiverId = normalizeId(raw.receiverId);
+    const messageId = normalizeId(raw.id);
+    const contactId = senderId === currentUserId ? receiverId : senderId;
+    if (!contactId) return;
+
     const existingThread = get().threads.find((t) => t.id === contactId);
+    if (existingThread?.messages.some((m) => m.id === messageId)) return;
+
+    // Replace optimistic local send with the server-confirmed message.
+    if (senderId === currentUserId && existingThread) {
+      const optimistic = existingThread.messages.find(
+        (m) => m.id.startsWith("umsg-") && m.text === raw.text,
+      );
+      if (optimistic) {
+        const confirmed = toChatMessage(
+          { ...raw, id: messageId, senderId, receiverId },
+          currentUserId,
+        );
+        set({
+          threads: get().threads.map((t) =>
+            t.id === contactId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) => (m.id === optimistic.id ? confirmed : m)),
+                }
+              : t,
+          ),
+        });
+        return;
+      }
+    }
+
+    const message = toChatMessage(
+      { ...raw, id: messageId, senderId, receiverId },
+      currentUserId,
+    );
+    const active =
+      get().activeThreadId === contactId ||
+      (!get().activeThreadId && get().threads[0]?.id === contactId);
 
     if (existingThread) {
-      if (existingThread.messages.some((m) => m.id === message.id)) return;
+      // Drop stale single-preview placeholder when the live message arrives.
+      const withoutPreview = existingThread.messages.filter(
+        (m) => !(m.id.startsWith("preview-") && m.text === message.text),
+      );
+      const nextMessages = [...withoutPreview, message].sort(
+        (a, b) => a.createdAt - b.createdAt,
+      );
       set({
-        threads: get().threads.map((t) =>
-          t.id === contactId ? { ...t, messages: [...t.messages, message] } : t,
-        ),
+        threads: [
+          { ...existingThread, messages: nextMessages },
+          ...get().threads.filter((t) => t.id !== contactId),
+        ],
+        activeThreadId: get().activeThreadId || contactId,
       });
     } else {
-      const newThread = threadFromContact(toSearchContact(sender));
-      set({ threads: [{ ...newThread, messages: [message] }, ...get().threads] });
+      const newThread = threadFromContact(
+        toSearchContact({
+          ...sender,
+          id: normalizeId(sender.id) || contactId,
+        }),
+      );
+      set({
+        threads: [
+          { ...newThread, id: contactId, gymId: contactId, messages: [message] },
+          ...get().threads,
+        ],
+        activeThreadId: get().activeThreadId || contactId,
+      });
+    }
+
+    if (active && senderId !== currentUserId) {
+      void api.post(`/messages/thread/${contactId}/read`).catch(() => undefined);
     }
   },
 
@@ -243,13 +354,16 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
     try {
       const { data } = await api.get(`/messages/thread/${contact.id}`);
       if (data.success && currentUserId) {
-        const messages = data.data.messages.map((m: RawDirectMessage) =>
+        const fromServer = data.data.messages.map((m: RawDirectMessage) =>
           toChatMessage(m, currentUserId),
         );
+        const local = get().threads.find((t) => t.id === contact.id)?.messages ?? [];
+        const messages = mergeChatMessages(local, fromServer);
         set({
           threads: get().threads.map((t) => (t.id === contact.id ? { ...t, messages } : t)),
         });
       }
+      void api.post(`/messages/thread/${contact.id}/read`).catch(() => undefined);
     } catch (error) {
       console.error("Failed to load conversation thread:", error);
     }
@@ -300,6 +414,20 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+    }
+  },
+
+  deleteConversation: async (threadId) => {
+    try {
+      await api.delete(`/messages/conversations/${threadId}`);
+      const remaining = get().threads.filter((t) => t.id !== threadId);
+      set({
+        threads: remaining,
+        activeThreadId:
+          get().activeThreadId === threadId ? remaining[0]?.id ?? "" : get().activeThreadId,
+      });
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
     }
   },
 

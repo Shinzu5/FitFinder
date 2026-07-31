@@ -73,7 +73,22 @@ export function SalesReceiptModal({ receipt, onClose }: SalesReceiptModalProps) 
 
           <section className="grid gap-3 rounded-xl border border-zinc-800 bg-[#131315] px-4 py-4 text-sm sm:grid-cols-2">
             <div>
-              <p className="text-zinc-500">Clerk</p>
+              <p className="text-zinc-500">Closed By</p>
+              <p className="mt-0.5 font-semibold text-white">
+                {receipt.closedByLabel ||
+                  (String(receipt.closedByRole || "").toUpperCase() === "OWNER"
+                    ? "Closed by Owner"
+                    : `Clerk · ${receipt.clerkName}`)}
+              </p>
+            </div>
+            <div>
+              <p className="text-zinc-500">Reference</p>
+              <p className="mt-0.5 font-mono font-semibold text-[#FACC15]">
+                {receipt.referenceNo || `DSR-${receipt.id.slice(0, 8).toUpperCase()}`}
+              </p>
+            </div>
+            <div>
+              <p className="text-zinc-500">Recorded By</p>
               <p className="mt-0.5 font-semibold text-white">{receipt.clerkName}</p>
             </div>
             <div>

@@ -27,6 +27,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const passwordJustReset = searchParams.get("reset") === "1";
+  const accountRemoved = searchParams.get("removed") === "1";
 
   const {
     login,
@@ -43,11 +44,26 @@ function LoginForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [removedNotice, setRemovedNotice] = useState<string | null>(null);
   const [resetNotice] = useState(
     passwordJustReset
       ? "Password updated successfully. Please sign in with your new password."
       : null,
   );
+
+  useEffect(() => {
+    if (!accountRemoved) return;
+    const stored =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem("fitfinder-account-removed")
+        : null;
+    setRemovedNotice(
+      stored || "Your account has been removed by the Gym Owner.",
+    );
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("fitfinder-account-removed");
+    }
+  }, [accountRemoved]);
   const {
     register,
     handleSubmit,
@@ -178,6 +194,7 @@ function LoginForm() {
       footerLinkText="Sign up"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+        {removedNotice ? <Alert variant="destructive">{removedNotice}</Alert> : null}
         {error || formError ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
         {resetNotice ? <Alert variant="success">{resetNotice}</Alert> : null}

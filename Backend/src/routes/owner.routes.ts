@@ -6,7 +6,7 @@ import {
   getCoaches, createCoach, updateCoach, removeCoach,
   getEquipment, createEquipment, updateEquipment, toggleEquipment, removeEquipment,
   getExercises, createExercise, updateExercise, removeExercise,
-  getShopProducts, createShopProduct, removeShopProduct,
+  getShopProducts, createShopProduct, updateShopProduct, removeShopProduct,
   getStaff, addStaff, removeStaff,
   getMessages, sendMessage,
   getSalesReports, getSalesReportReceipt,
@@ -51,6 +51,7 @@ router.delete("/exercises/:id", removeExercise);
 
 router.get("/shop", getShopProducts);
 router.post("/shop", createShopProduct);
+router.put("/shop/:id", updateShopProduct);
 router.delete("/shop/:id", removeShopProduct);
 
 router.get("/staff", getStaff);

@@ -61,7 +61,7 @@ export function OwnerReportsPanel() {
       <div>
         <h2 className="text-2xl font-bold text-white">Daily Sales Reports</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Private financial closings from your gym clerks. Admin and other gyms cannot access these.
+          Closed daily sales receipts from Owner and Clerk. Each closing creates one receipt here.
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export function OwnerReportsPanel() {
             <thead>
               <tr className="border-b border-zinc-800/80 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 <th className="px-5 py-4">Date</th>
-                <th className="px-5 py-4">Clerk</th>
+                <th className="px-5 py-4">Closed By</th>
                 <th className="px-5 py-4">Transactions</th>
                 <th className="px-5 py-4">Revenue</th>
                 <th className="px-5 py-4">Closed Time</th>
@@ -147,36 +147,46 @@ export function OwnerReportsPanel() {
               ) : reports.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-5 py-12 text-center text-zinc-500">
-                    No daily sales reports yet. Closings created by your clerk will appear here.
+                    No daily sales reports yet. Close today&apos;s walk-in payments to save a receipt
+                    here.
                   </td>
                 </tr>
               ) : (
-                reports.map((report) => (
-                  <tr key={report.id} className="border-b border-zinc-800/50 last:border-0">
-                    <td className="px-5 py-4 font-semibold text-white">{formatDate(report.date)}</td>
-                    <td className="px-5 py-4 text-zinc-300">{report.clerkName}</td>
-                    <td className="px-5 py-4 text-zinc-300">{report.totalTransactions}</td>
-                    <td className="px-5 py-4 font-bold text-[#FFD700]">
-                      ₱{report.totalRevenue.toLocaleString()}
-                    </td>
-                    <td className="px-5 py-4 text-zinc-400">{formatTime(report.closedAt)}</td>
-                    <td className="px-5 py-4">
-                      <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                        {report.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <button
-                        type="button"
-                        disabled={openingId === report.id}
-                        onClick={() => void handleViewReceipt(report.id)}
-                        className="rounded-lg border border-[#FFD700]/40 px-3 py-1.5 text-xs font-bold text-[#FFD700] hover:bg-[#FFD700]/10 disabled:opacity-60"
-                      >
-                        {openingId === report.id ? "Opening…" : "View Receipt"}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                reports.map((report) => {
+                  const closedByOwner =
+                    String(report.closedByRole || "").toUpperCase() === "OWNER";
+                  const closedBy =
+                    report.closedByLabel ||
+                    (closedByOwner ? "Closed by Owner" : `Closed by Clerk · ${report.clerkName}`);
+                  return (
+                    <tr key={report.id} className="border-b border-zinc-800/50 last:border-0">
+                      <td className="px-5 py-4 font-semibold text-white">
+                        {formatDate(report.date)}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-300">{closedBy}</td>
+                      <td className="px-5 py-4 text-zinc-300">{report.totalTransactions}</td>
+                      <td className="px-5 py-4 font-bold text-[#FFD700]">
+                        ₱{report.totalRevenue.toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-400">{formatTime(report.closedAt)}</td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                          {report.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <button
+                          type="button"
+                          disabled={openingId === report.id}
+                          onClick={() => void handleViewReceipt(report.id)}
+                          className="rounded-lg border border-[#FFD700]/40 px-3 py-1.5 text-xs font-bold text-[#FFD700] hover:bg-[#FFD700]/10 disabled:opacity-60"
+                        >
+                          {openingId === report.id ? "Opening…" : "View Receipt"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

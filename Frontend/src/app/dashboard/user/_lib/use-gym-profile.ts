@@ -3,16 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
-import { useOwnerCoachesStore } from "@/stores/owner-coaches-store";
-import { useOwnerEquipmentStore } from "@/stores/owner-equipment-store";
-import { useOwnerMembershipPlansStore } from "@/stores/owner-membership-plans-store";
 import { getSocket } from "@/lib/socket";
 import { resolveGymProfile } from "./gym-profile";
 import type { PublicGymProfile } from "./gym-profile";
 
 /**
- * Loads a public gym profile from the API (ACTIVE gyms only).
- * Subscribes to Socket.IO `coaches_updated` so coach CRUD is live without refresh.
+ * Loads a public gym profile from Neon (ACTIVE gyms only).
+ * Live updates for coaches + membership plans via Socket.IO — no polling.
  */
 export function useGymProfile(gymId: string): {
   profile: PublicGymProfile | null;
@@ -20,9 +17,6 @@ export function useGymProfile(gymId: string): {
 } {
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
-  const ownerPlans = useOwnerMembershipPlansStore((state) => state.plans);
-  const ownerCoaches = useOwnerCoachesStore((state) => state.coaches);
-  const ownerEquipment = useOwnerEquipmentStore((state) => state.equipment);
 
   const [realGym, setRealGym] = useState<any>(null);
   const [loading, setLoading] = useState(Boolean(gymId));
@@ -68,11 +62,50 @@ export function useGymProfile(gymId: string): {
       );
     }
 
+    function onPlansUpdated(payload: {
+      gymId?: string;
+      plans?: Array<{
+        id: string;
+        label?: string;
+        name?: string;
+        price: number;
+        durationDays: number;
+      }>;
+    }) {
+      if (!payload?.gymId || payload.gymId !== gymId) return;
+      if (!Array.isArray(payload.plans)) return;
+      setRealGym((prev: any) =>
+        prev && prev.id === gymId
+          ? {
+              ...prev,
+              membershipPlans: payload.plans!.map((p) => ({
+                id: p.id,
+                name: p.label || p.name || "Plan",
+                price: p.price,
+                durationDays: p.durationDays,
+              })),
+            }
+          : prev,
+      );
+    }
+
+    function onEquipmentUpdated(payload: { gymId?: string; equipment?: unknown[] }) {
+      if (!payload?.gymId || payload.gymId !== gymId) return;
+      if (!Array.isArray(payload.equipment)) return;
+      setRealGym((prev: any) =>
+        prev && prev.id === gymId ? { ...prev, equipment: payload.equipment } : prev,
+      );
+    }
+
     socket.on("coaches_updated", onCoachesUpdated);
+    socket.on("membership_plans_updated", onPlansUpdated);
+    socket.on("equipment_updated", onEquipmentUpdated);
 
     return () => {
       socket.emit("leave_gym", gymId);
       socket.off("coaches_updated", onCoachesUpdated);
+      socket.off("membership_plans_updated", onPlansUpdated);
+      socket.off("equipment_updated", onEquipmentUpdated);
     };
   }, [gymId, accessToken]);
 
@@ -83,19 +116,8 @@ export function useGymProfile(gymId: string): {
         realGym,
         ownerName: user?.fullName ?? "Gym Owner",
         ownerAvatarUrl: user?.avatarUrl,
-        ownerPlans,
-        ownerCoaches,
-        ownerEquipment,
       }),
-    [
-      gymId,
-      realGym,
-      user?.fullName,
-      user?.avatarUrl,
-      ownerPlans,
-      ownerCoaches,
-      ownerEquipment,
-    ],
+    [gymId, realGym, user?.fullName, user?.avatarUrl],
   );
 
   return { profile, loading };

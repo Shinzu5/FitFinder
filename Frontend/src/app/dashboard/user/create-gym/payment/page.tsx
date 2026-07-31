@@ -68,7 +68,7 @@ export default function CreateGymPaymentPage() {
             <div className="rounded-xl border border-white/10 bg-[#141414] p-3">
               <p className="text-xs text-zinc-500">Platform access until</p>
               <p className="mt-1 text-sm font-medium text-white">
-                {getAccessUntilDate(plan.months)}
+                {getAccessUntilDate(plan.days)}
               </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-[#141414] p-3">
@@ -101,8 +101,7 @@ export default function CreateGymPaymentPage() {
             ₱{formatPlanPrice(plan.price)}.00
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            {plan.name} Plan · {plan.months} month{plan.months > 1 ? "s" : ""} · The Gym
-            Club Platform
+            {plan.name} Plan · {plan.days} days · FitFinder Platform
           </p>
         </div>
 
