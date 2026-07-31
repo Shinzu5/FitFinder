@@ -8,6 +8,7 @@ import {
   emitWalkInStatus,
 } from "../services/realtime.service";
 import { expireOverdueMemberships } from "../services/membershipAccess.service";
+import { generateAiResponse } from "../services/ai.service";
 
 // POST /api/user/join-gym
 export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
@@ -321,7 +322,7 @@ export async function getMembership(req: AuthRequest, res: Response): Promise<vo
       joinedAt: membership.joinedAt.toISOString(),
       expiresAt: membership.expiresAt.toISOString(),
       durationDays,
-      renewalHistory: renewals.map((r) => ({
+      renewalHistory: renewals.map((r: any) => ({
         id: r.id,
         planName: r.planName,
         planPrice: r.planPrice,
@@ -434,20 +435,14 @@ export async function sendUserMessage(req: AuthRequest, res: Response): Promise<
 export async function aiChat(req: AuthRequest, res: Response): Promise<void> {
   try {
     const { message } = req.body;
-    const lower = message.toLowerCase();
-
-    let reply: string;
-
-    if (lower.includes("workout") || lower.includes("exercise") || lower.includes("train")) {
-      reply = "For balanced progress, aim for 3–4 strength sessions per week with compound lifts like squats, presses, and rows. Add 1–2 cardio or mobility days for recovery.";
-    } else if (lower.includes("nutrition") || lower.includes("protein") || lower.includes("diet")) {
-      reply = "A practical starting point is 1.6–2.2g of protein per kg of body weight daily, plus whole foods around your training window. Stay consistent before optimizing supplements.";
-    } else if (lower.includes("recovery") || lower.includes("rest") || lower.includes("sleep")) {
-      reply = "Recovery is where gains happen. Target 7–9 hours of sleep, hydrate well, and schedule at least one full rest day. Light walking and stretching help too.";
-    } else {
-      reply = "Great question! I can help with workout plans, nutrition basics, recovery habits, and gym-related guidance. Tell me your goal and I'll suggest a simple next step.";
+    
+    if (!message || typeof message !== "string") {
+      sendError(res, "Invalid message", 400);
+      return;
     }
 
+    const reply = await generateAiResponse(message);
+    
     sendSuccess(res, { reply });
   } catch (error) {
     console.error("AI chat error:", error);
@@ -469,7 +464,7 @@ export async function getWalkInStatus(req: AuthRequest, res: Response): Promise<
 
     sendSuccess(
       res,
-      approvals.map((a) => shapeWalkInApproval(a)),
+      approvals.map((a: any) => shapeWalkInApproval(a)),
     );
   } catch (error) {
     console.error("Get walk-in status error:", error);
@@ -529,7 +524,7 @@ export async function completeWalkInOnboarding(
         if (!liveCoach) liveCoachId = null;
       }
 
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         const { upsertGymMembership } = await import("../services/gymMembership.service");
         membership = await upsertGymMembership(
           {
