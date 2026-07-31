@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  ClipboardCheck,
   CreditCard,
   Dumbbell,
   FileText,
@@ -16,12 +18,15 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
+import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 export const OWNER_NAV_ITEMS = [
   { label: "Overview", href: "/dashboard/owner", icon: LayoutGrid },
   { label: "My Gym", href: "/dashboard/owner/my-gym", icon: Building2 },
   { label: "Memberships", href: "/dashboard/owner/memberships", icon: CreditCard },
   { label: "Members", href: "/dashboard/owner/members", icon: Users },
+  { label: "Walk-in Payment", href: "/dashboard/owner/walk-in", icon: CreditCard },
+  { label: "Approvals", href: "/dashboard/owner/approvals", icon: ClipboardCheck },
   { label: "Exercises", href: "/dashboard/owner/exercises", icon: Dumbbell },
   { label: "Equipment", href: "/dashboard/owner/equipment", icon: Wrench },
   { label: "Coaches", href: "/dashboard/owner/coaches", icon: UserCircle2 },
@@ -33,6 +38,18 @@ export const OWNER_NAV_ITEMS = [
 
 export function OwnerSidebar() {
   const pathname = usePathname();
+  const fetchApprovals = useWalkInApprovalsStore((state) => state.fetchApprovals);
+  const requests = useWalkInApprovalsStore((state) => state.requests);
+  const pendingCount = useMemo(
+    () => requests.filter((req) => req.status === "pending").length,
+    [requests],
+  );
+
+  useEffect(() => {
+    void fetchApprovals();
+    const id = window.setInterval(() => void fetchApprovals(), 60000);
+    return () => window.clearInterval(id);
+  }, [fetchApprovals]);
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5">
@@ -74,7 +91,12 @@ export function OwnerSidebar() {
                 <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#FFD700]" />
               ) : null}
               <Icon className="h-4 w-4 shrink-0" />
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.href === "/dashboard/owner/approvals" && pendingCount > 0 ? (
+                <span className="rounded-full bg-[#FFD700] px-1.5 py-0.5 text-[10px] font-bold text-black">
+                  {pendingCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

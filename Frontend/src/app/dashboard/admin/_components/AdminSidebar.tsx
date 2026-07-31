@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  ClipboardCheck,
+  ClipboardList,
   Dumbbell,
   LayoutGrid,
   MessageSquare,
@@ -13,13 +13,12 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { useAdminGymApprovalsStore } from "@/stores/admin-gym-approvals-store";
 
 export const ADMIN_NAV_ITEMS = [
   { label: "Overview", href: "/dashboard/admin", icon: LayoutGrid },
-  { label: "Gym Approvals", href: "/dashboard/admin/gym-approvals", icon: ClipboardCheck },
   { label: "Gyms", href: "/dashboard/admin/gyms", icon: Dumbbell },
   { label: "Users", href: "/dashboard/admin/users", icon: User },
+  { label: "Walk-in Approvals", href: "/dashboard/admin/walk-in-approvals", icon: ClipboardList },
   { label: "Transactions", href: "/dashboard/admin/transactions", icon: Wallet },
   { label: "Analytics", href: "/dashboard/admin/analytics", icon: BarChart3 },
   { label: "Messages", href: "/dashboard/admin/messages", icon: MessageSquare },
@@ -28,9 +27,6 @@ export const ADMIN_NAV_ITEMS = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
-  const pendingCount = useAdminGymApprovalsStore(
-    (state) => state.applications.filter((app) => app.status === "pending").length,
-  );
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5">
@@ -73,11 +69,6 @@ export function AdminSidebar() {
               ) : null}
               <Icon className="h-4 w-4 shrink-0" />
               <span className="flex-1">{item.label}</span>
-              {item.href === "/dashboard/admin/gym-approvals" && pendingCount > 0 ? (
-                <span className="rounded-full bg-[#FACC15] px-1.5 py-0.5 text-[10px] font-bold text-black">
-                  {pendingCount}
-                </span>
-              ) : null}
             </Link>
           );
         })}

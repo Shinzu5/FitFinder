@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { PublicGymProfile } from "../_lib/gym-profile";
 import { getWebsiteHref } from "../_lib/gym-profile";
+import { resolveMediaUrl } from "@/lib/media";
 import { useMembershipStore } from "@/stores/membership-store";
 
 interface GymProfileViewProps {
@@ -36,7 +37,7 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
       <section className="relative min-h-[380px] overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={profile.image}
+          src={resolveMediaUrl(profile.image)}
           alt={profile.name}
           className="absolute inset-0 h-full w-full object-cover"
         />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Banknote, Trash2, Upload } from "lucide-react";
+import { Banknote, Pencil, Trash2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,9 +37,11 @@ const EMPTY_FORM: CoachFormState = {
 
 function CoachCard({
   coach,
+  onEdit,
   onDelete,
 }: {
   coach: GymCoach;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -62,14 +64,24 @@ function CoachCard({
               <h3 className="text-lg font-semibold text-white">{coach.name}</h3>
               <p className="text-sm font-medium text-[#FFD700]">{coach.specialty}</p>
             </div>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="rounded-lg border border-white/10 p-2 text-red-400 transition hover:bg-red-500/10"
-              aria-label={`Delete ${coach.name}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-lg border border-white/10 p-2 text-zinc-300 transition hover:bg-white/5"
+                aria-label={`Edit ${coach.name}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="rounded-lg border border-white/10 p-2 text-red-400 transition hover:bg-red-500/10"
+                aria-label={`Delete ${coach.name}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <p className="mt-3 text-sm leading-relaxed text-zinc-400">{coach.description}</p>
@@ -101,14 +113,32 @@ function CoachCard({
 export function CoachesPanel() {
   const coaches = useOwnerCoachesStore((state) => state.coaches);
   const addCoach = useOwnerCoachesStore((state) => state.addCoach);
+  const updateCoach = useOwnerCoachesStore((state) => state.updateCoach);
   const removeCoach = useOwnerCoachesStore((state) => state.removeCoach);
 
   const [form, setForm] = useState<CoachFormState>(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function resetForm() {
     setForm(EMPTY_FORM);
+    setEditingId(null);
     setError(null);
+  }
+
+  function startEdit(coach: GymCoach) {
+    setEditingId(coach.id);
+    setForm({
+      name: coach.name,
+      specialty: coach.specialty,
+      sessionPrice: String(coach.sessionPrice),
+      schedule: { ...EMPTY_SCHEDULE, ...coach.schedule },
+      description: coach.description,
+      photoUrl: coach.photoUrl,
+      photoName: coach.photoName,
+    });
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function updateSchedule(day: WeekDayKey, value: string) {
@@ -151,7 +181,7 @@ export function CoachesPanel() {
       return;
     }
 
-    addCoach({
+    const payload = {
       name: form.name,
       specialty: form.specialty,
       sessionPrice: price,
@@ -159,16 +189,26 @@ export function CoachesPanel() {
       description: form.description,
       photoUrl: form.photoUrl,
       photoName: form.photoName,
-    });
+    };
+
+    if (editingId) {
+      void updateCoach(editingId, payload);
+    } else {
+      void addCoach(payload);
+    }
     resetForm();
   }
 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-white/10 bg-[#141414] p-6">
-        <h2 className="text-lg font-semibold text-white">Coaches</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {editingId ? "Edit Coach" : "Coaches"}
+        </h2>
         <p className="mt-1 text-sm text-zinc-400">
-          Add coaches with their specialty, price, and available time.
+          {editingId
+            ? "Update coach details — changes appear instantly for members."
+            : "Add coaches with their specialty, price, and available time."}
         </p>
 
         <form onSubmit={handleSave} className="mt-6 space-y-5">
@@ -277,7 +317,7 @@ export function CoachesPanel() {
               type="submit"
               className="rounded-lg bg-[#FFD700] px-5 py-2 text-sm font-bold text-black transition hover:bg-[#e6c200]"
             >
-              Save Coach
+              {editingId ? "Update Coach" : "Save Coach"}
             </button>
           </div>
         </form>
@@ -290,7 +330,12 @@ export function CoachesPanel() {
           </p>
         ) : (
           coaches.map((coach) => (
-            <CoachCard key={coach.id} coach={coach} onDelete={() => removeCoach(coach.id)} />
+            <CoachCard
+              key={coach.id}
+              coach={coach}
+              onEdit={() => startEdit(coach)}
+              onDelete={() => removeCoach(coach.id)}
+            />
           ))
         )}
       </div>

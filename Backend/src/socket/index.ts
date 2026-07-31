@@ -9,6 +9,10 @@ export function userRoom(userId: string): string {
   return `user:${userId}`;
 }
 
+export function gymRoom(gymId: string): string {
+  return `gym:${gymId}`;
+}
+
 export function initSocket(server: HTTPServer): IOServer {
   io = new IOServer(server, {
     cors: {
@@ -40,6 +44,18 @@ export function initSocket(server: HTTPServer): IOServer {
   io.on("connection", (socket: Socket) => {
     const userId = socket.data.userId as string;
     socket.join(userRoom(userId));
+
+    socket.on("join_gym", (gymId: unknown) => {
+      if (typeof gymId === "string" && gymId.trim()) {
+        socket.join(gymRoom(gymId.trim()));
+      }
+    });
+
+    socket.on("leave_gym", (gymId: unknown) => {
+      if (typeof gymId === "string" && gymId.trim()) {
+        socket.leave(gymRoom(gymId.trim()));
+      }
+    });
   });
 
   return io;
@@ -50,4 +66,21 @@ export function getIO(): IOServer {
     throw new Error("Socket.IO has not been initialized yet");
   }
   return io;
+}
+
+/** Safe emit — no-op if sockets are not ready (e.g. during tests). */
+export function emitToUser(userId: string, event: string, payload: unknown): void {
+  try {
+    getIO().to(userRoom(userId)).emit(event, payload);
+  } catch {
+    // Socket not initialized
+  }
+}
+
+export function emitToGym(gymId: string, event: string, payload: unknown): void {
+  try {
+    getIO().to(gymRoom(gymId)).emit(event, payload);
+  } catch {
+    // Socket not initialized
+  }
 }

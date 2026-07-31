@@ -1,15 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   getEquipmentStatusLabel,
-  useOwnerEquipmentStore,
   type EquipmentStatus,
 } from "@/stores/owner-equipment-store";
+import { useMembershipStore } from "@/stores/membership-store";
+import { useMemberGymContentStore } from "@/stores/member-gym-content-store";
 
 function getUserEquipmentStatusStyles(status: EquipmentStatus) {
-  return status === "available"
-    ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-400"
-    : "border-red-500/25 bg-red-500/10 text-red-400";
+  if (status === "in_use") {
+    return "border-amber-500/25 bg-amber-500/10 text-amber-400";
+  }
+  if (status === "under_maintenance") {
+    return "border-red-500/25 bg-red-500/10 text-red-400";
+  }
+  return "border-emerald-500/25 bg-emerald-500/10 text-emerald-400";
 }
 
 function StatusBadge({ status }: { status: EquipmentStatus }) {
@@ -24,7 +31,45 @@ function StatusBadge({ status }: { status: EquipmentStatus }) {
 }
 
 export default function EquipmentPage() {
-  const equipment = useOwnerEquipmentStore((state) => state.equipment);
+  const router = useRouter();
+  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  const fetchMembership = useMembershipStore((state) => state.fetchMembership);
+  const equipment = useMemberGymContentStore((state) => state.equipment);
+  const loading = useMemberGymContentStore((state) => state.loadingEquipment);
+  const error = useMemberGymContentStore((state) => state.equipmentError);
+  const fetchEquipment = useMemberGymContentStore((state) => state.fetchEquipment);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      await fetchMembership();
+      setReady(true);
+    })();
+  }, [fetchMembership]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!joinedGymId) {
+      router.replace("/dashboard/user");
+      return;
+    }
+    void fetchEquipment();
+    const onFocus = () => void fetchEquipment();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => void fetchEquipment(), 15000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [ready, joinedGymId, fetchEquipment, router]);
+
+  if (!ready || !joinedGymId) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -36,23 +81,34 @@ export default function EquipmentPage() {
             <thead>
               <tr className="border-b border-zinc-800/80 bg-[#131315] text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 <th className="px-6 py-4 font-semibold">Equipment</th>
+                <th className="px-6 py-4 font-semibold">Qty</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
-              {equipment.length === 0 ? (
+              {loading && equipment.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="px-6 py-12 text-center text-zinc-500">
+                  <td colSpan={3} className="px-6 py-12 text-center text-zinc-500">
+                    Loading equipment…
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-zinc-500">
+                    {error}
+                  </td>
+                </tr>
+              ) : equipment.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-12 text-center text-zinc-500">
                     No equipment listed yet. Your gym owner will update availability here.
                   </td>
                 </tr>
               ) : (
                 equipment.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="border-b border-zinc-800/50 last:border-0"
-                  >
+                  <tr key={item.id} className="border-b border-zinc-800/50 last:border-0">
                     <td className="px-6 py-4 font-medium text-white">{item.name}</td>
+                    <td className="px-6 py-4 text-zinc-400">{item.quantity}</td>
                     <td className="px-6 py-4">
                       <StatusBadge status={item.status} />
                     </td>

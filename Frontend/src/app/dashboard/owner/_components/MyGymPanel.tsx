@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Eye, Upload } from "lucide-react";
+import { AlertTriangle, Eye, Loader2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,16 +11,17 @@ import {
   useCreateGymStore,
 } from "@/stores/create-gym-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { resolveMediaUrl, uploadImageFile } from "@/lib/media";
 import { DeleteGymModal } from "./DeleteGymModal";
 import { GymPreviewModal } from "./GymPreviewModal";
 
 function normalizeGym(gym: RegisteredGym): RegisteredGym {
   return {
     ...gym,
-    coverImageUrl: gym.coverImageUrl ?? DEFAULT_GYM_COVER_IMAGE,
+    coverImageUrl: resolveMediaUrl(gym.coverImageUrl, DEFAULT_GYM_COVER_IMAGE),
     membershipPrice: gym.membershipPrice ?? 799,
     schedule: gym.schedule ?? "Mon-Sun: 6AM - 10PM",
-    memberCount: gym.memberCount ?? 142,
+    memberCount: gym.memberCount ?? 0,
   };
 }
 
@@ -35,10 +36,14 @@ export function MyGymPanel() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [storedCoverUrl, setStoredCoverUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (registeredGym) {
       setForm(normalizeGym(registeredGym));
+      setStoredCoverUrl(registeredGym.coverImageUrl);
     }
   }, [registeredGym]);
 
@@ -48,19 +53,24 @@ export function MyGymPanel() {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  function handleCoverUpload(file: File | undefined) {
+  async function handleCoverUpload(file: File | undefined) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        updateField("coverImageUrl", reader.result);
-        updateField("coverPhotoName", file.name);
-      }
-    };
-    reader.readAsDataURL(file);
+    setUploading(true);
+    setSavedMessage(null);
+    const uploaded = await uploadImageFile(file);
+    setUploading(false);
+
+    if (!uploaded) {
+      setSavedMessage("Image upload failed. Please try another file.");
+      return;
+    }
+
+    setStoredCoverUrl(uploaded.url);
+    updateField("coverImageUrl", resolveMediaUrl(uploaded.url, DEFAULT_GYM_COVER_IMAGE));
+    updateField("coverPhotoName", uploaded.filename);
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
     if (!form.name.trim() || !form.address.trim() || !form.contactNumber.trim()) {
@@ -68,34 +78,39 @@ export function MyGymPanel() {
       return;
     }
 
-    updateGymProfile({
+    setSaving(true);
+    const ok = await updateGymProfile({
       name: form.name.trim(),
       address: form.address.trim(),
       contactNumber: form.contactNumber.trim(),
       description: form.description.trim(),
       websiteOrSlug: form.websiteOrSlug.trim(),
       coverPhotoName: form.coverPhotoName,
-      coverImageUrl: form.coverImageUrl,
+      coverImageUrl: storedCoverUrl || form.coverImageUrl,
       membershipPrice: form.membershipPrice,
       schedule: form.schedule.trim(),
     });
+    setSaving(false);
 
-    setSavedMessage("Changes saved successfully.");
+    setSavedMessage(ok ? "Changes saved successfully." : "Could not save changes. Please try again.");
     setTimeout(() => setSavedMessage(null), 3000);
   }
 
-  function handleDeleteConfirm() {
-    deleteGym();
+  async function handleDeleteConfirm() {
+    await deleteGym();
     demoteToUser();
     setDeleteOpen(false);
     router.replace("/dashboard/user/create-gym");
   }
 
-  const previewGym = form;
+  const previewGym: RegisteredGym = {
+    ...form,
+    coverImageUrl: resolveMediaUrl(storedCoverUrl || form.coverImageUrl, DEFAULT_GYM_COVER_IMAGE),
+  };
 
   return (
     <>
-      <form onSubmit={handleSave} className="mx-auto max-w-4xl space-y-6">
+      <form onSubmit={(e) => void handleSave(e)} className="mx-auto max-w-4xl space-y-6">
         <section className="rounded-2xl border border-white/10 bg-[#141414] p-6">
           <h2 className="mb-6 text-lg font-semibold text-white">Gym Profile</h2>
 
@@ -104,18 +119,25 @@ export function MyGymPanel() {
             <div className="relative overflow-hidden rounded-xl border border-white/10">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={form.coverImageUrl}
+                src={resolveMediaUrl(form.coverImageUrl, DEFAULT_GYM_COVER_IMAGE)}
                 alt="Gym cover"
                 className="h-48 w-full object-cover sm:h-56"
               />
               <label className="absolute inset-0 flex cursor-pointer flex-col items-center justify-center bg-black/40 opacity-0 transition hover:opacity-100">
-                <Upload className="h-6 w-6 text-white" />
-                <span className="mt-2 text-sm text-white">Change photo</span>
+                {uploading ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-white" />
+                ) : (
+                  <Upload className="h-6 w-6 text-white" />
+                )}
+                <span className="mt-2 text-sm text-white">
+                  {uploading ? "Uploading..." : "Change photo"}
+                </span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
                   className="hidden"
-                  onChange={(e) => handleCoverUpload(e.target.files?.[0])}
+                  disabled={uploading}
+                  onChange={(e) => void handleCoverUpload(e.target.files?.[0])}
                 />
               </label>
             </div>
@@ -198,16 +220,19 @@ export function MyGymPanel() {
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-[#FFD700] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+              disabled={saving || uploading}
+              className="rounded-lg bg-[#FFD700] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-60"
             >
-              Save Changes
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
 
           {savedMessage ? (
             <p
               className={`mt-4 text-right text-sm ${
-                savedMessage.includes("success") ? "text-emerald-400" : "text-red-400"
+                savedMessage.toLowerCase().includes("success")
+                  ? "text-emerald-400"
+                  : "text-red-400"
               }`}
             >
               {savedMessage}
@@ -240,7 +265,7 @@ export function MyGymPanel() {
       <DeleteGymModal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={() => void handleDeleteConfirm()}
       />
     </>
   );

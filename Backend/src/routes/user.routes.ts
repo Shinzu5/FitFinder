@@ -3,6 +3,8 @@ import {
   joinGym, getMembership, leaveMembership,
   getMessages, sendUserMessage, aiChat,
   getWalkInStatus,
+  completeWalkInOnboarding,
+  getMemberExercises, getMemberEquipment,
 } from "../controllers/user.controller";
 import { authenticate } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
@@ -19,5 +21,8 @@ router.get("/messages", getMessages);
 router.post("/messages", sendUserMessage);
 router.post("/ai-chat", aiChat);
 router.get("/walk-in-status", getWalkInStatus);
+router.post("/walk-in-done/:id", completeWalkInOnboarding);
+router.get("/exercises", getMemberExercises);
+router.get("/equipment", getMemberEquipment);
 
 export default router;

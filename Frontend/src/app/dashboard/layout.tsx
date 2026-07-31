@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -17,9 +17,12 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
+import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useWalkInApprovalSync } from "@/hooks/useWalkInApprovalSync";
 import { useDirectMessageSocket } from "@/hooks/useDirectMessageSocket";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
+import api from "@/lib/api";
+import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard/user", icon: Home, unlockRequired: false },
@@ -31,11 +34,15 @@ const NAV_ITEMS = [
   { label: "AI Assistant", href: "/dashboard/user/ai", icon: Brain, unlockRequired: true },
 ] as const;
 
+const CREATE_GYM_PREFIX = "/dashboard/user/create-gym";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, role, logout, isAuthenticated, hasHydrated } = useAuthStore();
+  const fetchOwnedGymStatus = useCreateGymStore((state) => state.fetchOwnedGymStatus);
   const [ready, setReady] = useState(false);
+  const gatedRoleRef = useRef<string | null>(null);
 
   useDirectMessageSocket();
 
@@ -48,19 +55,163 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!hasHydrated) return;
 
-    if (!isAuthenticated || !role) {
-      router.replace("/login");
-      return;
+    let cancelled = false;
+
+    async function enforceAccess() {
+      if (!isAuthenticated || !role) {
+        gatedRoleRef.current = null;
+        setReady(false);
+        router.replace("/login");
+        return;
+      }
+
+      const isCreateGymPath = pathname.startsWith(CREATE_GYM_PREFIX);
+      const rolePath = `/dashboard/${role.toLowerCase()}`;
+      const alreadyGated = gatedRoleRef.current === role;
+
+      // Fast path: same role already allowed — only correct path, no full-screen reload
+      if (alreadyGated) {
+        if (role === "OWNER") {
+          if (isCreateGymPath) {
+            router.replace("/dashboard/owner/payment-settings");
+            return;
+          }
+          if (!pathname.startsWith(rolePath)) {
+            router.replace(rolePath);
+          }
+          return;
+        }
+
+        if (isCreateGymPath && role !== "USER") {
+          router.replace(rolePath);
+          return;
+        }
+
+        if (!pathname.startsWith(rolePath) && !(role === "USER" && isCreateGymPath)) {
+          router.replace(rolePath);
+        }
+        return;
+      }
+
+      setReady(false);
+
+      if (role === "OWNER") {
+        const cached = useCreateGymStore.getState().hasOwnedGym;
+        const hasGym = cached === true ? true : await fetchOwnedGymStatus();
+        if (cancelled) return;
+
+        if (!hasGym) {
+          useAuthStore.getState().demoteToUser();
+          gatedRoleRef.current = null;
+          if (!pathname.startsWith(CREATE_GYM_PREFIX)) {
+            router.replace(CREATE_GYM_PREFIX);
+            return;
+          }
+          if (pathname.startsWith(`${CREATE_GYM_PREFIX}/plans`)) {
+            router.replace(CREATE_GYM_PREFIX);
+            return;
+          }
+          gatedRoleRef.current = "USER";
+          setReady(true);
+          return;
+        }
+
+        if (isCreateGymPath) {
+          gatedRoleRef.current = "OWNER";
+          router.replace("/dashboard/owner/payment-settings");
+          return;
+        }
+
+        if (!pathname.startsWith(rolePath)) {
+          router.replace(rolePath);
+          gatedRoleRef.current = "OWNER";
+          setReady(true);
+          return;
+        }
+
+        gatedRoleRef.current = "OWNER";
+        setReady(true);
+        return;
+      }
+
+      if (isCreateGymPath && role !== "USER") {
+        router.replace(rolePath);
+        return;
+      }
+
+      if (!pathname.startsWith(rolePath) && !(role === "USER" && isCreateGymPath)) {
+        router.replace(rolePath);
+        return;
+      }
+
+      if (!cancelled) {
+        gatedRoleRef.current = role;
+        setReady(true);
+      }
     }
 
-    const rolePath = `/dashboard/${role.toLowerCase()}`;
-    if (pathname !== rolePath && !pathname.startsWith(`${rolePath}/`)) {
-      router.replace(rolePath);
-      return;
+    void enforceAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasHydrated, isAuthenticated, pathname, role, router, fetchOwnedGymStatus]);
+
+  // Rare ownership check — not every 2s (that caused Neon 500s + tab lag)
+  useEffect(() => {
+    if (!hasHydrated || !isAuthenticated || role !== "OWNER") return;
+
+    let cancelled = false;
+
+    async function kickIfGymGone() {
+      const hasGym = await fetchOwnedGymStatus();
+      if (cancelled || hasGym) return;
+      gatedRoleRef.current = null;
+      useAuthStore.getState().demoteToUser();
+      router.replace(CREATE_GYM_PREFIX);
     }
 
-    setReady(true);
-  }, [hasHydrated, isAuthenticated, pathname, role, router]);
+    const onFocus = () => void kickIfGymGone();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => void kickIfGymGone(), 60000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [hasHydrated, isAuthenticated, role, router, fetchOwnedGymStatus]);
+
+  // Clerks: check assignment on focus + every 60s (was 5s)
+  useEffect(() => {
+    if (!hasHydrated || !isAuthenticated || role !== "CLERK") return;
+
+    let cancelled = false;
+
+    async function kickIfUnassigned() {
+      try {
+        const { data } = await api.get("/clerk/dashboard");
+        if (cancelled) return;
+        if (data.success && data.data) return;
+      } catch {
+        // 403/404 — gym gone or role demoted
+      }
+      if (cancelled) return;
+      gatedRoleRef.current = null;
+      useAuthStore.getState().demoteToUser();
+      router.replace("/dashboard/user");
+    }
+
+    void kickIfUnassigned();
+    const onFocus = () => void kickIfUnassigned();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => void kickIfUnassigned(), 60000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [hasHydrated, isAuthenticated, role, router]);
 
   if (!hasHydrated || !ready || !user || !role) {
     return (
@@ -68,35 +219,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="w-full max-w-sm space-y-3 rounded-2xl border border-white/10 bg-white/5 p-8">
           <div className="h-3 w-24 animate-pulse rounded-full bg-white/10" />
           <div className="h-10 animate-pulse rounded-2xl bg-white/10" />
+          <p className="text-center text-sm text-zinc-500">Checking access...</p>
         </div>
       </div>
     );
   }
 
-  if (pathname.startsWith("/dashboard/user/create-gym")) {
+  if (pathname.startsWith(CREATE_GYM_PREFIX)) {
     return <>{children}</>;
   }
 
   if (role === "USER") {
-    const joinedGymId = useMembershipStore.getState().joinedGymId;
-    const isGymFlowPage = pathname.startsWith("/dashboard/user/gym/") && !joinedGymId;
-
-    if (isGymFlowPage) {
-      return <div className="min-h-screen bg-black text-white">{children}</div>;
-    }
-
-    return <UserDashboardFrame pathname={pathname}>{children}</UserDashboardFrame>;
+    return <UserShell pathname={pathname}>{children}</UserShell>;
   }
 
-  if (role === "OWNER") {
-    return <>{children}</>;
-  }
-
-  if (role === "CLERK") {
-    return <>{children}</>;
-  }
-
-  if (role === "ADMIN") {
+  if (role === "OWNER" || role === "CLERK" || role === "ADMIN") {
     return <>{children}</>;
   }
 
@@ -122,6 +259,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
+/** USER shell: always sync membership (cashless + walk-in) so unlock is reactive. */
+function UserShell({
+  children,
+  pathname,
+}: {
+  children: React.ReactNode;
+  pathname: string;
+}) {
+  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  useWalkInApprovalSync();
+
+  // Join/payment flow stays bare until membership is ACTIVE — then show full Gymer frame
+  const isGymFlowPage = pathname.startsWith("/dashboard/user/gym/") && !joinedGymId;
+  if (isGymFlowPage) {
+    return <div className="min-h-screen bg-black text-white">{children}</div>;
+  }
+
+  return <UserDashboardFrame pathname={pathname}>{children}</UserDashboardFrame>;
+}
+
 function UserDashboardFrame({
   children,
   pathname,
@@ -131,8 +288,18 @@ function UserDashboardFrame({
 }) {
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const unlocked = Boolean(joinedGymId);
-
-  useWalkInApprovalSync();
+  const walkInRequests = useWalkInApprovalsStore((state) => state.requests);
+  const user = useAuthStore((state) => state.user);
+  const pendingWalkIn = Boolean(
+    user?.id &&
+      !joinedGymId &&
+      walkInRequests.some(
+        (req) =>
+          req.userId === user.id &&
+          (req.status === "pending" ||
+            (req.status === "approved" && !req.consumedAt)),
+      ),
+  );
 
   return (
     <div className="flex min-h-screen bg-black text-white">
@@ -197,7 +364,9 @@ function UserDashboardFrame({
             {!unlocked ? (
               <div className="hidden max-w-md items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
                 <span className="text-[#FFD700]">⚠</span>
-                Dashboard locked — join a gym and complete payment to unlock
+                {pendingWalkIn
+                  ? "Membership pending — waiting for Owner/Clerk Approve & Done"
+                  : "Dashboard locked — join a gym and complete payment to unlock"}
               </div>
             ) : null}
             <button type="button" className="rounded-full border border-white/10 p-2 text-zinc-300">

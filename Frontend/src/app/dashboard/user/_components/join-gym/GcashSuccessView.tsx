@@ -16,6 +16,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const membership = useMembershipStore((state) => state.membership);
+  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const fetchMembership = useMembershipStore((state) => state.fetchMembership);
   const { xenditPaymentId, setXenditPaymentId, resetJoin } = useJoinGymStore();
 
@@ -42,6 +43,14 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
     void fetchMembership();
   }, [fetchMembership]);
 
+  // Already active for this gym — skip waiting
+  useEffect(() => {
+    if (joinedGymId === gymId && membership?.gymId === gymId) {
+      setVerifying(false);
+      setFailed(false);
+    }
+  }, [joinedGymId, membership, gymId]);
+
   useEffect(() => {
     if (!paymentLookupId) {
       setVerifying(false);
@@ -63,8 +72,33 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
               amount: data.data.amount,
               status: "SUCCEEDED",
             });
-            setVerifying(false);
-            void fetchMembership();
+
+            // Activate membership then unlock dashboard only when membership is live
+            await fetchMembership();
+            const activeGymId = useMembershipStore.getState().joinedGymId;
+            const membershipActive = Boolean(data.data.membershipActive) || activeGymId === gymId;
+
+            if (membershipActive && (activeGymId === gymId || useMembershipStore.getState().membership)) {
+              await fetchMembership();
+              if (useMembershipStore.getState().joinedGymId === gymId) {
+                setVerifying(false);
+                return;
+              }
+            }
+
+            // Payment succeeded but membership not visible yet — keep polling briefly
+            if (pollCountRef.current >= 30) {
+              setVerifying(false);
+              // Show success UI if payment cleared; membership may still sync on Done
+              if (data.data.membershipActive) {
+                setFailed(false);
+              } else {
+                setFailed(true);
+              }
+              return;
+            }
+
+            pollRef.current = setTimeout(poll, 1500);
             return;
           }
 
@@ -87,7 +121,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [paymentLookupId, fetchMembership]);
+  }, [paymentLookupId, fetchMembership, gymId]);
 
   if (verifying) {
     return (
@@ -95,16 +129,16 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
         <JoinGymHeader title="GCash Payment" backHref={`/dashboard/user/gym/${gymId}/join/gcash`} />
         <div className="mx-auto max-w-xl py-20 text-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-[#FFD700]" />
-          <h2 className="mt-6 text-xl font-bold text-white">Verifying payment...</h2>
+          <h2 className="mt-6 text-xl font-bold text-white">Activating membership...</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            We&apos;re confirming your GCash payment. This usually takes a few seconds.
+            We&apos;re confirming your GCash payment and unlocking your Gymer dashboard.
           </p>
         </div>
       </div>
     );
   }
 
-  if (failed) {
+  if (failed && joinedGymId !== gymId) {
     return (
       <div className="min-h-screen bg-black text-white">
         <JoinGymHeader title="GCash Payment" backHref={`/dashboard/user/gym/${gymId}/join/gcash`} />
@@ -165,7 +199,9 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
 
   function handleDone() {
     resetJoin();
-    router.push("/dashboard/user");
+    void fetchMembership().then(() => {
+      router.push("/dashboard/user");
+    });
   }
 
   return (
@@ -179,8 +215,8 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
         <div>
           <h2 className="text-2xl font-bold text-emerald-400">Payment Sent!</h2>
           <p className="mt-2 text-sm text-zinc-400">
-            Your GCash payment was received. The gym owner has been notified. Your membership is
-            active and your dashboard is unlocked.
+            Your GCash payment was received. Your membership is active and your Gymer dashboard is
+            unlocked.
           </p>
         </div>
 

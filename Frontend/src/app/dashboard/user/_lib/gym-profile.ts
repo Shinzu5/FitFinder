@@ -3,6 +3,7 @@ import type { GymCoach } from "@/stores/owner-coaches-store";
 import type { GymEquipment } from "@/stores/owner-equipment-store";
 import type { MembershipPlan } from "@/stores/owner-membership-plans-store";
 import type { Gym } from "@/lib/mock-gyms";
+import { resolveMediaUrl } from "@/lib/media";
 
 export interface PublicGymOwner {
   name: string;
@@ -26,6 +27,8 @@ export interface PublicGymCoach {
   specialty: string;
   sessionPrice: number;
   photoUrl: string | null;
+  description: string;
+  schedule: Record<string, string>;
 }
 
 export interface PublicGymProfile {
@@ -47,6 +50,8 @@ export interface PublicGymProfile {
   plans: PublicGymPlan[];
   coaches: PublicGymCoach[];
   equipment: string[];
+  /** True when gym has valid Xendit key + toggle on; omit/false = walk-in only */
+  cashlessEnabled?: boolean;
 }
 
 const DEFAULT_OWNER: PublicGymOwner = {
@@ -107,6 +112,16 @@ const GYM_1_PROFILE: Omit<PublicGymProfile, "id"> = {
       sessionPrice: 500,
       photoUrl:
         "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80",
+      description: "Competition powerlifter with 12 years of coaching experience.",
+      schedule: {
+        monday: "8AM - 5PM",
+        tuesday: "8AM - 5PM",
+        wednesday: "8AM - 5PM",
+        thursday: "8AM - 5PM",
+        friday: "8AM - 5PM",
+        saturday: "9AM - 1PM",
+        sunday: "Off",
+      },
     },
     {
       id: "coach-mobility",
@@ -115,6 +130,16 @@ const GYM_1_PROFILE: Omit<PublicGymProfile, "id"> = {
       sessionPrice: 400,
       photoUrl:
         "https://images.unsplash.com/photo-1594381898411-846e7d193883?auto=format&fit=crop&w=400&q=80",
+      description: "Helps members move better and recover faster between sessions.",
+      schedule: {
+        monday: "10AM - 6PM",
+        tuesday: "10AM - 6PM",
+        wednesday: "Off",
+        thursday: "10AM - 6PM",
+        friday: "10AM - 6PM",
+        saturday: "9AM - 12PM",
+        sunday: "Off",
+      },
     },
   ],
   equipment: [
@@ -293,12 +318,14 @@ function mapOwnerCoaches(coaches: GymCoach[]): PublicGymCoach[] {
     specialty: coach.specialty,
     sessionPrice: coach.sessionPrice,
     photoUrl: coach.photoUrl,
+    description: coach.description || "",
+    schedule: (coach.schedule as Record<string, string>) || {},
   }));
 }
 
 function mapOwnerEquipment(equipment: GymEquipment[]): string[] {
   return equipment
-    .filter((item) => item.status === "available")
+    .filter((item) => String(item.status || "").toLowerCase() === "available")
     .map((item) => `${item.name} (x${item.quantity})`);
 }
 
@@ -410,17 +437,7 @@ export interface ResolveGymProfileInput {
 }
 
 export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfile | null {
-  const {
-    gymId,
-    mockGym,
-    registeredGym,
-    realGym,
-    ownerName = "Gym Owner",
-    ownerAvatarUrl,
-    ownerPlans = [],
-    ownerCoaches = [],
-    ownerEquipment = [],
-  } = input;
+  const { gymId, realGym, ownerName = "Gym Owner", ownerAvatarUrl } = input;
 
   if (realGym && realGym.id === gymId) {
     const { openTime, closeTime } = parseScheduleHours(realGym.schedule || "");
@@ -439,7 +456,7 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
       members: realGym._count?.gymMemberships || 0,
       rating: 4.8,
       reviewCount: realGym._count?.gymMemberships || 0,
-      image: realGym.coverImageUrl || realGym.image,
+      image: resolveMediaUrl(realGym.coverImageUrl || realGym.image),
       owner: {
         name: realGym.owner?.fullName || ownerName,
         bio: `Owner of ${realGym.name}. Dedicated to helping members train smarter and stay consistent.`,
@@ -458,24 +475,11 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
       ],
       coaches: mapOwnerCoaches(realGym.coaches || []),
       equipment: mapOwnerEquipment(realGym.equipment || []).length > 0 ? mapOwnerEquipment(realGym.equipment || []) : ["Full Gym Access", "Locker Room"],
+      cashlessEnabled: Boolean(realGym.cashlessEnabled),
     };
   }
 
-  if (registeredGym?.id === gymId) {
-    return buildFromRegisteredGym(
-      registeredGym,
-      ownerName,
-      ownerAvatarUrl,
-      ownerPlans,
-      ownerCoaches,
-      ownerEquipment,
-    );
-  }
-
-  if (mockGym) {
-    return buildFromMockGym(mockGym);
-  }
-
+  // Public browse/join only uses ACTIVE gyms from the API.
   return null;
 }
 
@@ -489,7 +493,7 @@ export function registeredGymToListItem(gym: RegisteredGym): Gym {
     website: formatWebsite(gym.websiteOrSlug),
     members: gym.memberCount,
     pricePerMonth: gym.membershipPrice,
-    image: gym.coverImageUrl,
+    image: resolveMediaUrl(gym.coverImageUrl),
     status: "PENDING",
   };
 }

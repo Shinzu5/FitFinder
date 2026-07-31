@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import api from "@/lib/api";
 
 export interface MembershipPlan {
@@ -25,88 +24,79 @@ interface OwnerMembershipPlansState {
   deletePlan: (id: string) => Promise<void>;
 }
 
-export const useOwnerMembershipPlansStore = create<OwnerMembershipPlansState>()(
-  persist(
-    (set, get) => ({
-      plans: [],
-      loading: false,
+export const useOwnerMembershipPlansStore = create<OwnerMembershipPlansState>((set, get) => ({
+  plans: [],
+  loading: false,
 
-      fetchPlans: async () => {
-        set({ loading: true });
-        try {
-          const { data } = await api.get("/owner/membership-plans");
-          if (data.success) {
-            set({ plans: data.data, loading: false });
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to fetch plans:", error);
-        }
-        set({ loading: false });
-      },
+  fetchPlans: async () => {
+    set({ loading: true });
+    try {
+      const { data } = await api.get("/owner/membership-plans");
+      if (data.success) {
+        set({ plans: data.data || [], loading: false });
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to fetch plans:", error);
+    }
+    set({ loading: false });
+  },
 
-      addPlan: async (plan) => {
-        try {
-          const { data } = await api.post("/owner/membership-plans", plan);
-          if (data.success) {
-            set({
-              plans: [...get().plans, { ...data.data, activeSubscribers: 0 }],
-            });
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to add plan:", error);
-        }
-        // Fallback local
+  addPlan: async (plan) => {
+    try {
+      const { data } = await api.post("/owner/membership-plans", plan);
+      if (data.success) {
         set({
           plans: [
             ...get().plans,
             {
-              id: `plan-${Date.now()}`,
-              name: plan.name.trim(),
-              price: plan.price,
-              durationDays: plan.durationDays,
-              activeSubscribers: plan.activeSubscribers ?? 0,
+              id: data.data.id,
+              name: data.data.name,
+              price: data.data.price,
+              durationDays: data.data.durationDays,
+              activeSubscribers: 0,
             },
           ],
         });
-      },
+      }
+    } catch (error) {
+      console.error("Failed to add plan:", error);
+    }
+  },
 
-      updatePlan: async (id, updates) => {
-        try {
-          await api.put(`/owner/membership-plans/${id}`, updates);
-        } catch (error) {
-          console.error("Failed to update plan:", error);
-        }
+  updatePlan: async (id, updates) => {
+    try {
+      const { data } = await api.put(`/owner/membership-plans/${id}`, updates);
+      if (data.success) {
         set({
           plans: get().plans.map((plan) =>
             plan.id === id
               ? {
                   ...plan,
-                  name: updates.name.trim(),
-                  price: updates.price,
-                  durationDays: updates.durationDays,
+                  name: data.data.name,
+                  price: data.data.price,
+                  durationDays: data.data.durationDays,
                 }
               : plan,
           ),
         });
-      },
+      }
+    } catch (error) {
+      console.error("Failed to update plan:", error);
+    }
+  },
 
-      deletePlan: async (id) => {
-        try {
-          await api.delete(`/owner/membership-plans/${id}`);
-        } catch (error) {
-          console.error("Failed to delete plan:", error);
-        }
+  deletePlan: async (id) => {
+    try {
+      const { data } = await api.delete(`/owner/membership-plans/${id}`);
+      if (data.success) {
         set({ plans: get().plans.filter((plan) => plan.id !== id) });
-      },
-    }),
-    {
-      name: "fitfinder-owner-membership-plans",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+      }
+    } catch (error) {
+      console.error("Failed to delete plan:", error);
+    }
+  },
+}));
 
 export function formatPlanPrice(price: number) {
   return `₱${price.toLocaleString()}`;

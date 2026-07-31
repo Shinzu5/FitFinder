@@ -22,7 +22,10 @@ export interface WalkInApprovalRequest {
   paymentRef: string;
   totalPaid: number;
   durationDays: number;
+  paymentStatus: "paid" | "pending" | string;
+  approvalStatus: ApprovalStatus;
   status: ApprovalStatus;
+  rejectionReason?: string;
   submittedAt: number;
   reviewedAt?: number;
   consumedAt?: number;
@@ -57,6 +60,7 @@ export function formatApprovalTime(timestamp: number) {
 }
 
 function mapApproval(raw: any): WalkInApprovalRequest {
+  const status = String(raw.approvalStatus || raw.status || "pending").toLowerCase() as ApprovalStatus;
   return {
     id: raw.id,
     userId: raw.userId,
@@ -73,7 +77,10 @@ function mapApproval(raw: any): WalkInApprovalRequest {
     paymentRef: raw.paymentRef,
     totalPaid: raw.totalPaid,
     durationDays: raw.durationDays,
-    status: String(raw.status || "pending").toLowerCase() as ApprovalStatus,
+    paymentStatus: String(raw.paymentStatus || "paid").toLowerCase(),
+    approvalStatus: status,
+    status,
+    rejectionReason: raw.rejectionReason || "",
     submittedAt:
       typeof raw.submittedAt === "number"
         ? raw.submittedAt
@@ -109,7 +116,9 @@ interface WalkInApprovalsState {
   declineRequest: (id: string) => Promise<WalkInApprovalRequest | null>;
   fetchWalkInPayments: () => Promise<WalkInApprovalRequest[]>;
   completeWalkInPayment: (id: string) => Promise<boolean>;
+  completeOnboarding: (id: string) => Promise<boolean>;
   fetchUserStatus: () => Promise<void>;
+  applyRealtimeApproval: (raw: unknown) => void;
   getPendingRequests: () => WalkInApprovalRequest[];
   getAwaitingPaymentRequests: () => WalkInApprovalRequest[];
   getApprovedForUser: (userId: string) => WalkInApprovalRequest | null;
@@ -145,6 +154,8 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
       const { data } = await api.post("/user/join-gym", {
         gymId: input.membership.gymId,
         planId: input.membership.planId,
+        planName: input.membership.planName,
+        durationDays: input.durationDays,
         coachId: input.membership.coachId,
         paymentMethod: "walk-in",
         paymentRef: input.membership.paymentRef,
@@ -156,11 +167,18 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         return null;
       }
 
+      // API always returns { approval } — also accept bare approval for older responses
+      const raw = data.data?.approval || data.data;
+      if (!raw?.id) {
+        set({ error: data.message || "Invalid walk-in response from server." });
+        return null;
+      }
+
       const approval = mapApproval({
-        ...data.data.approval,
-        gymName: input.membership.gymName,
-        planName: input.membership.planName,
-        planPrice: input.membership.planPrice,
+        ...raw,
+        gymName: raw.gymName || input.membership.gymName,
+        planName: raw.planName || input.membership.planName,
+        planPrice: raw.planPrice ?? input.membership.planPrice,
       });
 
       set({
@@ -180,7 +198,10 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
       return approval;
     } catch (error: any) {
       set({
-        error: error.response?.data?.message || "Failed to submit walk-in request.",
+        error:
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to submit walk-in request.",
       });
       return null;
     }
@@ -208,18 +229,15 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
 
   declineRequest: async (id) => {
     try {
-      const { data } = await api.put(`/clerk/approvals/${id}/decline`);
+      const { data } = await api.put(`/clerk/approvals/${id}/decline`, {
+        reason: "Request declined by gym staff",
+      });
       if (!data.success) {
         set({ error: data.message || "Failed to decline request." });
         return null;
       }
 
-      const updated: WalkInApprovalRequest = {
-        ...(get().requests.find((req) => req.id === id) as WalkInApprovalRequest),
-        status: "declined",
-        reviewedAt: Date.now(),
-      };
-
+      const updated = mapApproval(data.data);
       set({
         requests: get().requests.map((req) => (req.id === id ? updated : req)),
         error: null,
@@ -239,7 +257,6 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         return [];
       }
       const mapped = (data.data || []).map(mapApproval);
-      // Merge into store so Approvals + Walk-in Payment stay in sync
       const byId = new Map(get().requests.map((r) => [r.id, r]));
       for (const item of mapped) byId.set(item.id, item);
       set({ requests: Array.from(byId.values()), error: null });
@@ -265,6 +282,7 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
                 ...req,
                 consumedAt: data.data?.approval?.consumedAt ?? Date.now(),
                 status: "approved",
+                approvalStatus: "approved",
               }
             : req,
         ),
@@ -279,6 +297,27 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
     }
   },
 
+  completeOnboarding: async (id) => {
+    try {
+      const { data } = await api.post(`/user/walk-in-done/${id}`);
+      if (!data.success) {
+        set({ error: data.message || "Failed to complete onboarding." });
+        return false;
+      }
+      const updated = mapApproval(data.data.approval || { ...data.data, id, status: "approved" });
+      set({
+        requests: get().requests.map((req) => (req.id === id ? { ...req, ...updated } : req)),
+        error: null,
+      });
+      return true;
+    } catch (error: any) {
+      set({
+        error: error.response?.data?.message || "Failed to complete onboarding.",
+      });
+      return false;
+    }
+  },
+
   fetchUserStatus: async () => {
     try {
       const { data } = await api.get("/user/walk-in-status");
@@ -288,13 +327,20 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
       const mapped = list.map(mapApproval);
       if (mapped.length === 0) return;
 
-      // Merge user-facing statuses without wiping clerk-fetched rows when both exist
       const byId = new Map(get().requests.map((r) => [r.id, r]));
       for (const item of mapped) byId.set(item.id, item);
       set({ requests: Array.from(byId.values()) });
     } catch {
       // USER may not have pending walk-ins; ignore
     }
+  },
+
+  applyRealtimeApproval: (raw) => {
+    if (!raw || typeof raw !== "object") return;
+    const approval = mapApproval(raw);
+    const byId = new Map(get().requests.map((r) => [r.id, r]));
+    byId.set(approval.id, approval);
+    set({ requests: Array.from(byId.values()) });
   },
 
   getPendingRequests: () => get().requests.filter((req) => req.status === "pending"),

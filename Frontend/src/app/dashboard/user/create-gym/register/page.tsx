@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useOwnerPlanTransactionsStore } from "@/stores/owner-plan-transactions-store";
+import { resolveMediaUrl, uploadImageFile } from "@/lib/media";
 
 export default function RegisterGymPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const role = useAuthStore((state) => state.role);
   const promoteToOwner = useAuthStore((state) => state.promoteToOwner);
   const attachGymToLatestPurchase = useOwnerPlanTransactionsStore(
     (state) => state.attachGymToLatestPurchase,
@@ -23,7 +25,11 @@ export default function RegisterGymPage() {
   const [description, setDescription] = useState("");
   const [websiteOrSlug, setWebsiteOrSlug] = useState("");
   const [coverPhotoName, setCoverPhotoName] = useState<string | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!paymentComplete) {
@@ -31,7 +37,24 @@ export default function RegisterGymPage() {
     }
   }, [paymentComplete, router]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleCoverSelect(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    const uploaded = await uploadImageFile(file);
+    setUploading(false);
+
+    if (!uploaded) {
+      setError("Cover photo upload failed. You can still submit without a photo.");
+      return;
+    }
+
+    setCoverImageUrl(uploaded.url);
+    setCoverPhotoName(uploaded.filename);
+    setCoverPreview(resolveMediaUrl(uploaded.url));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     const missing: string[] = [];
@@ -46,8 +69,8 @@ export default function RegisterGymPage() {
     }
 
     setError(null);
+    setSubmitting(true);
 
-    // Website / slug is optional — treat blank or placeholder values as empty
     const normalizedWebsite = websiteOrSlug.trim();
     const websiteValue =
       !normalizedWebsite ||
@@ -55,14 +78,22 @@ export default function RegisterGymPage() {
         ? ""
         : normalizedWebsite;
 
-    registerGym({
+    const ok = await registerGym({
       name: name.trim(),
       address: address.trim(),
       contactNumber: contactNumber.trim(),
       description: description.trim(),
       websiteOrSlug: websiteValue,
       coverPhotoName,
+      coverImageUrl: coverImageUrl || undefined,
     });
+
+    if (!ok) {
+      setSubmitting(false);
+      setError("Could not save your gym. Please try again.");
+      return;
+    }
+
     if (user && referenceNo) {
       attachGymToLatestPurchase({
         ownerId: user.id,
@@ -70,8 +101,14 @@ export default function RegisterGymPage() {
         gymName: name.trim(),
       });
     }
-    promoteToOwner();
-    router.push("/dashboard/owner");
+
+    if (role !== "OWNER") {
+      promoteToOwner();
+    }
+
+    setSubmitting(false);
+    // Gym is ACTIVE on create — optional Xendit setup (existing Payment Settings)
+    router.replace("/dashboard/owner/payment-settings");
   }
 
   if (!paymentComplete) return null;
@@ -79,7 +116,7 @@ export default function RegisterGymPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-black px-4 py-10 text-white">
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(e) => void handleSubmit(e)}
         className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#141414] p-6 sm:p-8"
       >
         <h1 className="text-2xl font-bold">Register Your Gym</h1>
@@ -120,17 +157,29 @@ export default function RegisterGymPage() {
 
           <div className="space-y-2">
             <Label>Cover Photo Upload (optional)</Label>
+            {coverPreview ? (
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverPreview} alt="Cover preview" className="h-40 w-full object-cover" />
+              </div>
+            ) : null}
             <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0A0A0A] px-4 py-8 text-sm text-zinc-400 transition hover:border-[#FFD700]/40 hover:text-zinc-200">
-              <Upload className="h-5 w-5" />
-              {coverPhotoName ? coverPhotoName : "Upload Cover Photo"}
+              {uploading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Upload className="h-5 w-5" />
+              )}
+              {uploading
+                ? "Uploading..."
+                : coverPhotoName
+                  ? coverPhotoName
+                  : "Upload Cover Photo"}
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  setCoverPhotoName(file ? file.name : null);
-                }}
+                disabled={uploading}
+                onChange={(e) => void handleCoverSelect(e.target.files?.[0])}
               />
             </label>
           </div>
@@ -157,9 +206,6 @@ export default function RegisterGymPage() {
                 onChange={(e) => setWebsiteOrSlug(e.target.value)}
                 placeholder="Leave blank if you don't have one"
               />
-              <p className="text-xs text-zinc-500">
-                You can skip this and submit without a website or slug.
-              </p>
             </div>
           </div>
         </div>
@@ -168,9 +214,10 @@ export default function RegisterGymPage() {
 
         <button
           type="submit"
-          className="mt-6 w-full rounded-xl bg-[#FFD700] py-3 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+          disabled={submitting || uploading}
+          className="mt-6 w-full rounded-xl bg-[#FFD700] py-3 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-60"
         >
-          Submit
+          {submitting ? "Saving..." : "Submit"}
         </button>
       </form>
     </div>

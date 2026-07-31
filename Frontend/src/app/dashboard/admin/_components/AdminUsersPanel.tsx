@@ -9,6 +9,7 @@ import {
   useAdminUsersStore,
 } from "@/stores/admin-users-store";
 import { AdminRemoveUserModal } from "./AdminRemoveUserModal";
+import { resolveMediaUrl } from "@/lib/media";
 
 const TABS: { id: AdminUserTab; label: string }[] = [
   { id: "users", label: "users" },
@@ -93,7 +94,10 @@ export function AdminUsersPanel() {
                         <div className="flex items-center gap-3">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={user.avatarUrl}
+                            src={
+                              resolveMediaUrl(user.avatarUrl) ||
+                              `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || "U")}&background=FACC15&color=000000&bold=true`
+                            }
                             alt={user.fullName}
                             className="h-10 w-10 shrink-0 rounded-full object-cover"
                           />

@@ -1,8 +1,9 @@
 import { Response } from "express";
-import prisma from "../config/database";
+import prisma, { withDbRetry } from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import { hashPassword } from "../utils/hash";
+import { emitCoachesUpdated } from "../services/realtime.service";
 
 // Helper: get the owner's gym
 async function getOwnerGym(ownerId: string) {
@@ -10,23 +11,52 @@ async function getOwnerGym(ownerId: string) {
 }
 
 // GET /api/owner/my-gym
+// ?light=1 — tiny payload for ownership checks (avoids lag / pool pressure)
 export async function getMyGym(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const gym = await prisma.gym.findFirst({
-      where: { ownerId: req.userId! },
-      include: {
-        _count: { select: { gymMemberships: true, coaches: true, equipment: true } },
-        membershipPlans: true,
-      },
-    });
+    const light =
+      req.query.light === "1" ||
+      req.query.light === "true" ||
+      String(req.query.fields || "") === "status";
+
+    if (light) {
+      const gym = await withDbRetry(() =>
+        prisma.gym.findFirst({
+          where: { ownerId: req.userId! },
+          select: { id: true, name: true, status: true },
+          orderBy: { createdAt: "desc" },
+        }),
+      );
+      sendSuccess(res, gym);
+      return;
+    }
+
+    const gym = await withDbRetry(() =>
+      prisma.gym.findFirst({
+        where: { ownerId: req.userId! },
+        include: {
+          _count: { select: { gymMemberships: true, coaches: true, equipment: true } },
+          membershipPlans: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
 
     if (!gym) {
       sendSuccess(res, null, "No gym registered");
       return;
     }
 
+    const { xenditApiKey: _key, ...safeGym } = gym;
     sendSuccess(res, {
-      ...gym,
+      ...safeGym,
+      cashlessEnabled:
+        Boolean(gym.xenditEnabled) &&
+        Boolean(
+          (gym.xenditApiKey || "").startsWith("xnd_production_") ||
+            (gym.xenditApiKey || "").startsWith("xnd_development_"),
+        ),
+      hasXenditApiKey: Boolean((gym.xenditApiKey || "").trim()),
       memberCount: gym._count.gymMemberships,
     });
   } catch (error) {
@@ -138,8 +168,16 @@ export async function createMembershipPlan(req: AuthRequest, res: Response): Pro
 // PUT /api/owner/membership-plans/:id
 export async function updateMembershipPlan(req: AuthRequest, res: Response): Promise<void> {
   try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.membershipPlan.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Plan not found", 404); return; }
+
     const plan = await prisma.membershipPlan.update({
-      where: { id: req.params.id as string },
+      where: { id: existing.id },
       data: {
         name: req.body.name,
         price: req.body.price,
@@ -157,7 +195,15 @@ export async function updateMembershipPlan(req: AuthRequest, res: Response): Pro
 // DELETE /api/owner/membership-plans/:id
 export async function deleteMembershipPlan(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.membershipPlan.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.membershipPlan.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Plan not found", 404); return; }
+
+    await prisma.membershipPlan.delete({ where: { id: existing.id } });
     sendSuccess(res, null, "Plan deleted");
   } catch (error) {
     console.error("Delete plan error:", error);
@@ -200,6 +246,7 @@ export async function createCoach(req: AuthRequest, res: Response): Promise<void
       },
     });
 
+    void emitCoachesUpdated(gym.id);
     sendCreated(res, coach, "Coach added");
   } catch (error) {
     console.error("Create coach error:", error);
@@ -207,10 +254,59 @@ export async function createCoach(req: AuthRequest, res: Response): Promise<void
   }
 }
 
+// PUT /api/owner/coaches/:id
+export async function updateCoach(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.coach.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Coach not found", 404); return; }
+
+    const coach = await prisma.coach.update({
+      where: { id: existing.id },
+      data: {
+        name: req.body.name ?? existing.name,
+        specialty: req.body.specialty ?? existing.specialty,
+        sessionPrice:
+          req.body.sessionPrice !== undefined
+            ? Number(req.body.sessionPrice)
+            : existing.sessionPrice,
+        description:
+          req.body.description !== undefined
+            ? String(req.body.description)
+            : existing.description,
+        photoUrl:
+          req.body.photoUrl !== undefined ? req.body.photoUrl : existing.photoUrl,
+        photoName:
+          req.body.photoName !== undefined ? req.body.photoName : existing.photoName,
+        schedule: req.body.schedule ?? existing.schedule,
+      },
+    });
+
+    void emitCoachesUpdated(gym.id);
+    sendSuccess(res, coach, "Coach updated");
+  } catch (error) {
+    console.error("Update coach error:", error);
+    sendError(res, "Failed to update coach", 500);
+  }
+}
+
 // DELETE /api/owner/coaches/:id
 export async function removeCoach(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.coach.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.coach.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Coach not found", 404); return; }
+
+    await prisma.coach.delete({ where: { id: existing.id } });
+    void emitCoachesUpdated(gym.id);
     sendSuccess(res, null, "Coach removed");
   } catch (error) {
     console.error("Remove coach error:", error);
@@ -240,12 +336,18 @@ export async function createEquipment(req: AuthRequest, res: Response): Promise<
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
+    const rawStatus = String(req.body.status || "AVAILABLE").toUpperCase().replace(/[\s-]+/g, "_");
+    const allowed = ["AVAILABLE", "IN_USE", "UNDER_MAINTENANCE"] as const;
+    const status = (allowed as readonly string[]).includes(rawStatus)
+      ? (rawStatus as (typeof allowed)[number])
+      : "AVAILABLE";
+
     const item = await prisma.equipment.create({
       data: {
         gymId: gym.id,
         name: req.body.name,
         quantity: req.body.quantity,
-        status: req.body.status || "AVAILABLE",
+        status,
       },
     });
 
@@ -256,18 +358,62 @@ export async function createEquipment(req: AuthRequest, res: Response): Promise<
   }
 }
 
-// PUT /api/owner/equipment/:id/toggle
-export async function toggleEquipment(req: AuthRequest, res: Response): Promise<void> {
+// PUT /api/owner/equipment/:id — update name/quantity/status
+export async function updateEquipment(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const item = await prisma.equipment.findUnique({ where: { id: req.params.id as string } });
-    if (!item) { sendError(res, "Equipment not found", 404); return; }
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.equipment.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Equipment not found", 404); return; }
+
+    const data: Record<string, unknown> = {};
+    if (typeof req.body.name === "string") data.name = req.body.name;
+    if (typeof req.body.quantity === "number") data.quantity = req.body.quantity;
+    if (typeof req.body.status === "string") {
+      const rawStatus = req.body.status.toUpperCase().replace(/[\s-]+/g, "_");
+      const allowed = ["AVAILABLE", "IN_USE", "UNDER_MAINTENANCE"];
+      if (allowed.includes(rawStatus)) data.status = rawStatus;
+    }
 
     const updated = await prisma.equipment.update({
-      where: { id: req.params.id as string },
-      data: { status: item.status === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE" },
+      where: { id: existing.id },
+      data,
     });
 
-    sendSuccess(res, updated, "Equipment status toggled");
+    sendSuccess(res, updated, "Equipment updated");
+  } catch (error) {
+    console.error("Update equipment error:", error);
+    sendError(res, "Failed to update equipment", 500);
+  }
+}
+
+// PUT /api/owner/equipment/:id/toggle — cycle Available → In Use → Under Maintenance
+export async function toggleEquipment(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const item = await prisma.equipment.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!item) { sendError(res, "Equipment not found", 404); return; }
+
+    const nextStatus =
+      item.status === "AVAILABLE"
+        ? "IN_USE"
+        : item.status === "IN_USE"
+          ? "UNDER_MAINTENANCE"
+          : "AVAILABLE";
+
+    const updated = await prisma.equipment.update({
+      where: { id: item.id },
+      data: { status: nextStatus },
+    });
+
+    sendSuccess(res, updated, "Equipment status updated");
   } catch (error) {
     console.error("Toggle equipment error:", error);
     sendError(res, "Failed to toggle equipment", 500);
@@ -277,7 +423,15 @@ export async function toggleEquipment(req: AuthRequest, res: Response): Promise<
 // DELETE /api/owner/equipment/:id
 export async function removeEquipment(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.equipment.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.equipment.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Equipment not found", 404); return; }
+
+    await prisma.equipment.delete({ where: { id: existing.id } });
     sendSuccess(res, null, "Equipment removed");
   } catch (error) {
     console.error("Remove equipment error:", error);
@@ -310,7 +464,19 @@ export async function createExercise(req: AuthRequest, res: Response): Promise<v
     const exercise = await prisma.exercise.create({
       data: {
         gymId: gym.id,
-        ...req.body,
+        name: req.body.name,
+        muscle: req.body.muscle,
+        category: req.body.category || req.body.muscle || "",
+        difficulty: req.body.difficulty || "Beginner",
+        sets: req.body.sets || "3",
+        reps: req.body.reps || "8-12",
+        rest: req.body.rest || "60s",
+        targetMuscles: req.body.targetMuscles || req.body.muscle || "",
+        formTips: req.body.formTips || "",
+        mediaUrl: req.body.mediaUrl || null,
+        mediaType: req.body.mediaType || null,
+        mediaName: req.body.mediaName || null,
+        cardImageUrl: req.body.cardImageUrl || "",
       },
     });
 
@@ -321,10 +487,55 @@ export async function createExercise(req: AuthRequest, res: Response): Promise<v
   }
 }
 
+// PUT /api/owner/exercises/:id
+export async function updateExercise(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.exercise.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Exercise not found", 404); return; }
+
+    const exercise = await prisma.exercise.update({
+      where: { id: existing.id },
+      data: {
+        name: req.body.name ?? existing.name,
+        muscle: req.body.muscle ?? existing.muscle,
+        category: req.body.category ?? req.body.muscle ?? existing.category,
+        difficulty: req.body.difficulty ?? existing.difficulty,
+        sets: req.body.sets ?? existing.sets,
+        reps: req.body.reps ?? existing.reps,
+        rest: req.body.rest ?? existing.rest,
+        targetMuscles: req.body.targetMuscles ?? req.body.muscle ?? existing.targetMuscles,
+        formTips: req.body.formTips ?? existing.formTips,
+        mediaUrl: req.body.mediaUrl !== undefined ? req.body.mediaUrl : existing.mediaUrl,
+        mediaType: req.body.mediaType !== undefined ? req.body.mediaType : existing.mediaType,
+        mediaName: req.body.mediaName !== undefined ? req.body.mediaName : existing.mediaName,
+        cardImageUrl: req.body.cardImageUrl ?? existing.cardImageUrl,
+      },
+    });
+
+    sendSuccess(res, exercise, "Exercise updated");
+  } catch (error) {
+    console.error("Update exercise error:", error);
+    sendError(res, "Failed to update exercise", 500);
+  }
+}
+
 // DELETE /api/owner/exercises/:id
 export async function removeExercise(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.exercise.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.exercise.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Exercise not found", 404); return; }
+
+    await prisma.exercise.delete({ where: { id: existing.id } });
     sendSuccess(res, null, "Exercise removed");
   } catch (error) {
     console.error("Remove exercise error:", error);
@@ -621,5 +832,118 @@ export async function getSalesReportReceipt(req: AuthRequest, res: Response): Pr
   } catch (error) {
     console.error("Get sales report receipt error:", error);
     sendError(res, "Failed to fetch receipt", 500);
+  }
+}
+
+function isValidXenditKey(key: string): boolean {
+  return key.startsWith("xnd_production_") || key.startsWith("xnd_development_");
+}
+
+function maskApiKey(key: string): string {
+  if (key.length <= 16) return "••••••••";
+  return `${key.slice(0, 12)}${"•".repeat(Math.min(key.length - 16, 20))}${key.slice(-4)}`;
+}
+
+// GET /api/owner/payment-settings — optional Xendit (walk-in always available)
+export async function getPaymentSettings(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) {
+      sendError(res, "No gym found", 404);
+      return;
+    }
+
+    const key = (gym.xenditApiKey || "").trim();
+    const hasApiKey = isValidXenditKey(key);
+
+    sendSuccess(res, {
+      hasApiKey,
+      maskedApiKey: hasApiKey ? maskApiKey(key) : null,
+      xenditEnabled: hasApiKey ? gym.xenditEnabled : false,
+      cashlessEnabled: hasApiKey && gym.xenditEnabled,
+      walkInAlwaysEnabled: true,
+    });
+  } catch (error) {
+    console.error("Get payment settings error:", error);
+    sendError(res, "Failed to fetch payment settings", 500);
+  }
+}
+
+// PUT /api/owner/payment-settings
+export async function updatePaymentSettings(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) {
+      sendError(res, "No gym found", 404);
+      return;
+    }
+
+    const { xenditApiKey, xenditEnabled, clearApiKey } = req.body as {
+      xenditApiKey?: string;
+      xenditEnabled?: boolean;
+      clearApiKey?: boolean;
+    };
+
+    const data: { xenditApiKey?: string; xenditEnabled?: boolean } = {};
+
+    if (clearApiKey === true) {
+      data.xenditApiKey = "";
+      data.xenditEnabled = false;
+    }
+
+    if (typeof xenditApiKey === "string") {
+      const trimmed = xenditApiKey.trim();
+      if (!trimmed) {
+        data.xenditApiKey = "";
+        data.xenditEnabled = false;
+      } else if (!isValidXenditKey(trimmed)) {
+        sendError(res, "Key must start with xnd_production_ or xnd_development_");
+        return;
+      } else {
+        data.xenditApiKey = trimmed;
+        // Saving a valid key enables cashless unless explicitly disabled in same request
+        if (typeof xenditEnabled !== "boolean") {
+          data.xenditEnabled = true;
+        }
+      }
+    }
+
+    if (typeof xenditEnabled === "boolean") {
+      const nextKey =
+        data.xenditApiKey !== undefined ? data.xenditApiKey : gym.xenditApiKey;
+      if (xenditEnabled && !isValidXenditKey((nextKey || "").trim())) {
+        sendError(res, "Save a valid Xendit API key before enabling cashless payments");
+        return;
+      }
+      data.xenditEnabled = xenditEnabled;
+    }
+
+    if (Object.keys(data).length === 0) {
+      sendError(res, "No payment settings to update");
+      return;
+    }
+
+    const updated = await prisma.gym.update({
+      where: { id: gym.id },
+      data,
+    });
+
+    const key = (updated.xenditApiKey || "").trim();
+    const hasApiKey = isValidXenditKey(key);
+
+    sendSuccess(
+      res,
+      {
+        hasApiKey,
+        maskedApiKey: hasApiKey ? maskApiKey(key) : null,
+        xenditEnabled: hasApiKey ? updated.xenditEnabled : false,
+        cashlessEnabled: hasApiKey && updated.xenditEnabled,
+        walkInAlwaysEnabled: true,
+      },
+      "Payment settings updated",
+    );
+  } catch (error) {
+    console.error("Update payment settings error:", error);
+    sendError(res, "Failed to update payment settings", 500);
   }
 }

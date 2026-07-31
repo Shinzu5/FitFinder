@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Eye,
@@ -16,15 +16,32 @@ import {
 } from "@/stores/owner-settings-store";
 
 export function PaymentSettingsPanel() {
-  const { xenditApiKey, connectionTested, saveApiKey, setConnectionTested } =
-    useOwnerSettingsStore();
-  const [inputValue, setInputValue] = useState(xenditApiKey ?? "");
+  const {
+    hasApiKey,
+    maskedApiKey,
+    xenditEnabled,
+    cashlessEnabled,
+    draftApiKey,
+    connectionTested,
+    loading,
+    fetchSettings,
+    setDraftApiKey,
+    saveApiKey,
+    clearApiKey,
+    setXenditEnabled,
+    setConnectionTested,
+  } = useOwnerSettingsStore();
+
   const [showKey, setShowKey] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const hasSavedKey = Boolean(xenditApiKey);
+  const [saving, setSaving] = useState(false);
 
-  function handleSave() {
-    const trimmed = inputValue.trim();
+  useEffect(() => {
+    void fetchSettings();
+  }, [fetchSettings]);
+
+  async function handleSave() {
+    const trimmed = draftApiKey.trim();
     if (!trimmed) {
       setMessage("Please paste your Xendit secret API key.");
       return;
@@ -33,18 +50,54 @@ export function PaymentSettingsPanel() {
       setMessage("Key must start with xnd_production_ or xnd_development_.");
       return;
     }
-    saveApiKey(trimmed);
-    setMessage("API key saved. GCash payments are now enabled.");
+    setSaving(true);
+    const ok = await saveApiKey(trimmed);
+    setSaving(false);
+    setMessage(
+      ok
+        ? "API key saved. Cashless payments (GCash, Maya & Xendit methods) are enabled."
+        : "Could not save API key. Try again.",
+    );
   }
 
   function handleTestConnection() {
-    const key = inputValue.trim() || xenditApiKey;
-    if (!key || !isValidXenditKey(key)) {
+    const key = draftApiKey.trim();
+    if (key) {
+      if (!isValidXenditKey(key)) {
+        setMessage("Save a valid Xendit API key before testing the connection.");
+        return;
+      }
+    } else if (!hasApiKey) {
       setMessage("Save a valid Xendit API key before testing the connection.");
       return;
     }
     setConnectionTested(true);
-    setMessage("Connection successful. Xendit is ready to receive GCash payments.");
+    setMessage("Connection successful. Xendit is ready to receive cashless payments.");
+  }
+
+  async function handleToggle() {
+    if (!hasApiKey) {
+      setMessage("Save a valid Xendit API key before enabling cashless payments.");
+      return;
+    }
+    setSaving(true);
+    const next = !xenditEnabled;
+    const ok = await setXenditEnabled(next);
+    setSaving(false);
+    setMessage(
+      ok
+        ? next
+          ? "Cashless payments enabled."
+          : "Cashless payments disabled. Members can still use Walk-in."
+        : "Could not update cashless toggle.",
+    );
+  }
+
+  async function handleClear() {
+    setSaving(true);
+    const ok = await clearApiKey();
+    setSaving(false);
+    setMessage(ok ? "API key removed. Only Walk-in payment is available." : "Could not clear API key.");
   }
 
   return (
@@ -57,32 +110,73 @@ export function PaymentSettingsPanel() {
           <div>
             <h2 className="text-lg font-semibold text-white">Xendit API settings</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Connect your Xendit account to receive GCash payments directly from your
-              gym members.
+              Optional. Walk-in (over-the-counter) is always available. Connect Xendit to
+              offer GCash, Maya, and other supported cashless methods.
             </p>
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3 text-sm">
-          <span className="text-zinc-500">● </span>
-          {hasSavedKey ? (
+        <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3 text-sm">
+          <p>
+            <span className="text-zinc-500">● </span>
             <span className="text-emerald-400">
-              API key saved — GCash payments are <strong>enabled</strong>
+              Walk-in payment is always <strong>enabled</strong>
             </span>
-          ) : (
-            <span className="text-zinc-400">
-              No API key saved — GCash payments are <strong className="text-white">disabled</strong>
-            </span>
-          )}
+          </p>
+          <p>
+            <span className="text-zinc-500">● </span>
+            {loading ? (
+              <span className="text-zinc-400">Loading Xendit status…</span>
+            ) : cashlessEnabled ? (
+              <span className="text-emerald-400">
+                Cashless (Xendit) is <strong>enabled</strong>
+              </span>
+            ) : hasApiKey ? (
+              <span className="text-amber-400">
+                API key saved — cashless is <strong>disabled</strong> (use the toggle below)
+              </span>
+            ) : (
+              <span className="text-zinc-400">
+                No API key — cashless is <strong className="text-white">hidden</strong> for
+                members
+              </span>
+            )}
+          </p>
         </div>
+
+        {hasApiKey ? (
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-white">Enable cashless (Xendit)</p>
+              <p className="text-xs text-zinc-500">
+                Turn off anytime — members will only see Walk-in.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={saving || loading}
+              onClick={() => void handleToggle()}
+              className={`relative h-8 w-14 shrink-0 rounded-full transition ${
+                xenditEnabled ? "bg-[#FFD700]" : "bg-zinc-700"
+              }`}
+              aria-pressed={xenditEnabled}
+              aria-label="Toggle cashless payments"
+            >
+              <span
+                className={`absolute top-1 h-6 w-6 rounded-full bg-black transition ${
+                  xenditEnabled ? "left-7" : "left-1"
+                }`}
+              />
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <div className="flex items-start gap-3 rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/5 px-4 py-3 text-sm text-[#FFD700]">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
           <strong>Never share your secret API key.</strong> It gives full access to your
-          Xendit account. This key is stored encrypted and never shown to gym members or
-          staff.
+          Xendit account. This key is never shown to gym members or staff.
         </p>
       </div>
 
@@ -97,14 +191,20 @@ export function PaymentSettingsPanel() {
           </p>
         </div>
 
+        {hasApiKey && maskedApiKey ? (
+          <p className="mb-3 text-xs text-zinc-500">
+            Saved key: <code className="text-zinc-300">{maskedApiKey}</code>
+          </p>
+        ) : null}
+
         <label className="mb-2 block text-sm text-zinc-400">
-          Paste your Xendit live secret key
+          {hasApiKey ? "Replace with a new Xendit secret key" : "Paste your Xendit secret key"}
         </label>
         <div className="relative">
           <input
             type={showKey ? "text" : "password"}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            value={draftApiKey}
+            onChange={(e) => setDraftApiKey(e.target.value)}
             placeholder="xnd_production_..."
             className="w-full rounded-lg border border-white/15 bg-white px-4 py-3 pr-12 text-sm text-black placeholder:text-zinc-400 outline-none focus:border-[#FFD700]/50"
           />
@@ -122,28 +222,45 @@ export function PaymentSettingsPanel() {
           key starts with <code className="text-zinc-400">xnd_development_</code>
         </p>
 
-        <div className="mt-5 flex items-center justify-between gap-4">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
           <button
             type="button"
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#FFD700] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+            disabled={saving}
+            onClick={() => void handleSave()}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#FFD700] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-50"
           >
             <Lock className="h-4 w-4" />
             SAVE API KEY
           </button>
-          <button
-            type="button"
-            onClick={handleTestConnection}
-            className="text-sm font-medium text-zinc-400 transition hover:text-[#FFD700]"
-          >
-            Test connection
-          </button>
+          <div className="flex items-center gap-4">
+            {hasApiKey ? (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleClear()}
+                className="text-sm font-medium text-red-400 transition hover:text-red-300"
+              >
+                Remove key
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              className="text-sm font-medium text-zinc-400 transition hover:text-[#FFD700]"
+            >
+              Test connection
+            </button>
+          </div>
         </div>
 
         {message ? (
           <p
             className={`mt-4 text-sm ${
-              message.includes("successful") || message.includes("saved")
+              message.includes("successful") ||
+              message.includes("saved") ||
+              message.includes("enabled") ||
+              message.includes("disabled") ||
+              message.includes("removed")
                 ? "text-emerald-400"
                 : "text-red-400"
             }`}
@@ -151,7 +268,7 @@ export function PaymentSettingsPanel() {
             {message}
           </p>
         ) : null}
-        {connectionTested && hasSavedKey ? (
+        {connectionTested && hasApiKey ? (
           <p className="mt-2 text-xs text-emerald-400">Last connection test: successful</p>
         ) : null}
       </section>
@@ -186,17 +303,17 @@ export function PaymentSettingsPanel() {
             <span className="font-semibold text-[#FFD700]">4.</span>
             <span>
               Paste it above and click <strong className="text-white">Save API key</strong>.
-              GCash payments from your gym go live instantly.
+              Cashless options appear for members when the toggle is on.
             </span>
           </li>
         </ol>
       </section>
 
-      {hasSavedKey ? (
+      {cashlessEnabled ? (
         <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
           <Zap className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-          Once saved, GCash payments from your gym members are automatically processed and
-          transferred to your Xendit balance — no manual action needed.
+          Cashless memberships activate immediately after successful Xendit payment. Walk-in
+          still needs Owner or Clerk approval.
         </div>
       ) : null}
     </div>

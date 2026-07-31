@@ -2,9 +2,10 @@ import { env } from "../config/env";
 
 const XENDIT_API_URL = "https://api.xendit.co";
 
-// Base64 encode the secret key for Basic Auth
-function getAuthHeader(): string {
-  const encoded = Buffer.from(`${env.XENDIT_SECRET_KEY}:`).toString("base64");
+// Base64 encode the secret key for Basic Auth (platform key, or gym-owned key)
+function getAuthHeader(apiKey?: string): string {
+  const key = (apiKey || env.XENDIT_SECRET_KEY || "").trim();
+  const encoded = Buffer.from(`${key}:`).toString("base64");
   return `Basic ${encoded}`;
 }
 
@@ -15,6 +16,8 @@ export interface CreateGcashPaymentParams {
   successReturnUrl: string;
   failureReturnUrl: string;
   metadata?: Record<string, unknown>;
+  /** Gym-owned Xendit secret for MEMBERSHIP payments; omit for platform SUBSCRIPTION */
+  apiKey?: string;
 }
 
 export interface XenditPaymentResponse {
@@ -60,7 +63,7 @@ export async function createGcashPayment(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: getAuthHeader(),
+      Authorization: getAuthHeader(params.apiKey),
     },
     body: JSON.stringify(body),
   });
@@ -95,14 +98,15 @@ export async function createGcashPayment(
  * Get the status of a Xendit payment by its payment request ID.
  */
 export async function getPaymentStatus(
-  paymentId: string
+  paymentId: string,
+  apiKey?: string
 ): Promise<{ status: string; amount: number; paidAt: string | null }> {
   const response = await fetch(
     `${XENDIT_API_URL}/payment_requests/${paymentId}`,
     {
       method: "GET",
       headers: {
-        Authorization: getAuthHeader(),
+        Authorization: getAuthHeader(apiKey),
       },
     }
   );

@@ -3,13 +3,14 @@ import {
   getMyGym,
   getMembers, removeMember,
   getMembershipPlans, createMembershipPlan, updateMembershipPlan, deleteMembershipPlan,
-  getCoaches, createCoach, removeCoach,
-  getEquipment, createEquipment, toggleEquipment, removeEquipment,
-  getExercises, createExercise, removeExercise,
+  getCoaches, createCoach, updateCoach, removeCoach,
+  getEquipment, createEquipment, updateEquipment, toggleEquipment, removeEquipment,
+  getExercises, createExercise, updateExercise, removeExercise,
   getShopProducts, createShopProduct, removeShopProduct,
   getStaff, addStaff, removeStaff,
   getMessages, sendMessage,
   getSalesReports, getSalesReportReceipt,
+  getPaymentSettings, updatePaymentSettings,
 } from "../controllers/owner.controller";
 import { authenticate } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
@@ -21,6 +22,9 @@ router.use(authenticate, requireRole("OWNER"));
 
 router.get("/my-gym", getMyGym);
 
+router.get("/payment-settings", getPaymentSettings);
+router.put("/payment-settings", updatePaymentSettings);
+
 router.get("/members", getMembers);
 router.delete("/members/:id", removeMember);
 
@@ -31,15 +35,18 @@ router.delete("/membership-plans/:id", deleteMembershipPlan);
 
 router.get("/coaches", getCoaches);
 router.post("/coaches", createCoach);
+router.put("/coaches/:id", updateCoach);
 router.delete("/coaches/:id", removeCoach);
 
 router.get("/equipment", getEquipment);
 router.post("/equipment", createEquipment);
+router.put("/equipment/:id", updateEquipment);
 router.put("/equipment/:id/toggle", toggleEquipment);
 router.delete("/equipment/:id", removeEquipment);
 
 router.get("/exercises", getExercises);
 router.post("/exercises", createExercise);
+router.put("/exercises/:id", updateExercise);
 router.delete("/exercises/:id", removeExercise);
 
 router.get("/shop", getShopProducts);

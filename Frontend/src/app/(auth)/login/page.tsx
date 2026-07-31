@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore, getDashboardPathForRole } from "@/stores/auth-store";
+import { useCreateGymStore } from "@/stores/create-gym-store";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -97,6 +98,12 @@ function LoginForm() {
     if (!ok) return;
 
     const currentRole = useAuthStore.getState().role;
+    if (currentRole === "OWNER") {
+      const hasGym = await useCreateGymStore.getState().fetchOwnedGymStatus();
+      router.replace(hasGym ? "/dashboard/owner" : "/dashboard/user/create-gym");
+      return;
+    }
+
     router.replace(getDashboardPathForRole(currentRole));
   }
 
@@ -138,7 +145,14 @@ function LoginForm() {
           </Alert>
           <button
             type="button"
-            onClick={() => router.replace(getDashboardPathForRole(role))}
+            onClick={async () => {
+              if (role === "OWNER") {
+                const hasGym = await useCreateGymStore.getState().fetchOwnedGymStatus();
+                router.replace(hasGym ? "/dashboard/owner" : "/dashboard/user/create-gym");
+                return;
+              }
+              router.replace(getDashboardPathForRole(role));
+            }}
             className="flex w-full items-center justify-center rounded-lg bg-[#FFD700] px-4 py-3 text-sm font-bold uppercase tracking-wide text-black transition hover:bg-[#e6c200]"
           >
             Continue to dashboard

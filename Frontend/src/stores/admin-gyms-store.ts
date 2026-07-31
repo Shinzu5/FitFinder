@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import api from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 
 export interface AdminActiveGym {
   id: string;
@@ -18,92 +19,76 @@ export interface AdminActiveGym {
   paymentConfigured: boolean;
 }
 
-const DEFAULT_GYMS: AdminActiveGym[] = [
-  {
-    id: "gym-1",
-    name: "Abbsy Mini Gym",
-    location: "Datag Buagsong, Cordova",
-    imageUrl:
-      "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80",
-    members: 142,
-    activeSubscriptions: 113,
-    status: "active",
-    ownerName: "Renz",
-    ownerEmail: "renz@example.com",
-    ownerInitials: "R",
-    planLabel: "Pro Plan",
-    paymentConfigured: true,
-  },
-  {
-    id: "gym-powerhouse",
-    name: "Powerhouse Fitness",
-    location: "Downtown Metro",
-    imageUrl:
-      "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
-    members: 342,
-    activeSubscriptions: 298,
-    status: "active",
-    ownerName: "Liza Gomez",
-    ownerEmail: "liza@powerhouse.fit",
-    ownerInitials: "LG",
-    planLabel: "Standard plan",
-    paymentConfigured: true,
-  },
-  {
-    id: "gym-3",
-    name: "The Iron Den",
-    location: "Cebu City, Cebu",
-    imageUrl:
-      "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1200&q=80",
-    members: 87,
-    activeSubscriptions: 72,
-    status: "active",
-    ownerName: "Marcus Lee",
-    ownerEmail: "marcus@ironden.fit",
-    ownerInitials: "ML",
-    planLabel: "Standard plan",
-    paymentConfigured: true,
-  },
-  {
-    id: "gym-4",
-    name: "The Zone Fitness",
-    location: "Lapu-Lapu City, Cebu",
-    imageUrl:
-      "https://images.unsplash.com/photo-1540497077202-7bf8a76381cd?auto=format&fit=crop&w=1200&q=80",
-    members: 203,
-    activeSubscriptions: 176,
-    status: "active",
-    ownerName: "Carla Mendoza",
-    ownerEmail: "carla@thezone.fit",
-    ownerInitials: "CM",
-    planLabel: "Pro Plan",
-    paymentConfigured: false,
-  },
-];
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+}
 
 interface AdminGymsState {
   gyms: AdminActiveGym[];
-  deleteGym: (id: string) => void;
-  addGym: (gym: AdminActiveGym) => void;
+  loading: boolean;
+  error: string | null;
+  fetchGyms: () => Promise<void>;
+  deleteGym: (id: string) => Promise<boolean>;
 }
 
-export const useAdminGymsStore = create<AdminGymsState>()(
-  persist(
-    (set, get) => ({
-      gyms: DEFAULT_GYMS,
+export const useAdminGymsStore = create<AdminGymsState>((set, get) => ({
+  gyms: [],
+  loading: false,
+  error: null,
 
-      deleteGym: (id) => {
-        set({ gyms: get().gyms.filter((gym) => gym.id !== id) });
-      },
+  fetchGyms: async () => {
+    set({ loading: true, error: null });
+    try {
+      // ACTIVE gyms only — same source Gymers see on Home
+      const { data } = await api.get("/gyms");
+      if (!data.success) {
+        set({ loading: false, error: data.message || "Failed to load gyms." });
+        return;
+      }
 
-      addGym: (gym) => {
-        if (get().gyms.some((item) => item.id === gym.id)) return;
-        set({ gyms: [gym, ...get().gyms] });
-      },
-    }),
-    {
-      name: "fitfinder-admin-gyms",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+      const gyms: AdminActiveGym[] = (data.data || []).map((gym: any) => ({
+        id: gym.id,
+        name: gym.name,
+        location: gym.location || gym.address || "",
+        imageUrl: resolveMediaUrl(gym.image || gym.coverImageUrl, ""),
+        members: gym.members ?? 0,
+        activeSubscriptions: gym.members ?? 0,
+        status: "active" as const,
+        ownerName: gym.ownerName || "Owner",
+        ownerEmail: gym.ownerEmail || "",
+        ownerInitials: initials(gym.ownerName || gym.name || "G"),
+        planLabel: "Membership",
+        paymentConfigured: true,
+      }));
+
+      set({ gyms, loading: false, error: null });
+    } catch (error: any) {
+      set({
+        loading: false,
+        error: error.response?.data?.message || "Failed to load gyms.",
+      });
+    }
+  },
+
+  deleteGym: async (id) => {
+    try {
+      const { data } = await api.delete(`/gyms/${id}`);
+      if (!data.success) {
+        console.error("Delete gym failed:", data.message);
+        set({ error: data.message || "Failed to delete gym." });
+        return false;
+      }
+      set({ gyms: get().gyms.filter((gym) => gym.id !== id), error: null });
+      return true;
+    } catch (error: any) {
+      console.error("Failed to delete gym:", error);
+      set({
+        error: error.response?.data?.message || "Failed to delete gym.",
+      });
+      return false;
+    }
+  },
+}));

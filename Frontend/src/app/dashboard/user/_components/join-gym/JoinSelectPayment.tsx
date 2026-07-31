@@ -12,6 +12,7 @@ import {
 import type { PublicGymProfile } from "../../_lib/gym-profile";
 import { getPlanSubtitle } from "../../_lib/use-gym-profile";
 import { useJoinGymStore } from "@/stores/join-gym-store";
+import { WEEK_DAYS, getCoachInitials } from "@/stores/owner-coaches-store";
 import { JoinGymHeader } from "./JoinGymHeader";
 
 interface JoinSelectPaymentProps {
@@ -32,14 +33,29 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
   } = useJoinGymStore();
 
   const [coachOpen, setCoachOpen] = useState(false);
+  const cashlessEnabled = Boolean(profile.cashlessEnabled);
 
   const defaultPlanId = profile.plans[0]?.id ?? "";
 
   useEffect(() => {
     if (gymId !== profile.id) {
-      initJoin(profile.id, defaultPlanId);
+      initJoin(profile.id, defaultPlanId, cashlessEnabled);
     }
-  }, [profile.id, gymId, initJoin, defaultPlanId]);
+  }, [profile.id, gymId, initJoin, defaultPlanId, cashlessEnabled]);
+
+  useEffect(() => {
+    if (!cashlessEnabled && paymentMethod === "cashless") {
+      setPaymentMethod("walk-in");
+    }
+  }, [cashlessEnabled, paymentMethod, setPaymentMethod]);
+
+  // Clear selection if coach was deleted via realtime update
+  useEffect(() => {
+    if (!selectedCoachId) return;
+    if (!profile.coaches.some((c) => c.id === selectedCoachId)) {
+      setCoachId(null);
+    }
+  }, [profile.coaches, selectedCoachId, setCoachId]);
 
   const selectedPlan = useMemo(
     () => profile.plans.find((plan) => plan.id === selectedPlanId) ?? profile.plans[0],
@@ -55,7 +71,7 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
 
   function handleConfirm() {
     if (!selectedPlan) return;
-    if (paymentMethod === "cashless") {
+    if (paymentMethod === "cashless" && cashlessEnabled) {
       router.push(`/dashboard/user/gym/${profile.id}/join/gcash`);
       return;
     }
@@ -83,31 +99,35 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
 
         <section>
           <p className="mb-3 text-xs text-zinc-500">Choose Payment Method</p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setPaymentMethod("cashless")}
-              className={`relative rounded-xl border p-4 text-left transition ${
-                paymentMethod === "cashless"
-                  ? "border-[#FFD700] bg-[#141414]"
-                  : "border-white/10 bg-[#141414] hover:border-white/20"
-              }`}
-            >
-              <span
-                className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full ${
+          <div className={`grid gap-3 ${cashlessEnabled ? "grid-cols-2" : "grid-cols-1"}`}>
+            {cashlessEnabled ? (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("cashless")}
+                className={`relative rounded-xl border p-4 text-left transition ${
                   paymentMethod === "cashless"
-                    ? "bg-[#FFD700] text-black"
-                    : "border border-zinc-600"
+                    ? "border-[#FFD700] bg-[#141414]"
+                    : "border-white/10 bg-[#141414] hover:border-white/20"
                 }`}
               >
-                {paymentMethod === "cashless" ? <Check className="h-3 w-3" /> : null}
-              </span>
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800">
-                <CreditCard className="h-4 w-4 text-sky-400" />
-              </div>
-              <p className="font-semibold text-white">Cashless</p>
-              <p className="mt-1 text-xs text-[#FFD700]">GCash via secure Xendit link</p>
-            </button>
+                <span
+                  className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full ${
+                    paymentMethod === "cashless"
+                      ? "bg-[#FFD700] text-black"
+                      : "border border-zinc-600"
+                  }`}
+                >
+                  {paymentMethod === "cashless" ? <Check className="h-3 w-3" /> : null}
+                </span>
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800">
+                  <CreditCard className="h-4 w-4 text-sky-400" />
+                </div>
+                <p className="font-semibold text-white">Cashless</p>
+                <p className="mt-1 text-xs text-[#FFD700]">
+                  GCash, Maya &amp; Xendit methods
+                </p>
+              </button>
+            ) : null}
 
             <button
               type="button"
@@ -134,6 +154,11 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
               <p className="mt-1 text-xs text-zinc-500">Pay cash at front desk</p>
             </button>
           </div>
+          {!cashlessEnabled ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              This gym accepts Walk-in (over-the-counter) payment only.
+            </p>
+          ) : null}
         </section>
 
         <section>
@@ -237,17 +262,61 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
                 </div>
               ) : null}
             </div>
+
+            {selectedCoach ? (
+              <article className="mt-3 rounded-xl border border-white/10 bg-[#141414] p-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Coach Details
+                </p>
+                <div className="flex gap-4">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full border border-white/10 bg-zinc-900">
+                    {selectedCoach.photoUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={selectedCoach.photoUrl}
+                        alt={selectedCoach.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[#FFD700]/15 text-sm font-bold text-[#FFD700]">
+                        {getCoachInitials(selectedCoach.name)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-white">{selectedCoach.name}</p>
+                    <p className="text-sm text-[#FFD700]">{selectedCoach.specialty}</p>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      ₱{selectedCoach.sessionPrice.toLocaleString()}/session
+                    </p>
+                    {selectedCoach.description ? (
+                      <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                        {selectedCoach.description}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-zinc-500 sm:grid-cols-3">
+                      {WEEK_DAYS.map((day) => (
+                        <p key={day.key}>
+                          <span className="text-zinc-600">{day.short}</span>{" "}
+                          {selectedCoach.schedule?.[day.key] || "Off"}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ) : null}
           </section>
         ) : null}
 
         <article className="rounded-xl border border-white/10 bg-[#141414] p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-500">Membership plan</span>
+            <span className="text-zinc-500">Membership Plan</span>
             <span className="text-white">₱{(selectedPlan?.price ?? 0).toLocaleString()}</span>
           </div>
           {selectedCoach ? (
             <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-zinc-500">Coach session</span>
+              <span className="text-zinc-500">Coach Session</span>
               <span className="text-white">₱{selectedCoach.sessionPrice.toLocaleString()}</span>
             </div>
           ) : null}

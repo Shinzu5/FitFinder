@@ -2,14 +2,26 @@ import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
+import {
+  emitMembershipUpdated,
+  emitWalkInApprovalsUpdated,
+  emitWalkInStatus,
+} from "../services/realtime.service";
 
-// Helper: get clerk's gym
-async function getClerkGym(clerkId: string) {
+// Helper: gym for Clerk (assigned) or Owner (owned) — same walk-in approval flow
+async function getClerkGym(userId: string) {
   const user = await prisma.user.findUnique({
-    where: { id: clerkId },
-    select: { clerkGymId: true },
+    where: { id: userId },
+    select: { role: true, clerkGymId: true },
   });
-  if (!user?.clerkGymId) return null;
+  if (!user) return null;
+  if (user.role === "OWNER") {
+    return prisma.gym.findFirst({
+      where: { ownerId: userId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+  if (!user.clerkGymId) return null;
   return prisma.gym.findUnique({ where: { id: user.clerkGymId } });
 }
 
@@ -317,10 +329,13 @@ export async function getApprovals(req: AuthRequest, res: Response): Promise<voi
         paymentRef: a.paymentRef,
         totalPaid: a.totalPaid,
         durationDays: a.durationDays,
+        paymentStatus: String((a as any).paymentStatus || "PAID").toLowerCase(),
+        approvalStatus: a.status.toLowerCase(),
         status: a.status.toLowerCase(),
+        rejectionReason: (a as any).rejectionReason || "",
         submittedAt: a.submittedAt.getTime(),
-        reviewedAt: a.reviewedAt?.getTime(),
-        consumedAt: a.consumedAt?.getTime(),
+        reviewedAt: a.reviewedAt?.getTime() ?? null,
+        consumedAt: a.consumedAt?.getTime() ?? null,
       })),
     );
   } catch (error) {
@@ -330,11 +345,12 @@ export async function getApprovals(req: AuthRequest, res: Response): Promise<voi
 }
 
 // PUT /api/clerk/approvals/:id/approve
+// Owner/Clerk Approve → activate membership (gymer then sees Done).
 export async function approveWalkIn(req: AuthRequest, res: Response): Promise<void> {
   try {
     const approval = await prisma.walkInApproval.findUnique({
       where: { id: req.params.id as string },
-      include: { plan: true },
+      include: { plan: true, gym: { select: { name: true } } },
     });
 
     if (!approval) { sendError(res, "Not found", 404); return; }
@@ -346,33 +362,96 @@ export async function approveWalkIn(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Approve only — membership + payment are confirmed later in Walk-in Payment (Done).
-    const updated = await prisma.walkInApproval.update({
-      where: { id: req.params.id as string },
-      data: { status: "APPROVED", reviewedAt: new Date() },
+    const now = new Date();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + approval.durationDays);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const existingMembership = await tx.gymMembership.findFirst({
+        where: {
+          userId: approval.userId,
+          gymId: approval.gymId,
+          status: { in: ["ACTIVE", "EXPIRING"] },
+        },
+      });
+
+      if (!existingMembership) {
+        await tx.gymMembership.create({
+          data: {
+            userId: approval.userId,
+            gymId: approval.gymId,
+            planId: approval.planId,
+            coachId: approval.coachId,
+            paymentMethod: "WALK_IN",
+            paymentRef: approval.paymentRef,
+            totalPaid: approval.totalPaid,
+            status: "ACTIVE",
+            expiresAt,
+          },
+        });
+      }
+
+      await tx.clerkTransaction.create({
+        data: {
+          gymId: approval.gymId,
+          clerkId: req.userId!,
+          type: "MONTHLY",
+          memberName: approval.memberName,
+          amount: approval.totalPaid,
+          method: "CASH",
+          notes: `Walk-in approved · Ref ${approval.paymentRef}`,
+        },
+      });
+
+      // Keep consumedAt null until gymer clicks Done (onboarding complete)
+      return tx.walkInApproval.update({
+        where: { id: approval.id },
+        data: {
+          status: "APPROVED",
+          reviewedAt: now,
+          paymentStatus: "PAID",
+        },
+        include: {
+          plan: { select: { name: true, price: true } },
+          gym: { select: { name: true } },
+        },
+      });
     });
 
-    sendSuccess(res, {
+    const responsePayload = {
       id: updated.id,
       userId: updated.userId,
       memberName: updated.memberName,
       memberEmail: updated.memberEmail,
       gymId: updated.gymId,
-      gymName: gym.name,
+      gymName: updated.gym.name,
       planId: updated.planId,
-      planName: approval.plan.name,
-      planPrice: approval.plan.price,
+      planName: updated.plan.name,
+      planPrice: updated.plan.price,
       coachId: updated.coachId,
       coachName: updated.coachName,
       coachSessionPrice: updated.coachSessionPrice,
       paymentRef: updated.paymentRef,
       totalPaid: updated.totalPaid,
       durationDays: updated.durationDays,
-      status: updated.status.toLowerCase(),
+      paymentStatus: String((updated as any).paymentStatus || "PAID").toLowerCase(),
+      approvalStatus: "approved",
+      status: "approved",
+      rejectionReason: (updated as any).rejectionReason || "",
       submittedAt: updated.submittedAt.getTime(),
-      reviewedAt: updated.reviewedAt?.getTime(),
+      reviewedAt: updated.reviewedAt?.getTime() ?? null,
       consumedAt: updated.consumedAt?.getTime() ?? null,
-    }, "Walk-in request approved — collect payment in Walk-in Payment");
+    };
+
+    emitWalkInStatus(updated.userId, responsePayload);
+    emitMembershipUpdated(updated.userId);
+    void emitWalkInApprovalsUpdated(updated.gymId);
+
+    sendSuccess(
+      res,
+      responsePayload,
+      "Walk-in approved — membership is now Active",
+    );
   } catch (error) {
     console.error("Approve walk-in error:", error);
     sendError(res, "Failed to approve", 500);
@@ -469,7 +548,21 @@ export async function completeWalkInPayment(req: AuthRequest, res: Response): Pr
         where: { id: approval.id },
         data: { consumedAt: new Date() },
       });
-      sendError(res, "Member already has an active membership at this gym");
+      // Still success — gymer already active; unlocks via membership poll
+      sendSuccess(
+        res,
+        {
+          membership: existingMembership,
+          alreadyActive: true,
+          approval: {
+            id: approval.id,
+            status: "approved",
+            consumedAt: Date.now(),
+            paymentRef: approval.paymentRef,
+          },
+        },
+        "Membership already active",
+      );
       return;
     }
 
@@ -536,6 +629,10 @@ export async function declineWalkIn(req: AuthRequest, res: Response): Promise<vo
   try {
     const approval = await prisma.walkInApproval.findUnique({
       where: { id: req.params.id as string },
+      include: {
+        plan: { select: { name: true, price: true } },
+        gym: { select: { name: true } },
+      },
     });
 
     if (!approval) { sendError(res, "Not found", 404); return; }
@@ -547,21 +644,50 @@ export async function declineWalkIn(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const reason = String(req.body?.reason || req.body?.rejectionReason || "").trim();
+
     const updated = await prisma.walkInApproval.update({
       where: { id: req.params.id as string },
-      data: { status: "DECLINED", reviewedAt: new Date() },
+      data: {
+        status: "DECLINED",
+        reviewedAt: new Date(),
+        rejectionReason: reason || "Request declined by gym staff",
+      },
+      include: {
+        plan: { select: { name: true, price: true } },
+        gym: { select: { name: true } },
+      },
     });
 
-    sendSuccess(
-      res,
-      {
-        ...updated,
-        status: updated.status.toLowerCase(),
-        submittedAt: updated.submittedAt.getTime(),
-        reviewedAt: updated.reviewedAt?.getTime(),
-      },
-      "Walk-in declined",
-    );
+    const responsePayload = {
+      id: updated.id,
+      userId: updated.userId,
+      memberName: updated.memberName,
+      memberEmail: updated.memberEmail,
+      gymId: updated.gymId,
+      gymName: updated.gym.name,
+      planId: updated.planId,
+      planName: updated.plan.name,
+      planPrice: updated.plan.price,
+      coachId: updated.coachId,
+      coachName: updated.coachName,
+      coachSessionPrice: updated.coachSessionPrice,
+      paymentRef: updated.paymentRef,
+      totalPaid: updated.totalPaid,
+      durationDays: updated.durationDays,
+      paymentStatus: String((updated as any).paymentStatus || "PAID").toLowerCase(),
+      approvalStatus: "declined",
+      status: "declined",
+      rejectionReason: (updated as any).rejectionReason || "",
+      submittedAt: updated.submittedAt.getTime(),
+      reviewedAt: updated.reviewedAt?.getTime() ?? null,
+      consumedAt: updated.consumedAt?.getTime() ?? null,
+    };
+
+    emitWalkInStatus(updated.userId, responsePayload);
+    void emitWalkInApprovalsUpdated(updated.gymId);
+
+    sendSuccess(res, responsePayload, "Walk-in declined");
   } catch (error) {
     console.error("Decline walk-in error:", error);
     sendError(res, "Failed to decline", 500);

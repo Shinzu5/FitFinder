@@ -1,51 +1,73 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { Plus } from "lucide-react";
+import type { Gym } from "@/lib/mock-gyms";
+import { resolveMediaUrl } from "@/lib/media";
 import { useAuthStore } from "@/stores/auth-store";
-import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useMembershipStore } from "@/stores/membership-store";
-import { registeredGymToListItem } from "./_lib/gym-profile";
 import { UserGymCard } from "./_components/UserGymCard";
 
 function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
+function mapApiGymToListItem(gym: any): Gym {
+  return {
+    id: gym.id,
+    name: gym.name,
+    location: gym.location || gym.address || "",
+    description: gym.description || "",
+    hours: gym.hours || gym.schedule || "",
+    website: gym.website || "",
+    members: gym.members ?? 0,
+    pricePerMonth: Number(gym.pricePerMonth ?? 0),
+    image: resolveMediaUrl(gym.image || gym.coverImageUrl),
+    status: "ACTIVE",
+  };
+}
+
 export default function UserDashboardPage() {
   const { user } = useAuthStore();
-  const registeredGym = useCreateGymStore((state) => state.registeredGym);
   const { joinedGymId, membership, fetchMembership } = useMembershipStore();
   const firstName = getFirstName(user?.fullName ?? "Member");
   const hasMembership = Boolean(joinedGymId);
 
-  const [realGyms, setRealGyms] = useState<any[]>([]);
+  const [realGyms, setRealGyms] = useState<Gym[]>([]);
+  const [loadingGyms, setLoadingGyms] = useState(true);
 
   useEffect(() => {
     void fetchMembership();
   }, [fetchMembership]);
 
-  useEffect(() => {
-    async function fetchGyms() {
-      try {
-        const { data } = await api.get("/gyms");
-        if (data.success) {
-          setRealGyms(data.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch real gyms:", error);
+  const fetchGyms = useCallback(async () => {
+    try {
+      const { data } = await api.get("/gyms");
+      if (data.success) {
+        setRealGyms((data.data || []).map(mapApiGymToListItem));
       }
+    } catch (error) {
+      console.error("Failed to fetch real gyms:", error);
+    } finally {
+      setLoadingGyms(false);
     }
-    fetchGyms();
   }, []);
+
+  useEffect(() => {
+    void fetchGyms();
+    const onFocus = () => void fetchGyms();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => void fetchGyms(), 15000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [fetchGyms]);
 
   const availableGyms = useMemo(() => {
     const gyms = [...realGyms];
-    if (registeredGym && !gyms.some((gym) => gym.id === registeredGym.id)) {
-      gyms.unshift(registeredGymToListItem(registeredGym));
-    }
     if (joinedGymId) {
       return gyms.sort((a, b) => {
         if (a.id === joinedGymId) return -1;
@@ -54,7 +76,7 @@ export default function UserDashboardPage() {
       });
     }
     return gyms;
-  }, [realGyms, registeredGym, joinedGymId]);
+  }, [realGyms, joinedGymId]);
 
   const joinedGymName =
     membership?.gymName ?? availableGyms.find((gym) => gym.id === joinedGymId)?.name ?? "your gym";
@@ -68,7 +90,11 @@ export default function UserDashboardPage() {
           </h1>
           <p className="mt-2 text-sm text-zinc-500 sm:text-base">
             {hasMembership
-              ? `You're a member of ${joinedGymName}.`
+              ? `You're a member of ${joinedGymName}.${
+                  membership?.coachName
+                    ? ` Your coach is ${membership.coachName}.`
+                    : ""
+                }`
               : "Browse gyms below, or create your own."}
           </p>
         </div>
@@ -85,11 +111,17 @@ export default function UserDashboardPage() {
 
       <section>
         <h2 className="mb-5 text-lg font-bold text-white">Available Gyms</h2>
-        <div className="grid gap-6 md:grid-cols-2">
-          {availableGyms.map((gym) => (
-            <UserGymCard key={gym.id} gym={gym} isJoined={joinedGymId === gym.id} />
-          ))}
-        </div>
+        {loadingGyms && availableGyms.length === 0 ? (
+          <p className="text-sm text-zinc-500">Loading gyms…</p>
+        ) : availableGyms.length === 0 ? (
+          <p className="text-sm text-zinc-500">No approved gyms available yet.</p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2">
+            {availableGyms.map((gym) => (
+              <UserGymCard key={gym.id} gym={gym} isJoined={joinedGymId === gym.id} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
