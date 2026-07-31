@@ -1,7 +1,10 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import type { GymMember } from "@/stores/owner-members-store";
+import {
+  formatMemberDate,
+  type GymMember,
+} from "@/stores/owner-members-store";
 
 interface ManageMemberModalProps {
   member: GymMember | null;
@@ -29,10 +32,33 @@ export function ManageMemberModal({ member, onClose, onDelete }: ManageMemberMod
             <span className="text-zinc-500">Email:</span> {member.email}
           </p>
           <p className="text-zinc-300">
+            <span className="text-zinc-500">Type:</span> {member.memberType}
+          </p>
+          <p className="text-zinc-300">
             <span className="text-zinc-500">Plan:</span> {member.planName}
           </p>
           <p className="text-zinc-300">
+            <span className="text-zinc-500">Status:</span> {member.status}
+          </p>
+          <p className="text-zinc-300">
             <span className="text-zinc-500">Remaining:</span> {member.remainingDays} days
+          </p>
+          <p className="text-zinc-300">
+            <span className="text-zinc-500">Start:</span> {formatMemberDate(member.startsAt)}
+          </p>
+          <p className="text-zinc-300">
+            <span className="text-zinc-500">Expires:</span> {formatMemberDate(member.expiresAt)}
+          </p>
+          <p className="text-zinc-300">
+            <span className="text-zinc-500">Total paid:</span> ₱
+            {member.totalPaid.toLocaleString()}
+          </p>
+          <p className="text-zinc-300">
+            <span className="text-zinc-500">Registered by:</span> {member.registeredBy}
+          </p>
+          <p className="text-zinc-300">
+            <span className="text-zinc-500">Registered:</span>{" "}
+            {formatMemberDate(member.registrationDate)}
           </p>
         </div>
 

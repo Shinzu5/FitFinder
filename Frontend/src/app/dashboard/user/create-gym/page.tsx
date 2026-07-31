@@ -13,7 +13,7 @@ import { useCreateGymStore } from "@/stores/create-gym-store";
 const ICONS = {
   starter: Dumbbell,
   standard: CalendarDays,
-  pro: Building2,
+  popular: Building2,
 } as const;
 
 export default function CreateGymPlanPage() {

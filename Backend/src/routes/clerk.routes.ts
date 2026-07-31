@@ -13,16 +13,16 @@ const router = Router();
 
 router.use(authenticate);
 
-const clerkOnly = requireRole("CLERK");
-/** Owner and Clerk share walk-in approval / Done — reuses same controllers */
+/** Owner and Clerk share walk-in payment, approvals, and daily close */
 const walkInStaff = requireRole("CLERK", "OWNER");
 
-router.get("/dashboard", clerkOnly, getDashboard);
-router.get("/transactions", clerkOnly, getTransactions);
-router.post("/transactions", clerkOnly, recordPayment);
-router.get("/members", clerkOnly, getMembers);
-router.post("/members", clerkOnly, registerMember);
-router.get("/plans", clerkOnly, getPlans);
+/** Owner + Clerk share Walk-in Payment (record / today's log / close) */
+router.get("/dashboard", walkInStaff, getDashboard);
+router.get("/transactions", walkInStaff, getTransactions);
+router.post("/transactions", walkInStaff, recordPayment);
+router.get("/members", walkInStaff, getMembers);
+router.post("/members", walkInStaff, registerMember);
+router.get("/plans", walkInStaff, getPlans);
 
 router.get("/approvals", walkInStaff, getApprovals);
 router.put("/approvals/:id/approve", walkInStaff, approveWalkIn);
@@ -30,7 +30,7 @@ router.put("/approvals/:id/decline", walkInStaff, declineWalkIn);
 router.get("/walk-in-payments", walkInStaff, getWalkInPayments);
 router.post("/walk-in-payments/:id/complete", walkInStaff, completeWalkInPayment);
 
-router.get("/sales/closing-preview", clerkOnly, getClosingPreview);
-router.post("/sales/close", clerkOnly, closeDailySales);
+router.get("/sales/closing-preview", walkInStaff, getClosingPreview);
+router.post("/sales/close", walkInStaff, closeDailySales);
 
 export default router;

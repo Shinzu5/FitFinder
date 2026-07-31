@@ -22,7 +22,7 @@ import { useMembershipStore } from "@/stores/membership-store";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard/user", icon: Home, unlockRequired: false },
-  { label: "My Membership", href: "/dashboard/user/membership", icon: CreditCard, unlockRequired: true },
+  { label: "My Membership", href: "/dashboard/user/membership", icon: CreditCard, unlockRequired: false },
   { label: "Exercises", href: "/dashboard/user/exercises", icon: Dumbbell, unlockRequired: true },
   { label: "Equipment", href: "/dashboard/user/equipment", icon: Wrench, unlockRequired: true },
   { label: "Shop", href: "/dashboard/user/shop", icon: ShoppingBag, unlockRequired: true },

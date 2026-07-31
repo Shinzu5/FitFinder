@@ -16,7 +16,23 @@ export function gymRoom(gymId: string): string {
 export function initSocket(server: HTTPServer): IOServer {
   io = new IOServer(server, {
     cors: {
-      origin: env.FRONTEND_URL,
+      origin: (origin, callback) => {
+        // Allow local/dev frontends (localhost, 127.0.0.1, LAN IPs) so realtime works.
+        if (!origin || origin === env.FRONTEND_URL) {
+          callback(null, true);
+          return;
+        }
+        if (
+          env.NODE_ENV !== "production" &&
+          /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
+            origin,
+          )
+        ) {
+          callback(null, true);
+          return;
+        }
+        callback(null, origin === env.FRONTEND_URL);
+      },
       credentials: true,
     },
   });
@@ -42,8 +58,15 @@ export function initSocket(server: HTTPServer): IOServer {
   });
 
   io.on("connection", (socket: Socket) => {
-    const userId = socket.data.userId as string;
+    const userId = String(socket.data.userId ?? "");
+    if (!userId) {
+      socket.disconnect(true);
+      return;
+    }
+    socket.data.userId = userId;
     socket.join(userRoom(userId));
+    // Home gym list — plan availability / starting price updates
+    socket.join("gym_catalog");
 
     socket.on("join_gym", (gymId: unknown) => {
       if (typeof gymId === "string" && gymId.trim()) {
@@ -72,6 +95,14 @@ export function getIO(): IOServer {
 export function emitToUser(userId: string, event: string, payload: unknown): void {
   try {
     getIO().to(userRoom(userId)).emit(event, payload);
+  } catch {
+    // Socket not initialized
+  }
+}
+
+export function emitToRoom(room: string, event: string, payload: unknown): void {
+  try {
+    getIO().to(room).emit(event, payload);
   } catch {
     // Socket not initialized
   }

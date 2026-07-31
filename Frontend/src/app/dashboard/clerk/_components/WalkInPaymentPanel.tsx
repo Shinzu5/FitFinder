@@ -2,11 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
-import {
-  type PaymentMethod,
-  WALK_IN_PAYMENT_OPTIONS,
-  useClerkStore,
-} from "@/stores/clerk-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { useClerkStore } from "@/stores/clerk-store";
 import {
   formatTransactionTime,
   getPaymentMethodLabel,
@@ -16,18 +13,22 @@ import {
   formatApprovalTime,
   useWalkInApprovalsStore,
 } from "@/stores/walk-in-approvals-store";
+import { useOwnerSalesReportsStore } from "@/stores/owner-sales-reports-store";
 
 type CustomerType = "guest" | "existing";
 
 export function WalkInPaymentPanel() {
+  const role = useAuthStore((state) => state.role);
   const members = useClerkStore((state) => state.members);
   const transactions = useClerkStore((state) => state.transactions);
   const recordPayment = useClerkStore((state) => state.recordPayment);
   const fetchMembers = useClerkStore((state) => state.fetchMembers);
   const fetchTransactions = useClerkStore((state) => state.fetchTransactions);
+  const fetchDashboard = useClerkStore((state) => state.fetchDashboard);
   const fetchClosingPreview = useClerkStore((state) => state.fetchClosingPreview);
   const closeDailySales = useClerkStore((state) => state.closeDailySales);
   const fetchAll = useClerkStore((state) => state.fetchAll);
+  const fetchOwnerReports = useOwnerSalesReportsStore((state) => state.fetchReports);
 
   const requests = useWalkInApprovalsStore((state) => state.requests);
   const awaitingPayment = useMemo(
@@ -39,9 +40,7 @@ export function WalkInPaymentPanel() {
 
   const [customerType, setCustomerType] = useState<CustomerType>("guest");
   const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [paymentOptionId, setPaymentOptionId] = useState("day-pass");
-  const [amount, setAmount] = useState("150");
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -61,15 +60,13 @@ export function WalkInPaymentPanel() {
   } | null>(null);
 
   useEffect(() => {
-    void Promise.all([fetchMembers(), fetchTransactions(), fetchWalkInPayments()]);
-    const id = window.setInterval(() => void fetchWalkInPayments(), 8000);
-    return () => window.clearInterval(id);
-  }, [fetchMembers, fetchTransactions, fetchWalkInPayments]);
-
-  const selectedOption = useMemo(
-    () => WALK_IN_PAYMENT_OPTIONS.find((opt) => opt.id === paymentOptionId) ?? WALK_IN_PAYMENT_OPTIONS[0],
-    [paymentOptionId],
-  );
+    void Promise.all([
+      fetchMembers(),
+      fetchTransactions(),
+      fetchDashboard(),
+      fetchWalkInPayments(),
+    ]);
+  }, [fetchMembers, fetchTransactions, fetchDashboard, fetchWalkInPayments]);
 
   async function openCloseModal() {
     setCloseError(null);
@@ -95,14 +92,16 @@ export function WalkInPaymentPanel() {
       return;
     }
     setShowCloseModal(false);
-    setCloseSuccess("Daily sales closed. Running counter reset to zero.");
-  }
-
-  function handlePaymentTypeChange(optionId: string) {
-    const option = WALK_IN_PAYMENT_OPTIONS.find((opt) => opt.id === optionId);
-    if (!option) return;
-    setPaymentOptionId(optionId);
-    setAmount(String(option.defaultAmount));
+    void fetchOwnerReports();
+    if (role === "OWNER") {
+      setCloseSuccess(
+        "Daily sales closed by Owner. Receipt saved to Reports. Running log reset.",
+      );
+    } else {
+      setCloseSuccess(
+        "Daily sales closed. Receipt saved to Owner Reports. Running counter reset to zero.",
+      );
+    }
   }
 
   function getMemberName() {
@@ -126,10 +125,10 @@ export function WalkInPaymentPanel() {
 
     setSubmitting(true);
     const ok = await recordPayment({
-      type: selectedOption.transactionType,
+      type: "day-pass",
       member: getMemberName(),
       amount: parsedAmount,
-      method,
+      method: "cash",
       notes,
     });
     setSubmitting(false);
@@ -139,6 +138,7 @@ export function WalkInPaymentPanel() {
       return;
     }
 
+    setAmount("");
     setNotes("");
     setSubmitted(true);
     window.setTimeout(() => setSubmitted(false), 2000);
@@ -299,29 +299,6 @@ export function WalkInPaymentPanel() {
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-400">Payment Type</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {WALK_IN_PAYMENT_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => handlePaymentTypeChange(option.id)}
-                  className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                    paymentOptionId === option.id
-                      ? "border-[#FACC15] bg-[#FACC15]/10 text-[#FACC15]"
-                      : "border-zinc-800 bg-[#131315] text-zinc-300 hover:border-zinc-700"
-                  }`}
-                >
-                  {option.label}
-                  <span className="mt-0.5 block text-xs font-normal text-zinc-500">
-                    ₱{option.defaultAmount.toLocaleString()}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="amount" className="text-sm font-medium text-zinc-400">
@@ -333,22 +310,15 @@ export function WalkInPaymentPanel() {
                 min={1}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none focus:border-[#FACC15]/40"
+                placeholder="Enter amount"
+                className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#FACC15]/40"
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="method" className="text-sm font-medium text-zinc-400">
-                Method
-              </label>
-              <select
-                id="method"
-                value={method}
-                onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-                className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none focus:border-[#FACC15]/40"
-              >
-                <option value="cash">Cash</option>
-                <option value="cashless">Cashless</option>
-              </select>
+              <p className="text-sm font-medium text-zinc-400">Type</p>
+              <div className="flex h-[46px] items-center rounded-xl border border-zinc-800 bg-[#131315] px-4 text-sm font-semibold text-[#FACC15]">
+                Cash
+              </div>
             </div>
           </div>
 

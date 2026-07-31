@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Banknote, Plus, Trash2, Upload, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,8 +55,13 @@ function ProductCard({
 
 export function ShopPanel() {
   const products = useOwnerShopStore((state) => state.products);
+  const fetchProducts = useOwnerShopStore((state) => state.fetchProducts);
   const addProduct = useOwnerShopStore((state) => state.addProduct);
   const removeProduct = useOwnerShopStore((state) => state.removeProduct);
+
+  useEffect(() => {
+    void fetchProducts();
+  }, [fetchProducts]);
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");

@@ -39,6 +39,11 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
     new URLSearchParams(window.location.search).get("payment_failed") === "true";
 
   async function handlePayViaGcash() {
+    if (!selectedPlan?.id) {
+      setError("No membership plans available.");
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -46,12 +51,12 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
       const { data } = await api.post("/payments/create-gcash", {
         type: "MEMBERSHIP",
         amount: total,
-        description: `${profile.name} — ${selectedPlan?.name} Membership`,
+        description: `${profile.name} — ${selectedPlan.name} Membership`,
         metadata: {
           gymId: profile.id,
           gymName: profile.name,
-          planId: selectedPlan?.id,
-          planName: selectedPlan?.name,
+          planId: selectedPlan.id,
+          planName: selectedPlan.name,
           coachId: selectedCoach?.id || null,
           coachName: selectedCoach?.name || null,
         },

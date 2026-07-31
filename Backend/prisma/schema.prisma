@@ -93,29 +93,48 @@ model User {
   walkInApprovals     WalkInApproval[]
   xenditPayments      XenditPayment[]
   dailySalesReports   DailySalesReport[] @relation("DailySalesClerk")
-  clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id])
+  clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id], onDelete: SetNull)
   clerkGymId          String?
   sentDirectMessages     DirectMessage[] @relation("SentDirectMessages")
   receivedDirectMessages DirectMessage[] @relation("ReceivedDirectMessages")
+  hiddenDirectConversations DirectConversationHide[] @relation("HiddenDirectConversations")
 
   @@map("users")
 }
 
 // Direct 1:1 messages between any two registered users (cross-role inbox).
 model DirectMessage {
-  id         String   @id @default(uuid())
-  senderId   String
-  receiverId String
-  senderRole UserRole
-  text       String
-  createdAt  DateTime @default(now())
+  id           String    @id @default(uuid())
+  senderId     String
+  receiverId   String
+  senderRole   UserRole
+  receiverRole UserRole  @default(USER)
+  text         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  readAt       DateTime?
 
   sender   User @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiver User @relation("ReceivedDirectMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([senderId, receiverId])
   @@index([receiverId, senderId])
+  @@index([receiverId, readAt])
   @@map("direct_messages")
+}
+
+/** Soft-hide a DM thread for one participant (messages stay in DB). */
+model DirectConversationHide {
+  id        String   @id @default(uuid())
+  userId    String
+  peerId    String
+  deletedAt DateTime @default(now())
+
+  user User @relation("HiddenDirectConversations", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId])
+  @@index([userId])
+  @@map("direct_conversation_hides")
 }
 
 model Gym {
@@ -162,8 +181,9 @@ model OwnerSubscription {
   planId      String
   planName    String
   price       Float
+  /** Duration in days for current plans (15/30/60). Legacy rows may store months (1–12). */
   months      Int
-  referenceNo String
+  referenceNo String   @unique
   method      String   @default("Xendit")
   paidAt      DateTime @default(now())
   validUntil  DateTime
@@ -181,12 +201,15 @@ model MembershipPlan {
   price             Float
   durationDays      Int
   activeSubscribers Int             @default(0)
+  /** false = soft-deleted; hidden from new purchases, existing memberships keep access */
+  isActive          Boolean         @default(true)
   createdAt         DateTime        @default(now())
 
   gym            Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
   gymMemberships GymMembership[]
   walkInApprovals WalkInApproval[]
 
+  @@index([gymId, isActive])
   @@map("membership_plans")
 }
 
@@ -194,47 +217,68 @@ model GymMembership {
   id            String           @id @default(uuid())
   userId        String
   gymId         String
-  planId        String
+  planId        String?
+  /** Snapshot of purchased plan — survives plan soft/hard delete */
+  planName      String           @default("")
+  planPrice     Float            @default(0)
+  durationDays  Int              @default(0)
   coachId       String?
   paymentMethod String
   paymentRef    String
   totalPaid     Float
   status        MembershipStatus @default(ACTIVE)
+  /** WALK_IN | ONLINE — how the membership was purchased */
+  memberType    String           @default("WALK_IN")
+  /** OWNER | CLERK | SELF — who registered the membership */
+  registeredBy  String           @default("SELF")
+  registeredById String?
+  /** Current period start (updated on renew) */
+  startsAt      DateTime         @default(now())
+  /** First registration date (immutable after create) */
   joinedAt      DateTime         @default(now())
   expiresAt     DateTime
 
-  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gym   Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  plan  MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  coach Coach?         @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym   Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan  MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  coach Coach?          @relation(fields: [coachId], references: [id], onDelete: SetNull)
 
+  @@index([userId, gymId])
+  @@index([userId, status])
+  @@index([gymId, status])
+  @@index([expiresAt, status])
   @@map("gym_memberships")
 }
 
 model Coach {
-  id           String  @id @default(uuid())
+  id           String   @id @default(uuid())
   gymId        String
   name         String
   specialty    String
   sessionPrice Float
-  description  String  @default("")
+  description  String   @default("")
   photoUrl     String?
   photoName    String?
-  schedule     Json    @default("{}")
+  schedule     Json     @default("{}")
+  /** false = hidden from Gymers; cannot be booked */
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   gym            Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
   gymMemberships GymMembership[]
 
+  @@index([gymId, isActive])
   @@map("coaches")
 }
 
 model Equipment {
-  id       String          @id @default(uuid())
-  gymId    String
-  name     String
-  quantity Int             @default(1)
-  status   EquipmentStatus @default(AVAILABLE)
+  id        String          @id @default(uuid())
+  gymId     String
+  name      String
+  quantity  Int             @default(1)
+  status    EquipmentStatus @default(AVAILABLE)
+  imageUrl  String          @default("")
+  imageName String?
 
   gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
 
@@ -329,6 +373,8 @@ model DailySalesReport {
   id                String   @id @default(uuid())
   gymId             String
   clerkId           String
+  /** OWNER | CLERK — who closed the day (Owner closings stay off Clerk Approvals) */
+  closedByRole      String   @default("CLERK")
   reportDate        DateTime @db.Date
   totalTransactions Int
   totalRevenue      Float
@@ -340,6 +386,7 @@ model DailySalesReport {
 
   @@index([gymId, reportDate])
   @@index([clerkId])
+  @@index([gymId, closedAt])
   @@map("daily_sales_reports")
 }
 
@@ -347,7 +394,10 @@ model WalkInApproval {
   id                String         @id @default(uuid())
   userId            String
   gymId             String
-  planId            String
+  planId            String?
+  /** Snapshot so approvals survive plan removal */
+  planName          String         @default("")
+  planPrice         Float          @default(0)
   memberName        String
   memberEmail       String
   coachId           String?
@@ -356,6 +406,10 @@ model WalkInApproval {
   paymentRef        String
   totalPaid         Float
   durationDays      Int
+  /** true = extend existing membership after Owner/Clerk approve */
+  isRenewal         Boolean        @default(false)
+  /** WALK_IN | XENDIT — how the gymer paid before approval */
+  paymentMethod     String         @default("WALK_IN")
   /** Walk-in OTC: recorded as paid when the gymer submits Proceed */
   paymentStatus     String         @default("PAID")
   status            ApprovalStatus @default(PENDING)
@@ -365,9 +419,9 @@ model WalkInApproval {
   /** Set when gymer clicks Done (onboarding complete — never show wait screen again) */
   consumedAt        DateTime?
 
-  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gym  Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  plan MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([userId, gymId, status])
   @@index([gymId, status])

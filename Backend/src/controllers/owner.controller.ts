@@ -3,11 +3,24 @@ import prisma, { withDbRetry } from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import { hashPassword } from "../utils/hash";
-import { emitCoachesUpdated } from "../services/realtime.service";
+import {
+  emitAdminUsersUpdated,
+  emitCoachesUpdated,
+  emitEquipmentUpdated,
+  emitMembersUpdated,
+  emitMembershipPlansUpdated,
+  emitShopUpdated,
+  emitWalkInApprovalsUpdated,
+  emitWalkInStatus,
+} from "../services/realtime.service";
+import { permanentlyDeleteUser } from "../services/accountRemoval.service";
 
 // Helper: get the owner's gym
 async function getOwnerGym(ownerId: string) {
-  return prisma.gym.findFirst({ where: { ownerId } });
+  return prisma.gym.findFirst({
+    where: { ownerId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 // GET /api/owner/my-gym
@@ -73,30 +86,8 @@ export async function getMembers(req: AuthRequest, res: Response): Promise<void>
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
-    const memberships = await prisma.gymMembership.findMany({
-      where: { gymId: gym.id },
-      include: {
-        user: { select: { id: true, fullName: true, email: true } },
-        plan: { select: { name: true, durationDays: true } },
-      },
-      orderBy: { joinedAt: "desc" },
-    });
-
-    const members = memberships.map((m) => {
-      const totalDays = m.plan.durationDays;
-      const remainingDays = Math.max(0, Math.ceil((m.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-      return {
-        id: m.id,
-        fullName: m.user.fullName,
-        email: m.user.email,
-        planName: m.plan.name,
-        totalDays,
-        remainingDays,
-        paymentStatus: m.totalPaid > 0 ? "paid" : "unpaid",
-        status: remainingDays <= 5 ? "expiring" : "active",
-      };
-    });
-
+    const { listGymMembers } = await import("../services/gymMembership.service");
+    const members = await listGymMembers(gym.id);
     sendSuccess(res, members);
   } catch (error) {
     console.error("Get members error:", error);
@@ -107,7 +98,20 @@ export async function getMembers(req: AuthRequest, res: Response): Promise<void>
 // DELETE /api/owner/members/:id
 export async function removeMember(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.gymMembership.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const membership = await prisma.gymMembership.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+      select: { id: true, userId: true, gymId: true },
+    });
+    if (!membership) { sendError(res, "Member not found", 404); return; }
+
+    await prisma.gymMembership.delete({ where: { id: membership.id } });
+
+    const { notifyMembershipChange } = await import("../services/gymMembership.service");
+    await notifyMembershipChange(membership.userId, membership.gymId);
+
     sendSuccess(res, null, "Member removed");
   } catch (error) {
     console.error("Remove member error:", error);
@@ -124,7 +128,7 @@ export async function getMembershipPlans(req: AuthRequest, res: Response): Promi
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
     const plans = await prisma.membershipPlan.findMany({
-      where: { gymId: gym.id },
+      where: { gymId: gym.id, isActive: true },
       include: { _count: { select: { gymMemberships: true } } },
     });
 
@@ -158,6 +162,7 @@ export async function createMembershipPlan(req: AuthRequest, res: Response): Pro
       },
     });
 
+    void emitMembershipPlansUpdated(gym.id);
     sendCreated(res, plan, "Plan created");
   } catch (error) {
     console.error("Create plan error:", error);
@@ -172,7 +177,7 @@ export async function updateMembershipPlan(req: AuthRequest, res: Response): Pro
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
     const existing = await prisma.membershipPlan.findFirst({
-      where: { id: req.params.id as string, gymId: gym.id },
+      where: { id: req.params.id as string, gymId: gym.id, isActive: true },
     });
     if (!existing) { sendError(res, "Plan not found", 404); return; }
 
@@ -185,6 +190,7 @@ export async function updateMembershipPlan(req: AuthRequest, res: Response): Pro
       },
     });
 
+    void emitMembershipPlansUpdated(gym.id);
     sendSuccess(res, plan, "Plan updated");
   } catch (error) {
     console.error("Update plan error:", error);
@@ -193,17 +199,102 @@ export async function updateMembershipPlan(req: AuthRequest, res: Response): Pro
 }
 
 // DELETE /api/owner/membership-plans/:id
+// Soft-delete: hide from new purchases; existing paid members keep access until expiresAt.
 export async function deleteMembershipPlan(req: AuthRequest, res: Response): Promise<void> {
   try {
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
     const existing = await prisma.membershipPlan.findFirst({
-      where: { id: req.params.id as string, gymId: gym.id },
+      where: { id: req.params.id as string, gymId: gym.id, isActive: true },
     });
     if (!existing) { sendError(res, "Plan not found", 404); return; }
 
-    await prisma.membershipPlan.delete({ where: { id: existing.id } });
+    const declinedPending = await prisma.$transaction(async (tx) => {
+      // Ensure every linked membership has a plan snapshot before hiding the plan
+      const members = await tx.gymMembership.findMany({
+        where: { planId: existing.id },
+        select: { id: true, planName: true, durationDays: true },
+      });
+      for (const m of members) {
+        if (!m.planName || !m.durationDays) {
+          await tx.gymMembership.update({
+            where: { id: m.id },
+            data: {
+              planName: existing.name,
+              planPrice: existing.price,
+              durationDays: existing.durationDays,
+            },
+          });
+        }
+      }
+
+      await tx.walkInApproval.updateMany({
+        where: { planId: existing.id, planName: "" },
+        data: {
+          planName: existing.name,
+          planPrice: existing.price,
+        },
+      });
+
+      const pending = await tx.walkInApproval.findMany({
+        where: { planId: existing.id, status: "PENDING" },
+        include: { gym: { select: { name: true } } },
+      });
+
+      // Pending walk-ins for this plan can no longer proceed
+      if (pending.length > 0) {
+        await tx.walkInApproval.updateMany({
+          where: { id: { in: pending.map((p) => p.id) } },
+          data: {
+            status: "DECLINED",
+            rejectionReason: "Membership plan was removed by the gym owner.",
+            reviewedAt: new Date(),
+            planName: existing.name,
+            planPrice: existing.price,
+          },
+        });
+      }
+
+      await tx.membershipPlan.update({
+        where: { id: existing.id },
+        data: { isActive: false },
+      });
+
+      return pending;
+    });
+
+    for (const p of declinedPending) {
+      emitWalkInStatus(p.userId, {
+        id: p.id,
+        userId: p.userId,
+        memberName: p.memberName,
+        memberEmail: p.memberEmail,
+        gymId: p.gymId,
+        gymName: p.gym.name,
+        planId: p.planId,
+        planName: existing.name,
+        planPrice: existing.price,
+        coachId: p.coachId,
+        coachName: p.coachName,
+        coachSessionPrice: p.coachSessionPrice,
+        paymentRef: p.paymentRef,
+        totalPaid: p.totalPaid,
+        durationDays: p.durationDays,
+        paymentStatus: String(p.paymentStatus || "PAID").toLowerCase(),
+        approvalStatus: "declined",
+        status: "declined",
+        rejectionReason: "Membership plan was removed by the gym owner.",
+        submittedAt: p.submittedAt.getTime(),
+        reviewedAt: Date.now(),
+        consumedAt: p.consumedAt?.getTime() ?? null,
+      });
+    }
+    if (declinedPending.length > 0) {
+      void emitWalkInApprovalsUpdated(gym.id);
+    }
+
+    void emitMembershipPlansUpdated(gym.id);
     sendSuccess(res, null, "Plan deleted");
   } catch (error) {
     console.error("Delete plan error:", error);
@@ -219,7 +310,10 @@ export async function getCoaches(req: AuthRequest, res: Response): Promise<void>
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
-    const coaches = await prisma.coach.findMany({ where: { gymId: gym.id } });
+    const coaches = await prisma.coach.findMany({
+      where: { gymId: gym.id },
+      orderBy: { createdAt: "asc" },
+    });
     sendSuccess(res, coaches);
   } catch (error) {
     console.error("Get coaches error:", error);
@@ -243,6 +337,7 @@ export async function createCoach(req: AuthRequest, res: Response): Promise<void
         photoUrl: req.body.photoUrl || null,
         photoName: req.body.photoName || null,
         schedule: req.body.schedule || {},
+        isActive: req.body.isActive === false ? false : true,
       },
     });
 
@@ -283,6 +378,8 @@ export async function updateCoach(req: AuthRequest, res: Response): Promise<void
         photoName:
           req.body.photoName !== undefined ? req.body.photoName : existing.photoName,
         schedule: req.body.schedule ?? existing.schedule,
+        isActive:
+          typeof req.body.isActive === "boolean" ? req.body.isActive : existing.isActive,
       },
     });
 
@@ -348,9 +445,12 @@ export async function createEquipment(req: AuthRequest, res: Response): Promise<
         name: req.body.name,
         quantity: req.body.quantity,
         status,
+        imageUrl: typeof req.body.imageUrl === "string" ? req.body.imageUrl : "",
+        imageName: req.body.imageName ?? null,
       },
     });
 
+    void emitEquipmentUpdated(gym.id);
     sendCreated(res, item, "Equipment added");
   } catch (error) {
     console.error("Create equipment error:", error);
@@ -377,12 +477,15 @@ export async function updateEquipment(req: AuthRequest, res: Response): Promise<
       const allowed = ["AVAILABLE", "IN_USE", "UNDER_MAINTENANCE"];
       if (allowed.includes(rawStatus)) data.status = rawStatus;
     }
+    if (typeof req.body.imageUrl === "string") data.imageUrl = req.body.imageUrl;
+    if (req.body.imageName !== undefined) data.imageName = req.body.imageName;
 
     const updated = await prisma.equipment.update({
       where: { id: existing.id },
       data,
     });
 
+    void emitEquipmentUpdated(gym.id);
     sendSuccess(res, updated, "Equipment updated");
   } catch (error) {
     console.error("Update equipment error:", error);
@@ -413,6 +516,7 @@ export async function toggleEquipment(req: AuthRequest, res: Response): Promise<
       data: { status: nextStatus },
     });
 
+    void emitEquipmentUpdated(gym.id);
     sendSuccess(res, updated, "Equipment status updated");
   } catch (error) {
     console.error("Toggle equipment error:", error);
@@ -432,6 +536,7 @@ export async function removeEquipment(req: AuthRequest, res: Response): Promise<
     if (!existing) { sendError(res, "Equipment not found", 404); return; }
 
     await prisma.equipment.delete({ where: { id: existing.id } });
+    void emitEquipmentUpdated(gym.id);
     sendSuccess(res, null, "Equipment removed");
   } catch (error) {
     console.error("Remove equipment error:", error);
@@ -551,7 +656,10 @@ export async function getShopProducts(req: AuthRequest, res: Response): Promise<
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
-    const products = await prisma.shopProduct.findMany({ where: { gymId: gym.id } });
+    const products = await prisma.shopProduct.findMany({
+      where: { gymId: gym.id },
+      orderBy: { createdAt: "desc" },
+    });
     sendSuccess(res, products);
   } catch (error) {
     console.error("Get shop products error:", error);
@@ -575,6 +683,7 @@ export async function createShopProduct(req: AuthRequest, res: Response): Promis
       },
     });
 
+    void emitShopUpdated(gym.id);
     sendCreated(res, product, "Product added");
   } catch (error) {
     console.error("Create product error:", error);
@@ -582,10 +691,49 @@ export async function createShopProduct(req: AuthRequest, res: Response): Promis
   }
 }
 
+// PUT /api/owner/shop/:id — update name/price/image for live Gymer sync
+export async function updateShopProduct(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.shopProduct.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Product not found", 404); return; }
+
+    const data: Record<string, unknown> = {};
+    if (typeof req.body.name === "string") data.name = req.body.name.trim();
+    if (typeof req.body.price === "number") data.price = req.body.price;
+    if (typeof req.body.imageUrl === "string") data.imageUrl = req.body.imageUrl;
+    if (req.body.imageName !== undefined) data.imageName = req.body.imageName;
+
+    const product = await prisma.shopProduct.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    void emitShopUpdated(gym.id);
+    sendSuccess(res, product, "Product updated");
+  } catch (error) {
+    console.error("Update product error:", error);
+    sendError(res, "Failed to update product", 500);
+  }
+}
+
 // DELETE /api/owner/shop/:id
 export async function removeShopProduct(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.shopProduct.delete({ where: { id: req.params.id as string } });
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) { sendError(res, "No gym found", 404); return; }
+
+    const existing = await prisma.shopProduct.findFirst({
+      where: { id: req.params.id as string, gymId: gym.id },
+    });
+    if (!existing) { sendError(res, "Product not found", 404); return; }
+
+    await prisma.shopProduct.delete({ where: { id: existing.id } });
+    void emitShopUpdated(gym.id);
     sendSuccess(res, null, "Product removed");
   } catch (error) {
     console.error("Remove product error:", error);
@@ -654,6 +802,10 @@ export async function addStaff(req: AuthRequest, res: Response): Promise<void> {
       },
     });
 
+    void emitAdminUsersUpdated();
+    // Reuse members_updated so Owner Overview Front Desk Staff refreshes live
+    void emitMembersUpdated(gym.id);
+
     sendCreated(
       res,
       { id: clerk.id, fullName: clerk.fullName, email: clerk.email },
@@ -665,14 +817,39 @@ export async function addStaff(req: AuthRequest, res: Response): Promise<void> {
   }
 }
 
-// DELETE /api/owner/staff/:id
+// DELETE /api/owner/staff/:id — permanently remove this gym's clerk + revoke session
 export async function removeStaff(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await prisma.user.update({
-      where: { id: req.params.id as string },
-      data: { clerkGymId: null },
+    const gym = await getOwnerGym(req.userId!);
+    if (!gym) {
+      sendError(res, "No gym found", 404);
+      return;
+    }
+
+    const clerkId = req.params.id as string;
+    const clerk = await prisma.user.findUnique({
+      where: { id: clerkId },
+      select: { id: true, role: true, clerkGymId: true },
     });
-    sendSuccess(res, null, "Staff removed");
+
+    if (!clerk || clerk.role !== "CLERK" || clerk.clerkGymId !== gym.id) {
+      sendError(res, "Clerk not found in your gym", 404);
+      return;
+    }
+
+    const result = await permanentlyDeleteUser(clerkId, {
+      message: "Your account has been removed by the Gym Owner.",
+      allowRoles: ["CLERK"],
+    });
+
+    if (!result.ok) {
+      sendError(res, result.message, result.status);
+      return;
+    }
+
+    void emitMembersUpdated(gym.id);
+
+    sendSuccess(res, null, "Clerk account permanently removed");
   } catch (error) {
     console.error("Remove staff error:", error);
     sendError(res, "Failed to remove staff", 500);
@@ -768,16 +945,23 @@ export async function getSalesReports(req: AuthRequest, res: Response): Promise<
 
     sendSuccess(
       res,
-      reports.map((report) => ({
-        id: report.id,
-        date: report.reportDate,
-        clerkId: report.clerkId,
-        clerkName: report.clerk.fullName,
-        totalTransactions: report.totalTransactions,
-        totalRevenue: report.totalRevenue,
-        closedAt: report.closedAt,
-        status: "Closed",
-      })),
+      reports.map((report) => {
+        const closedByRole =
+          String(report.closedByRole || "CLERK").toUpperCase() === "OWNER" ? "OWNER" : "CLERK";
+        return {
+          id: report.id,
+          date: report.reportDate,
+          clerkId: report.clerkId,
+          clerkName: report.clerk.fullName,
+          closedByRole,
+          closedByLabel: closedByRole === "OWNER" ? "Closed by Owner" : "Closed by Clerk",
+          referenceNo: `DSR-${report.id.slice(0, 8).toUpperCase()}`,
+          totalTransactions: report.totalTransactions,
+          totalRevenue: report.totalRevenue,
+          closedAt: report.closedAt,
+          status: "Closed",
+        };
+      }),
     );
   } catch (error) {
     console.error("Get sales reports error:", error);
@@ -807,6 +991,9 @@ export async function getSalesReportReceipt(req: AuthRequest, res: Response): Pr
       return;
     }
 
+    const closedByRole =
+      String(report.closedByRole || "CLERK").toUpperCase() === "OWNER" ? "OWNER" : "CLERK";
+
     sendSuccess(res, {
       id: report.id,
       gymId: gym.id,
@@ -815,6 +1002,9 @@ export async function getSalesReportReceipt(req: AuthRequest, res: Response): Pr
       date: report.reportDate,
       clerkId: report.clerkId,
       clerkName: report.clerk.fullName,
+      closedByRole,
+      closedByLabel: closedByRole === "OWNER" ? "Closed by Owner" : "Closed by Clerk",
+      referenceNo: `DSR-${report.id.slice(0, 8).toUpperCase()}`,
       totalTransactions: report.totalTransactions,
       totalRevenue: report.totalRevenue,
       closedAt: report.closedAt,

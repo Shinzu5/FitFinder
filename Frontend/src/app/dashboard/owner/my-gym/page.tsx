@@ -22,8 +22,15 @@ export default function OwnerMyGymPage() {
       const hasGym = await fetchOwnedGymStatus({ full: true });
       if (cancelled) return;
       if (!hasGym) {
+        const createGym = useCreateGymStore.getState();
+        const stillPaid = createGym.paymentComplete;
+        if (!stillPaid) {
+          createGym.resetFlow();
+        }
         demoteToUser();
-        router.replace(CREATE_GYM_PREFIX);
+        router.replace(
+          stillPaid ? `${CREATE_GYM_PREFIX}/register` : CREATE_GYM_PREFIX,
+        );
         return;
       }
       setChecking(false);

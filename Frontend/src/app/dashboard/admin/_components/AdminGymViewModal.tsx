@@ -9,6 +9,37 @@ interface AdminGymViewModalProps {
   onClose: () => void;
 }
 
+function formatDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function StatusBadge({ status }: { status: AdminActiveGym["status"] }) {
+  if (status === "active") {
+    return (
+      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+        Active
+      </span>
+    );
+  }
+  if (status === "expired") {
+    return (
+      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-400">
+        Expired
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
+      Pending
+    </span>
+  );
+}
+
 export function AdminGymViewModal({ gym, onClose }: AdminGymViewModalProps) {
   if (!gym) return null;
 
@@ -75,24 +106,63 @@ export function AdminGymViewModal({ gym, onClose }: AdminGymViewModalProps) {
               </div>
               <div className="rounded-xl border border-zinc-800/80 bg-[#131315] px-4 py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                  Active Subs
+                  Remaining Days
                 </p>
-                <p className="mt-1 text-2xl font-bold text-white">{gym.activeSubscriptions}</p>
+                <p
+                  className={`mt-1 text-2xl font-bold ${
+                    gym.remainingDays === null
+                      ? "text-zinc-500"
+                      : gym.planExpired || gym.remainingDays === 0
+                        ? "text-red-400"
+                        : "text-[#FACC15]"
+                  }`}
+                >
+                  {gym.remainingDays === null
+                    ? "—"
+                    : gym.planExpired || gym.remainingDays === 0
+                      ? "0"
+                      : gym.remainingDays}
+                </p>
               </div>
             </div>
           </section>
 
           <section>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-              Gym Status
+              Owner Platform Plan
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                Active
-              </span>
-              <span className="rounded-full border border-[#FACC15]/35 bg-[#FACC15]/15 px-3 py-1 text-xs font-semibold text-[#FACC15]">
-                {gym.planLabel}
-              </span>
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <StatusBadge status={gym.status} />
+                <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-300">
+                  {gym.publishedStatus === "published" ? "Published" : gym.publishedStatus}
+                </span>
+                <span className="rounded-full border border-[#FACC15]/35 bg-[#FACC15]/15 px-3 py-1 text-xs font-semibold text-[#FACC15]">
+                  {gym.planLabel}
+                  {typeof gym.planPrice === "number"
+                    ? ` · ₱${gym.planPrice.toLocaleString("en-PH")}`
+                    : ""}
+                  {gym.planMonths ? ` · ${gym.planMonths} days` : ""}
+                </span>
+              </div>
+              <dl className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Start Date
+                  </dt>
+                  <dd className="mt-0.5 text-zinc-200">
+                    {formatDate(gym.subscriptionStartDate)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Expiration
+                  </dt>
+                  <dd className="mt-0.5 text-zinc-200">
+                    {formatDate(gym.subscriptionExpirationDate)}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </section>
 

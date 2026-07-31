@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Banknote, Pencil, Trash2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/stores/auth-store";
+import { getSocket } from "@/lib/socket";
 import {
   EMPTY_SCHEDULE,
   WEEK_DAYS,
   formatSessionPrice,
   getCoachInitials,
+  getCoachStatusStyles,
   type CoachSchedule,
   type GymCoach,
   type WeekDayKey,
@@ -39,13 +42,19 @@ function CoachCard({
   coach,
   onEdit,
   onDelete,
+  onToggleActive,
 }: {
   coach: GymCoach;
   onEdit: () => void;
   onDelete: () => void;
+  onToggleActive: () => void;
 }) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-[#141414] p-5">
+    <article
+      className={`rounded-2xl border bg-[#141414] p-5 ${
+        coach.isActive ? "border-white/10" : "border-white/5 opacity-80"
+      }`}
+    >
       <div className="flex gap-4">
         <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/10 bg-[#0A0A0A]">
           {coach.photoUrl ? (
@@ -61,7 +70,17 @@ function CoachCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-white">{coach.name}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold text-white">{coach.name}</h3>
+                <button
+                  type="button"
+                  onClick={onToggleActive}
+                  className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition ${getCoachStatusStyles(coach.isActive)}`}
+                  title="Click to toggle Active / Inactive"
+                >
+                  {coach.isActive ? "Active" : "Inactive"}
+                </button>
+              </div>
               <p className="text-sm font-medium text-[#FFD700]">{coach.specialty}</p>
             </div>
             <div className="flex gap-2">
@@ -112,13 +131,47 @@ function CoachCard({
 
 export function CoachesPanel() {
   const coaches = useOwnerCoachesStore((state) => state.coaches);
+  const loading = useOwnerCoachesStore((state) => state.loading);
+  const fetchCoaches = useOwnerCoachesStore((state) => state.fetchCoaches);
   const addCoach = useOwnerCoachesStore((state) => state.addCoach);
   const updateCoach = useOwnerCoachesStore((state) => state.updateCoach);
+  const setCoachActive = useOwnerCoachesStore((state) => state.setCoachActive);
   const removeCoach = useOwnerCoachesStore((state) => state.removeCoach);
+  const applyRealtimeCoaches = useOwnerCoachesStore((state) => state.applyRealtimeCoaches);
+
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const [form, setForm] = useState<CoachFormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchCoaches();
+  }, [fetchCoaches]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !accessToken) return;
+    const socket = getSocket(accessToken);
+
+    function onCoachesUpdated(payload: {
+      gymId?: string;
+      coaches?: unknown[];
+      scope?: string;
+    }) {
+      if (payload?.scope === "owner" && Array.isArray(payload.coaches)) {
+        applyRealtimeCoaches(payload.coaches);
+        return;
+      }
+      // Fallback: refetch full Owner list from Neon
+      void fetchCoaches();
+    }
+
+    socket.on("coaches_updated", onCoachesUpdated);
+    return () => {
+      socket.off("coaches_updated", onCoachesUpdated);
+    };
+  }, [accessToken, isAuthenticated, applyRealtimeCoaches, fetchCoaches]);
 
   function resetForm() {
     setForm(EMPTY_FORM);
@@ -181,14 +234,19 @@ export function CoachesPanel() {
       return;
     }
 
+    const existing = editingId
+      ? coaches.find((c) => c.id === editingId)
+      : null;
+
     const payload = {
-      name: form.name,
-      specialty: form.specialty,
+      name: form.name.trim(),
+      specialty: form.specialty.trim(),
       sessionPrice: price,
       schedule: form.schedule,
-      description: form.description,
+      description: form.description.trim(),
       photoUrl: form.photoUrl,
       photoName: form.photoName,
+      isActive: existing?.isActive ?? true,
     };
 
     if (editingId) {
@@ -208,7 +266,7 @@ export function CoachesPanel() {
         <p className="mt-1 text-sm text-zinc-400">
           {editingId
             ? "Update coach details — changes appear instantly for members."
-            : "Add coaches with their specialty, price, and available time."}
+            : "Add coaches with their specialty, price, and available time. Inactive coaches are hidden from Gymers."}
         </p>
 
         <form onSubmit={handleSave} className="mt-6 space-y-5">
@@ -324,7 +382,11 @@ export function CoachesPanel() {
       </section>
 
       <div className="space-y-4">
-        {coaches.length === 0 ? (
+        {loading && coaches.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
+            Loading coaches…
+          </p>
+        ) : coaches.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
             No coaches yet. Save your first coach using the form above.
           </p>
@@ -334,7 +396,8 @@ export function CoachesPanel() {
               key={coach.id}
               coach={coach}
               onEdit={() => startEdit(coach)}
-              onDelete={() => removeCoach(coach.id)}
+              onDelete={() => void removeCoach(coach.id)}
+              onToggleActive={() => void setCoachActive(coach.id, !coach.isActive)}
             />
           ))
         )}

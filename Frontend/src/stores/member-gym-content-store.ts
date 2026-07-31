@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
 import type { GymExercise, ExerciseMediaType } from "@/stores/owner-exercises-store";
 import type { EquipmentStatus, GymEquipment } from "@/stores/owner-equipment-store";
+import type { ShopProduct } from "@/stores/owner-shop-store";
 
 function mapExercise(raw: any): GymExercise {
   return {
@@ -35,26 +36,56 @@ function normalizeStatus(status: string | undefined): EquipmentStatus {
   return "available";
 }
 
+function mapEquipment(item: any): GymEquipment {
+  return {
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity ?? 1,
+    status: normalizeStatus(item.status),
+    imageUrl: resolveMediaUrl(item.imageUrl || ""),
+    imageName: item.imageName || null,
+  };
+}
+
+function mapShopProduct(raw: any): ShopProduct {
+  return {
+    id: raw.id,
+    name: raw.name,
+    price: Number(raw.price) || 0,
+    imageUrl: resolveMediaUrl(raw.imageUrl || ""),
+    imageName: raw.imageName || null,
+  };
+}
+
 interface MemberGymContentState {
   exercises: GymExercise[];
   equipment: GymEquipment[];
+  products: ShopProduct[];
   loadingExercises: boolean;
   loadingEquipment: boolean;
+  loadingShop: boolean;
   exercisesError: string | null;
   equipmentError: string | null;
+  shopError: string | null;
   fetchExercises: () => Promise<void>;
   fetchEquipment: () => Promise<void>;
+  fetchShop: () => Promise<void>;
+  setEquipmentFromRealtime: (items: unknown[]) => void;
+  setShopFromRealtime: (items: unknown[]) => void;
   clear: () => void;
 }
 
-/** Member-scoped gym content — never shares owner localStorage. */
+/** Member-scoped gym content — Neon only, never Owner localStorage. */
 export const useMemberGymContentStore = create<MemberGymContentState>((set) => ({
   exercises: [],
   equipment: [],
+  products: [],
   loadingExercises: false,
   loadingEquipment: false,
+  loadingShop: false,
   exercisesError: null,
   equipmentError: null,
+  shopError: null,
 
   fetchExercises: async () => {
     set({ loadingExercises: true, exercisesError: null });
@@ -85,12 +116,7 @@ export const useMemberGymContentStore = create<MemberGymContentState>((set) => (
       const { data } = await api.get("/user/equipment");
       if (data.success) {
         set({
-          equipment: (data.data || []).map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            quantity: item.quantity ?? 1,
-            status: normalizeStatus(item.status),
-          })),
+          equipment: (data.data || []).map(mapEquipment),
           loadingEquipment: false,
         });
         return;
@@ -110,11 +136,49 @@ export const useMemberGymContentStore = create<MemberGymContentState>((set) => (
     }
   },
 
+  fetchShop: async () => {
+    set({ loadingShop: true, shopError: null });
+    try {
+      const { data } = await api.get("/user/shop");
+      if (data.success) {
+        set({
+          products: (data.data || []).map(mapShopProduct),
+          loadingShop: false,
+        });
+        return;
+      }
+      set({
+        products: [],
+        loadingShop: false,
+        shopError: data.message || "Failed to load shop products.",
+      });
+    } catch (error: any) {
+      set({
+        products: [],
+        loadingShop: false,
+        shopError:
+          error.response?.data?.message || "Active membership required to view the shop.",
+      });
+    }
+  },
+
+  setEquipmentFromRealtime: (items) => {
+    if (!Array.isArray(items)) return;
+    set({ equipment: items.map(mapEquipment), equipmentError: null, loadingEquipment: false });
+  },
+
+  setShopFromRealtime: (items) => {
+    if (!Array.isArray(items)) return;
+    set({ products: items.map(mapShopProduct), shopError: null, loadingShop: false });
+  },
+
   clear: () =>
     set({
       exercises: [],
       equipment: [],
+      products: [],
       exercisesError: null,
       equipmentError: null,
+      shopError: null,
     }),
 }));

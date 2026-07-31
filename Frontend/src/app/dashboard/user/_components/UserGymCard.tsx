@@ -59,10 +59,16 @@ export function UserGymCard({ gym, isJoined }: UserGymCardProps) {
           <div className="flex items-start gap-2">
             <div className="mt-1 h-9 w-1 shrink-0 rounded-full bg-[#FACC15]" />
             <div>
-              <p className="text-xl font-extrabold text-[#FACC15]">
-                ₱{gym.pricePerMonth.toLocaleString()}
-                <span className="text-sm font-medium text-zinc-500"> /mo</span>
-              </p>
+              {gym.hasActivePlans !== false && gym.pricePerMonth != null ? (
+                <p className="text-xl font-extrabold text-[#FACC15]">
+                  ₱{gym.pricePerMonth.toLocaleString()}
+                  <span className="text-sm font-medium text-zinc-500"> /mo</span>
+                </p>
+              ) : (
+                <p className="text-sm font-medium text-zinc-500">
+                  No membership plans available.
+                </p>
+              )}
             </div>
           </div>
 
@@ -88,7 +94,7 @@ export function UserGymCard({ gym, isJoined }: UserGymCardProps) {
                 href={`/dashboard/user/gym/${gym.id}`}
                 className="rounded-xl border border-[#FACC15] px-4 py-2 text-xs font-bold text-[#FACC15] transition hover:bg-[#FACC15] hover:text-black"
               >
-                Join Gym
+                {gym.hasActivePlans === false ? "View Gym" : "Join Gym"}
               </Link>
             )}
           </div>

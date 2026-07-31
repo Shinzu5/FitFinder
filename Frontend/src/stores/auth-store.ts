@@ -45,6 +45,8 @@ interface AuthState {
   clearSession: () => void;
   promoteToOwner: () => void;
   demoteToUser: () => void;
+  /** Overwrite local user/role from Neon via GET /auth/me (source of truth). */
+  syncSessionFromServer: () => Promise<UserRole | null>;
   setHasHydrated: (value: boolean) => void;
   updateProfileAvatar: (avatarUrl: string) => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -275,7 +277,8 @@ export const useAuthStore = create<AuthState>()(
 
       promoteToOwner: () => {
         const user = get().user;
-        if (!user) return;
+        // Never overwrite Clerk/Admin from the client — DB is source of truth
+        if (!user || user.role === "CLERK" || user.role === "ADMIN") return;
         set({
           user: { ...user, role: "OWNER" },
           role: "OWNER",
@@ -284,11 +287,47 @@ export const useAuthStore = create<AuthState>()(
 
       demoteToUser: () => {
         const user = get().user;
-        if (!user) return;
+        // Clerks/Admins must never be rewritten to Gymer on the client
+        if (!user || user.role === "CLERK" || user.role === "ADMIN") return;
         set({
           user: { ...user, role: "USER" },
           role: "USER",
         });
+      },
+
+      syncSessionFromServer: async () => {
+        const token = get().accessToken;
+        if (!token || !get().isAuthenticated) return null;
+
+        try {
+          const { data } = await api.get("/auth/me");
+          const serverUser = data?.data?.user;
+          if (!data?.success || !serverUser?.role) return get().role;
+
+          const nextUser: AuthUser = {
+            id: serverUser.id,
+            fullName: serverUser.fullName,
+            email: serverUser.email,
+            role: serverUser.role as UserRole,
+            avatarUrl: serverUser.avatarUrl || undefined,
+          };
+
+          set({
+            user: nextUser,
+            role: nextUser.role,
+            isAuthenticated: true,
+          });
+          return nextUser.role;
+        } catch (error: unknown) {
+          const code = (error as { response?: { data?: { code?: string } } })?.response
+            ?.data?.code;
+          if (code === "ACCOUNT_DELETED") {
+            get().clearSession();
+            return null;
+          }
+          // Transient errors: keep existing session, do not rewrite role
+          return get().role;
+        }
       },
 
       updateProfileAvatar: async (avatarUrl) => {
@@ -340,6 +379,10 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem("fitfinder-owner-coaches");
         localStorage.removeItem("fitfinder-owner-equipment");
         localStorage.removeItem("fitfinder-owner-plans");
+        localStorage.removeItem("fitfinder-owner-staff");
+        localStorage.removeItem("fitfinder-owner-shop");
+        localStorage.removeItem("fitfinder-owner-members");
+        localStorage.removeItem("fitfinder-join-gym-flow");
         localStorage.removeItem("fitfinder-admin-gym-approvals-v2");
         localStorage.removeItem("fitfinder-auth-v2");
         set({

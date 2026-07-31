@@ -11,6 +11,7 @@ import {
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, verifyAccessToken } from "../utils/jwt";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service";
+import { emitAdminUsersUpdated } from "../services/realtime.service";
 import { AuthRequest } from "../middleware/auth";
 import { env } from "../config/env";
 
@@ -85,6 +86,9 @@ export async function register(req: Request, res: Response): Promise<void> {
       console.error("Failed to send verification email:", emailError);
     }
 
+    // Admin Users page updates live (no refresh)
+    void emitAdminUsersUpdated();
+
     sendCreated(res, {
       userId: user.id,
       email: user.email,
@@ -137,6 +141,9 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
         verificationExpires: null,
       },
     });
+
+    // Status flips to Active on Admin Users — push live update
+    void emitAdminUsersUpdated();
 
     sendSuccess(res, null, "Email verified successfully");
   } catch (error) {
@@ -213,6 +220,12 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Soft-removed clerks (no gym) cannot sign in until an Owner recreates them
+    if (user.role === "CLERK" && !user.clerkGymId) {
+      sendError(res, "Your account has been removed by the Gym Owner.", 403);
+      return;
+    }
+
     const tokenPayload = { userId: user.id, role: user.role };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
@@ -263,7 +276,25 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
       where: { id: payload.userId },
     });
 
-    if (!user || user.refreshToken !== token) {
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "Your account has been removed. Please sign in again.",
+        code: "ACCOUNT_DELETED",
+      });
+      return;
+    }
+
+    if (user.role === "CLERK" && !user.clerkGymId) {
+      res.status(401).json({
+        success: false,
+        message: "Your account has been removed by the Gym Owner.",
+        code: "ACCOUNT_DELETED",
+      });
+      return;
+    }
+
+    if (user.refreshToken !== token) {
       sendError(res, "Invalid refresh token", 401);
       return;
     }
@@ -285,7 +316,20 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    sendSuccess(res, { accessToken: newAccessToken }, "Token refreshed");
+    sendSuccess(
+      res,
+      {
+        accessToken: newAccessToken,
+        user: {
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          avatarUrl: user.avatarUrl,
+        },
+      },
+      "Token refreshed",
+    );
   } catch (error) {
     sendError(res, "Invalid refresh token", 401);
   }

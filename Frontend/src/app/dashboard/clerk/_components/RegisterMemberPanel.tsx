@@ -24,8 +24,13 @@ export function RegisterMemberPanel() {
     void fetchPlans();
   }, [fetchPlans]);
 
+  // Keep selection valid when Owner creates/updates/deletes plans in realtime
   useEffect(() => {
-    if (!planId && plans.length > 0) {
+    if (plans.length === 0) {
+      setPlanId("");
+      return;
+    }
+    if (!planId || !plans.some((plan) => plan.id === planId)) {
       setPlanId(plans[0].id);
     }
   }, [plans, planId]);
@@ -83,9 +88,6 @@ export function RegisterMemberPanel() {
           <div className="flex gap-2">
             <span className="rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-semibold text-white">
               Active
-            </span>
-            <span className="rounded-full px-3 py-1 text-xs font-semibold text-zinc-500">
-              Expiring Soon
             </span>
           </div>
         </div>
@@ -175,7 +177,10 @@ export function RegisterMemberPanel() {
                   >
                     {plan.label}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-500">₱{plan.price.toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    ₱{plan.price.toLocaleString()}
+                    {plan.durationDays ? ` · ${plan.durationDays} days` : ""}
+                  </p>
                 </button>
               ))}
             </div>

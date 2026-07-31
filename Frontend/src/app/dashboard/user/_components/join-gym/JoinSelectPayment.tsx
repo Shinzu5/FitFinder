@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -21,6 +21,8 @@ interface JoinSelectPaymentProps {
 
 export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isRenewal = searchParams.get("renew") === "1";
   const {
     gymId,
     selectedPlanId,
@@ -33,6 +35,7 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
   } = useJoinGymStore();
 
   const [coachOpen, setCoachOpen] = useState(false);
+  const [coachUnavailableNotice, setCoachUnavailableNotice] = useState<string | null>(null);
   const cashlessEnabled = Boolean(profile.cashlessEnabled);
 
   const defaultPlanId = profile.plans[0]?.id ?? "";
@@ -49,13 +52,27 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
     }
   }, [cashlessEnabled, paymentMethod, setPaymentMethod]);
 
-  // Clear selection if coach was deleted via realtime update
+  // Clear selection if coach was deleted / inactivated via realtime update
   useEffect(() => {
     if (!selectedCoachId) return;
     if (!profile.coaches.some((c) => c.id === selectedCoachId)) {
       setCoachId(null);
+      setCoachUnavailableNotice(
+        "Your selected coach is no longer available. Please choose another coach or continue without one.",
+      );
     }
   }, [profile.coaches, selectedCoachId, setCoachId]);
+
+  // Keep plan selection on an active Neon plan when Owner deletes/updates plans live
+  useEffect(() => {
+    if (profile.plans.length === 0) {
+      if (selectedPlanId) setPlanId("");
+      return;
+    }
+    if (!selectedPlanId || !profile.plans.some((p) => p.id === selectedPlanId)) {
+      setPlanId(profile.plans[0].id);
+    }
+  }, [profile.plans, selectedPlanId, setPlanId]);
 
   const selectedPlan = useMemo(
     () => profile.plans.find((plan) => plan.id === selectedPlanId) ?? profile.plans[0],
@@ -71,18 +88,19 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
 
   function handleConfirm() {
     if (!selectedPlan) return;
+    const renewQuery = isRenewal ? "?renew=1" : "";
     if (paymentMethod === "cashless" && cashlessEnabled) {
-      router.push(`/dashboard/user/gym/${profile.id}/join/gcash`);
+      router.push(`/dashboard/user/gym/${profile.id}/join/gcash${renewQuery}`);
       return;
     }
-    router.push(`/dashboard/user/gym/${profile.id}/join/walk-in`);
+    router.push(`/dashboard/user/gym/${profile.id}/join/walk-in${renewQuery}`);
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
       <JoinGymHeader
-        title="Join Gym — Select Payment"
-        backHref={`/dashboard/user/gym/${profile.id}`}
+        title={isRenewal ? "Renew Membership — Select Payment" : "Join Gym — Select Payment"}
+        backHref={isRenewal ? "/dashboard/user/membership" : `/dashboard/user/gym/${profile.id}`}
       />
 
       <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
@@ -163,39 +181,51 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
 
         <section>
           <p className="mb-3 text-xs text-zinc-500">Select Plan</p>
-          <div className="space-y-3">
-            {profile.plans.map((plan) => {
-              const active = selectedPlan?.id === plan.id;
-              return (
-                <button
-                  key={plan.id}
-                  type="button"
-                  onClick={() => setPlanId(plan.id)}
-                  className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 text-left transition ${
-                    active
-                      ? "border-[#FFD700] bg-[#141414]"
-                      : "border-white/10 bg-[#141414] hover:border-white/20"
-                  }`}
-                >
-                  <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                      active ? "border-[#FFD700] bg-[#FFD700]" : "border-zinc-600"
+          {profile.plans.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-[#141414] px-4 py-6">
+              <p className="text-sm text-zinc-400">No membership plans available.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {profile.plans.map((plan) => {
+                const active = selectedPlan?.id === plan.id;
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => setPlanId(plan.id)}
+                    className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 text-left transition ${
+                      active
+                        ? "border-[#FFD700] bg-[#141414]"
+                        : "border-white/10 bg-[#141414] hover:border-white/20"
                     }`}
                   >
-                    {active ? <span className="h-2 w-2 rounded-full bg-black" /> : null}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-white">{plan.name}</p>
-                    <p className="text-xs text-zinc-500">{getPlanSubtitle(plan.name)}</p>
-                  </div>
-                  <p className="shrink-0 text-lg font-bold text-[#FFD700]">
-                    ₱{plan.price.toLocaleString()}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                        active ? "border-[#FFD700] bg-[#FFD700]" : "border-zinc-600"
+                      }`}
+                    >
+                      {active ? <span className="h-2 w-2 rounded-full bg-black" /> : null}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-white">{plan.name}</p>
+                      <p className="text-xs text-zinc-500">{getPlanSubtitle(plan.name)}</p>
+                    </div>
+                    <p className="shrink-0 text-lg font-bold text-[#FFD700]">
+                      ₱{plan.price.toLocaleString()}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
+
+        {coachUnavailableNotice ? (
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            {coachUnavailableNotice}
+          </p>
+        ) : null}
 
         {profile.coaches.length > 0 ? (
           <section>
@@ -230,6 +260,7 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
                     type="button"
                     onClick={() => {
                       setCoachId(null);
+                      setCoachUnavailableNotice(null);
                       setCoachOpen(false);
                     }}
                     className={`w-full rounded-lg px-3 py-2.5 text-left text-sm ${
@@ -244,6 +275,7 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
                       type="button"
                       onClick={() => {
                         setCoachId(coach.id);
+                        setCoachUnavailableNotice(null);
                         setCoachOpen(false);
                       }}
                       className={`w-full rounded-lg px-3 py-2.5 text-left text-sm ${
@@ -330,7 +362,8 @@ export function JoinSelectPayment({ profile }: JoinSelectPaymentProps) {
         <button
           type="button"
           onClick={handleConfirm}
-          className="w-full rounded-xl border border-white/10 bg-[#1A1A1A] py-4 text-sm font-bold text-[#FFD700] transition hover:bg-[#222222]"
+          disabled={!selectedPlan || profile.plans.length === 0}
+          className="w-full rounded-xl border border-white/10 bg-[#1A1A1A] py-4 text-sm font-bold text-[#FFD700] transition hover:bg-[#222222] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Confirm Payment
         </button>

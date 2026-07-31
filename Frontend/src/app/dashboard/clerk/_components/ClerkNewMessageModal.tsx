@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Sparkles, UserCircle2, X } from "lucide-react";
+import { Search, UserCircle2, X } from "lucide-react";
 import {
   getContactInitials,
   useClerkMessagesStore,
@@ -13,14 +13,6 @@ interface ClerkNewMessageModalProps {
   onClose: () => void;
   onSelectContact: (contact: MessageContact) => void;
 }
-
-const AI_CONTACT: MessageContact = {
-  id: "contact-ai",
-  name: "Fitness AI",
-  subtitle: "Your AI assistant",
-  type: "ai",
-  geminiTag: true,
-};
 
 export function ClerkNewMessageModal({
   open,
@@ -53,7 +45,7 @@ export function ClerkNewMessageModal({
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      searchUsers(query);
+      void searchUsers(query);
     }, 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -61,8 +53,6 @@ export function ClerkNewMessageModal({
   }, [query, searchUsers]);
 
   if (!open) return null;
-
-  const showAiOption = "fitness ai".includes(query.trim().toLowerCase()) || query.trim() === "";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -97,31 +87,6 @@ export function ClerkNewMessageModal({
         </div>
 
         <div className="max-h-80 space-y-2 overflow-y-auto">
-          {showAiOption ? (
-            <button
-              type="button"
-              onClick={() => {
-                onSelectContact(AI_CONTACT);
-                onClose();
-              }}
-              className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-[#0A0A0A] px-4 py-3 text-left transition hover:border-[#FACC15]/30 hover:bg-white/5"
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FACC15]/15 text-[#FACC15]">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-white">{AI_CONTACT.name}</p>
-                  <span className="rounded bg-[#FACC15]/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FACC15]">
-                    Gemini
-                  </span>
-                </div>
-                <p className="truncate text-sm text-zinc-500">{AI_CONTACT.subtitle}</p>
-              </div>
-              <UserCircle2 className="h-4 w-4 shrink-0 text-zinc-600" />
-            </button>
-          ) : null}
-
           {query.trim() === "" ? (
             <p className="px-1 py-3 text-center text-sm text-zinc-500">
               Type a name or email to find a registered user to message.

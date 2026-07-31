@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import prisma from "../config/database";
 import { verifyAccessToken } from "../utils/jwt";
 
 export interface AuthRequest extends Request {
@@ -6,11 +7,11 @@ export interface AuthRequest extends Request {
   userRole?: string;
 }
 
-export function authenticate(
+export async function authenticate(
   req: AuthRequest,
   res: Response,
-  next: NextFunction
-): void {
+  next: NextFunction,
+): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
 
@@ -22,9 +23,33 @@ export function authenticate(
     const token = authHeader.split(" ")[1];
     const payload = verifyAccessToken(token);
 
-    req.userId = payload.userId;
-    req.userRole = payload.role;
+    // Reject tokens for deleted / unassigned clerk accounts (JWT alone is not enough)
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true, clerkGymId: true },
+    });
 
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "Your account has been removed. Please sign in again.",
+        code: "ACCOUNT_DELETED",
+      });
+      return;
+    }
+
+    // Legacy soft-remove: CLERK with no gym assignment must not access protected routes
+    if (user.role === "CLERK" && !user.clerkGymId) {
+      res.status(401).json({
+        success: false,
+        message: "Your account has been removed by the Gym Owner.",
+        code: "ACCOUNT_DELETED",
+      });
+      return;
+    }
+
+    req.userId = user.id;
+    req.userRole = user.role;
     next();
   } catch (error) {
     res.status(401).json({ success: false, message: "Invalid or expired token" });

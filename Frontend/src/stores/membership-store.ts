@@ -4,9 +4,20 @@ import { create } from "zustand";
 import api from "@/lib/api";
 import type { CompletedMembership, JoinPaymentMethod } from "./join-gym-store";
 
+export interface RenewalHistoryItem {
+  id: string;
+  planName: string;
+  planPrice: number;
+  durationDays: number;
+  totalPaid: number;
+  paymentMethod: string;
+  renewalDate: string;
+}
+
 interface MembershipState {
   joinedGymId: string | null;
   membership: CompletedMembership | null;
+  renewalHistory: RenewalHistoryItem[];
   loading: boolean;
   error: string | null;
   fetchMembership: () => Promise<void>;
@@ -31,13 +42,33 @@ function mapMembership(data: any): CompletedMembership {
     paymentRef: data.paymentRef,
     totalPaid: data.totalPaid,
     joinedAt: data.joinedAt,
+    expiresAt: data.expiresAt,
     durationDays: data.durationDays,
   };
+}
+
+function mapRenewalHistory(raw: unknown): RenewalHistoryItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item: any) => ({
+    id: String(item.id),
+    planName: String(item.planName || "Plan"),
+    planPrice: Number(item.planPrice) || 0,
+    durationDays: Number(item.durationDays) || 0,
+    totalPaid: Number(item.totalPaid) || 0,
+    paymentMethod: String(item.paymentMethod || "Walk-in"),
+    renewalDate: String(item.renewalDate || ""),
+  }));
+}
+
+function isMembershipExpired(membership: CompletedMembership): boolean {
+  if (!membership.expiresAt) return false;
+  return new Date(membership.expiresAt).getTime() <= Date.now();
 }
 
 export const useMembershipStore = create<MembershipState>((set) => ({
   joinedGymId: null,
   membership: null,
+  renewalHistory: [],
   loading: false,
   error: null,
 
@@ -46,14 +77,26 @@ export const useMembershipStore = create<MembershipState>((set) => ({
     try {
       const { data } = await api.get("/user/membership");
       if (!data.success || !data.data) {
-        set({ joinedGymId: null, membership: null, loading: false });
+        set({ joinedGymId: null, membership: null, renewalHistory: [], loading: false });
         return;
       }
 
       const membership = mapMembership(data.data);
+      if (isMembershipExpired(membership)) {
+        set({
+          joinedGymId: null,
+          membership: null,
+          renewalHistory: [],
+          loading: false,
+          error: null,
+        });
+        return;
+      }
+
       set({
         joinedGymId: membership.gymId,
         membership,
+        renewalHistory: mapRenewalHistory(data.data.renewalHistory),
         loading: false,
         error: null,
       });
@@ -81,7 +124,7 @@ export const useMembershipStore = create<MembershipState>((set) => ({
         return false;
       }
 
-      // Walk-in creates an approval, not an active membership yet
+      // Walk-in / renewal creates an approval, not an immediate date change
       if (details.paymentMethod === "walk-in") {
         set({ error: null });
         return true;
@@ -117,7 +160,7 @@ export const useMembershipStore = create<MembershipState>((set) => ({
     } catch {
       // Still clear local state if already gone server-side
     }
-    set({ joinedGymId: null, membership: null, error: null });
+    set({ joinedGymId: null, membership: null, renewalHistory: [], error: null });
   },
 }));
 

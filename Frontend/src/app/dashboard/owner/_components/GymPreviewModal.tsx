@@ -81,16 +81,16 @@ export function GymPreviewModal({ gym, onClose }: GymPreviewModalProps) {
           <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
             <div className="flex items-center gap-2">
               <span className="h-8 w-1 rounded-full bg-[#FFD700]" />
-              <p className="text-lg font-bold text-[#FFD700]">
-                ₱ {gym.membershipPrice.toLocaleString()}
-                <span className="text-sm font-medium text-zinc-400">/mo</span>
+              <p className="text-sm font-medium text-zinc-400">
+                Pricing from{" "}
+                <span className="font-semibold text-[#FFD700]">Membership Plans</span>
               </p>
             </div>
             <button
               type="button"
               className="rounded-lg border border-[#FFD700] px-4 py-2 text-xs font-semibold text-[#FFD700]"
             >
-              Join Gym
+              View Gym
             </button>
           </div>
         </div>

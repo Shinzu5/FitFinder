@@ -4,7 +4,7 @@ import {
   getMessages, sendUserMessage, aiChat,
   getWalkInStatus,
   completeWalkInOnboarding,
-  getMemberExercises, getMemberEquipment,
+  getMemberExercises, getMemberEquipment, getMemberShop,
 } from "../controllers/user.controller";
 import { authenticate } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
@@ -24,5 +24,6 @@ router.get("/walk-in-status", getWalkInStatus);
 router.post("/walk-in-done/:id", completeWalkInOnboarding);
 router.get("/exercises", getMemberExercises);
 router.get("/equipment", getMemberEquipment);
+router.get("/shop", getMemberShop);
 
 export default router;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Dumbbell, Pencil, Trash2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,18 +22,20 @@ export function EquipmentPanel() {
 
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageName, setImageName] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchEquipment();
-    const id = window.setInterval(() => void fetchEquipment(), 15000);
-    return () => window.clearInterval(id);
   }, [fetchEquipment]);
 
   function resetForm() {
     setName("");
     setQuantity("");
+    setImageUrl(null);
+    setImageName(null);
     setEditingId(null);
     setError(null);
   }
@@ -42,7 +44,30 @@ export function EquipmentPanel() {
     setEditingId(item.id);
     setName(item.name);
     setQuantity(String(item.quantity));
+    setImageUrl(item.imageUrl || null);
+    setImageName(item.imageName);
     setError(null);
+  }
+
+  function handlePhotoUpload(file: File | undefined) {
+    if (!file || !file.type.startsWith("image/")) {
+      setError("Please upload an image file.");
+      return;
+    }
+
+    // Same approach as Shop — read as data URL (no separate /upload call).
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") return;
+      setImageUrl(result);
+      setImageName(file.name);
+      setError(null);
+    };
+    reader.onerror = () => {
+      setError("Failed to read photo. Please try another image.");
+    };
+    reader.readAsDataURL(file);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -59,19 +84,28 @@ export function EquipmentPanel() {
       return;
     }
 
-    if (editingId) {
-      await updateEquipment(editingId, { name: trimmedName, quantity: qty });
-    } else {
-      await addEquipment({ name: trimmedName, quantity: qty });
+    const photo = {
+      imageUrl: imageUrl || "",
+      imageName: imageName,
+    };
+
+    try {
+      if (editingId) {
+        await updateEquipment(editingId, { name: trimmedName, quantity: qty, ...photo });
+      } else {
+        await addEquipment({ name: trimmedName, quantity: qty, ...photo });
+      }
+      resetForm();
+    } catch {
+      setError("Failed to save equipment. Please try again.");
     }
-    resetForm();
   }
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="rounded-2xl border border-white/10 bg-[#141414] p-5">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-left text-sm">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-xs text-zinc-500">
                 <th className="pb-3 pr-4 font-medium">Equipment</th>
@@ -96,7 +130,23 @@ export function EquipmentPanel() {
               ) : (
                 equipment.map((item) => (
                   <tr key={item.id} className="border-b border-white/5 last:border-0">
-                    <td className="py-4 pr-4 font-medium text-white">{item.name}</td>
+                    <td className="py-4 pr-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#0A0A0A]">
+                          {item.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Dumbbell className="h-5 w-5 text-zinc-600" />
+                          )}
+                        </div>
+                        <span className="font-medium text-white">{item.name}</span>
+                      </div>
+                    </td>
                     <td className="py-4 pr-4 text-zinc-400">{item.quantity}</td>
                     <td className="py-4 pr-4">
                       <button
@@ -145,6 +195,30 @@ export function EquipmentPanel() {
           {editingId ? "Edit Equipment" : "Add Equipment"}
         </h2>
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Photo</Label>
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0A0A0A] px-4 py-8 text-sm text-zinc-400 transition hover:border-[#FFD700]/40 hover:text-zinc-200">
+              <Upload className="h-5 w-5" />
+              {imageName ? imageName : "Upload Photo"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handlePhotoUpload(e.target.files?.[0])}
+              />
+            </label>
+            {imageUrl ? (
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt="Equipment preview"
+                  className="aspect-video w-full object-cover"
+                />
+              </div>
+            ) : null}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="equipmentName">Name</Label>
             <Input

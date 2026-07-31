@@ -8,7 +8,7 @@ export type JoinPaymentMethod = "cashless" | "walk-in";
 export interface CompletedMembership {
   gymId: string;
   gymName: string;
-  planId: string;
+  planId: string | null;
   planName: string;
   planPrice: number;
   coachId: string | null;
@@ -18,6 +18,8 @@ export interface CompletedMembership {
   paymentRef: string;
   totalPaid: number;
   joinedAt?: string;
+  /** ISO expiry — access ends at this time even if the original plan was deleted */
+  expiresAt?: string;
   durationDays?: number;
 }
 

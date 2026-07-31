@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Send, Sparkles } from "lucide-react";
+import { Plus, Send, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   getContactInitials,
@@ -10,20 +10,11 @@ import {
   type MessageContact,
   useClerkMessagesStore,
 } from "@/stores/clerk-messages-store";
+import { DeleteConversationModal } from "@/components/messages/DeleteConversationModal";
 import { ClerkNewMessageModal } from "./ClerkNewMessageModal";
 
 function ContactAvatar({ contact, size = "md" }: { contact: MessageContact; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-9 w-9" : "h-10 w-10";
-
-  if (contact.type === "ai") {
-    return (
-      <div
-        className={`flex ${dim} shrink-0 items-center justify-center rounded-full bg-[#FACC15]/15 text-[#FACC15]`}
-      >
-        <Sparkles className={size === "sm" ? "h-4 w-4" : "h-5 w-5"} />
-      </div>
-    );
-  }
 
   if (contact.avatarUrl) {
     return (
@@ -75,13 +66,13 @@ function ConversationListItem({
           <p className={`truncate font-medium ${active ? "text-[#FACC15]" : "text-white"}`}>
             {contact.name}
           </p>
-          {contact.geminiTag ? (
-            <span className="shrink-0 rounded bg-[#FACC15]/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FACC15]">
-              Gemini
+          {(contact.unreadCount || 0) > 0 ? (
+            <span className="shrink-0 rounded-full bg-[#FACC15] px-1.5 py-0.5 text-[10px] font-bold text-black">
+              {contact.unreadCount}
             </span>
           ) : null}
         </div>
-        <p className="mt-0.5 truncate text-xs text-zinc-500">{contact.subtitle ?? preview}</p>
+        <p className="mt-0.5 truncate text-xs text-zinc-500">{preview}</p>
       </div>
     </button>
   );
@@ -134,9 +125,12 @@ export function ClerkMessagesPanel() {
     (state) => state.openConversationWithContact,
   );
   const sendMessage = useClerkMessagesStore((state) => state.sendMessage);
+  const deleteConversation = useClerkMessagesStore((state) => state.deleteConversation);
 
   const [draft, setDraft] = useState("");
   const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -169,8 +163,13 @@ export function ClerkMessagesPanel() {
   }, [conversations]);
 
   const activeConversation = conversations.find((conv) => conv.id === activeConversationId);
-  const activeContact = activeConversation
-    ? contactMap.get(activeConversation.contactId)
+  // Don't gate the chat pane on contactMap (Admin doesn't) — socket threads must still render.
+  const activeContact: MessageContact | undefined = activeConversation
+    ? contactMap.get(activeConversation.contactId) ?? {
+        id: activeConversation.contactId,
+        name: "Conversation",
+        type: "member",
+      }
     : undefined;
 
   useEffect(() => {
@@ -212,13 +211,16 @@ export function ClerkMessagesPanel() {
               </p>
             ) : (
               sortedConversations.map((conversation) => {
-                const contact = contactMap.get(conversation.contactId);
-                if (!contact) return null;
+                const contact = contactMap.get(conversation.contactId) ?? {
+                  id: conversation.contactId,
+                  name: "Conversation",
+                  type: "member" as const,
+                };
                 return (
                   <ConversationListItem
                     key={conversation.id}
                     contact={contact}
-                    preview={getConversationPreview(conversation)}
+                    preview={getConversationPreview(conversation, contact.name)}
                     active={conversation.id === activeConversationId}
                     onClick={() => void openConversationWithContact(contact)}
                   />
@@ -233,14 +235,20 @@ export function ClerkMessagesPanel() {
             <>
               <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
                 <ContactAvatar contact={activeContact} />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-white">{activeContact.name}</p>
                   <p className="text-xs text-zinc-500">
-                    {activeContact.type === "ai"
-                      ? "AI assistant"
-                      : activeContact.subtitle ?? "Member"}
+                    {activeContact.subtitle ?? "Member"}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setDeleteOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
@@ -297,6 +305,24 @@ export function ClerkMessagesPanel() {
         open={newMessageOpen}
         onClose={() => setNewMessageOpen(false)}
         onSelectContact={handleSelectContact}
+      />
+      <DeleteConversationModal
+        open={deleteOpen}
+        busy={deleteBusy}
+        onClose={() => {
+          if (!deleteBusy) setDeleteOpen(false);
+        }}
+        onConfirm={() => {
+          if (!activeConversation) {
+            setDeleteOpen(false);
+            return;
+          }
+          setDeleteBusy(true);
+          void deleteConversation(activeConversation.id).finally(() => {
+            setDeleteBusy(false);
+            setDeleteOpen(false);
+          });
+        }}
       />
     </>
   );

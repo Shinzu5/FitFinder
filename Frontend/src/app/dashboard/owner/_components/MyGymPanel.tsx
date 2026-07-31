@@ -19,7 +19,6 @@ function normalizeGym(gym: RegisteredGym): RegisteredGym {
   return {
     ...gym,
     coverImageUrl: resolveMediaUrl(gym.coverImageUrl, DEFAULT_GYM_COVER_IMAGE),
-    membershipPrice: gym.membershipPrice ?? 799,
     schedule: gym.schedule ?? "Mon-Sun: 6AM - 10PM",
     memberCount: gym.memberCount ?? 0,
   };
@@ -87,7 +86,6 @@ export function MyGymPanel() {
       websiteOrSlug: form.websiteOrSlug.trim(),
       coverPhotoName: form.coverPhotoName,
       coverImageUrl: storedCoverUrl || form.coverImageUrl,
-      membershipPrice: form.membershipPrice,
       schedule: form.schedule.trim(),
     });
     setSaving(false);
@@ -97,10 +95,18 @@ export function MyGymPanel() {
   }
 
   async function handleDeleteConfirm() {
-    await deleteGym();
-    demoteToUser();
-    setDeleteOpen(false);
-    router.replace("/dashboard/user/create-gym");
+    try {
+      await deleteGym();
+      useCreateGymStore.getState().resetFlow();
+      demoteToUser();
+      setDeleteOpen(false);
+      // Back to plan selection — must buy again before creating a gym
+      router.replace("/dashboard/user/create-gym");
+    } catch {
+      setDeleteOpen(false);
+      setSavedMessage("Could not delete gym. Please try again.");
+      setTimeout(() => setSavedMessage(null), 3000);
+    }
   }
 
   const previewGym: RegisteredGym = {
@@ -164,19 +170,7 @@ export function MyGymPanel() {
                 placeholder="abbsy.gym"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="price">Base Membership Price (₱)</Label>
-              <Input
-                id="price"
-                type="number"
-                min={0}
-                value={form.membershipPrice}
-                onChange={(e) =>
-                  updateField("membershipPrice", Number(e.target.value) || 0)
-                }
-              />
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="schedule">Open/Close Schedule</Label>
               <Input
                 id="schedule"
@@ -184,6 +178,9 @@ export function MyGymPanel() {
                 onChange={(e) => updateField("schedule", e.target.value)}
                 placeholder="e.g. Mon-Sun: 6AM - 10PM"
               />
+              <p className="text-xs text-zinc-500">
+                Membership pricing is managed only under Memberships → Membership Plans.
+              </p>
             </div>
           </div>
 

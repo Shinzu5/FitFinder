@@ -356,19 +356,25 @@ async function main() {
 
   // ─── Owner Subscription ───────────────────────────────────────────────────
   const validUntil = new Date();
-  validUntil.setMonth(validUntil.getMonth() + 3);
+  validUntil.setDate(validUntil.getDate() + 30);
 
   await prisma.ownerSubscription.upsert({
-    where: { id: "sub-seed-1" },
-    update: {},
+    where: { referenceNo: "XDT-8842011" },
+    update: {
+      planId: "standard",
+      planName: "Standard",
+      price: 350,
+      months: 30,
+      validUntil,
+    },
     create: {
       id: "sub-seed-1",
       ownerId: owner.id,
       gymId: gym.id,
       planId: "standard",
       planName: "Standard",
-      price: 699,
-      months: 3,
+      price: 350,
+      months: 30,
       referenceNo: "XDT-8842011",
       method: "Xendit",
       validUntil,

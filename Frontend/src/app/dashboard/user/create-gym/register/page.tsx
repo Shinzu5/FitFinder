@@ -106,6 +106,9 @@ export default function RegisterGymPage() {
       promoteToOwner();
     }
 
+    // Mark owner gate ready immediately so layout skips "Checking access..."
+    useCreateGymStore.setState({ hasOwnedGym: true });
+
     setSubmitting(false);
     // Gym is ACTIVE on create — optional Xendit setup (existing Payment Settings)
     router.replace("/dashboard/owner/payment-settings");

@@ -13,7 +13,7 @@ export interface WalkInApprovalRequest {
   memberEmail: string;
   gymId: string;
   gymName: string;
-  planId: string;
+  planId: string | null;
   planName: string;
   planPrice: number;
   coachId: string | null;
@@ -22,6 +22,8 @@ export interface WalkInApprovalRequest {
   paymentRef: string;
   totalPaid: number;
   durationDays: number;
+  isRenewal?: boolean;
+  paymentMethod?: string;
   paymentStatus: "paid" | "pending" | string;
   approvalStatus: ApprovalStatus;
   status: ApprovalStatus;
@@ -29,6 +31,7 @@ export interface WalkInApprovalRequest {
   submittedAt: number;
   reviewedAt?: number;
   consumedAt?: number;
+  renewalDate?: number;
 }
 
 export function approvalToMembership(request: WalkInApprovalRequest): CompletedMembership {
@@ -77,6 +80,8 @@ function mapApproval(raw: any): WalkInApprovalRequest {
     paymentRef: raw.paymentRef,
     totalPaid: raw.totalPaid,
     durationDays: raw.durationDays,
+    isRenewal: Boolean(raw.isRenewal),
+    paymentMethod: raw.paymentMethod || "Walk-in",
     paymentStatus: String(raw.paymentStatus || "paid").toLowerCase(),
     approvalStatus: status,
     status,
@@ -95,6 +100,13 @@ function mapApproval(raw: any): WalkInApprovalRequest {
         ? raw.consumedAt
         : new Date(raw.consumedAt).getTime()
       : undefined,
+    renewalDate: raw.renewalDate
+      ? typeof raw.renewalDate === "number"
+        ? raw.renewalDate
+        : new Date(raw.renewalDate).getTime()
+      : typeof raw.submittedAt === "number"
+        ? raw.submittedAt
+        : new Date(raw.submittedAt).getTime(),
   };
 }
 
@@ -181,6 +193,7 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         planPrice: raw.planPrice ?? input.membership.planPrice,
       });
 
+      // Drop prior declines for this gym — a new submit supersedes rejection UI
       set({
         requests: [
           approval,
@@ -325,11 +338,21 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
 
       const list = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
       const mapped = list.map(mapApproval);
-      if (mapped.length === 0) return;
 
-      const byId = new Map(get().requests.map((r) => [r.id, r]));
-      for (const item of mapped) byId.set(item.id, item);
-      set({ requests: Array.from(byId.values()) });
+      // Hide superseded declines when a newer pending/approved request exists for same gym
+      const filtered = mapped.filter((req: WalkInApprovalRequest) => {
+        if (req.status !== "declined") return true;
+        return !mapped.some(
+          (other: WalkInApprovalRequest) =>
+            other.id !== req.id &&
+            other.userId === req.userId &&
+            other.gymId === req.gymId &&
+            other.submittedAt >= req.submittedAt &&
+            (other.status === "pending" || other.status === "approved"),
+        );
+      });
+
+      set({ requests: filtered });
     } catch {
       // USER may not have pending walk-ins; ignore
     }
@@ -338,7 +361,19 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
   applyRealtimeApproval: (raw) => {
     if (!raw || typeof raw !== "object") return;
     const approval = mapApproval(raw);
-    const byId = new Map(get().requests.map((r) => [r.id, r]));
+    let next = get().requests.filter((req) => {
+      // New pending/approved submission clears older declines for that gym
+      if (
+        (approval.status === "pending" || approval.status === "approved") &&
+        req.status === "declined" &&
+        req.userId === approval.userId &&
+        req.gymId === approval.gymId
+      ) {
+        return false;
+      }
+      return true;
+    });
+    const byId = new Map(next.map((r) => [r.id, r]));
     byId.set(approval.id, approval);
     set({ requests: Array.from(byId.values()) });
   },

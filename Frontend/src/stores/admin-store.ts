@@ -4,6 +4,7 @@ import { create } from "zustand";
 import api from "@/lib/api";
 
 export type ActivityTone = "success" | "info" | "warning";
+export type RevenuePeriod = "today" | "week" | "month" | "year";
 
 export interface AdminActivity {
   id: string;
@@ -13,8 +14,15 @@ export interface AdminActivity {
 }
 
 export interface RevenuePoint {
-  month: string;
+  label: string;
   value: number;
+}
+
+export interface RevenueChartSeries {
+  today: RevenuePoint[];
+  week: RevenuePoint[];
+  month: RevenuePoint[];
+  year: RevenuePoint[];
 }
 
 export function formatActivityTime(timestamp: number) {
@@ -30,6 +38,8 @@ export function formatActivityTime(timestamp: number) {
 interface AdminState {
   totalUsers: number;
   totalGyms: number;
+  activeGyms: number;
+  activeSubscriptions: number;
   platformRevenue: number;
   revenueStats: {
     today: number;
@@ -37,11 +47,13 @@ interface AdminState {
     thisMonth: number;
     total: number;
   };
+  revenueChart: RevenueChartSeries;
+  chartPeriod: RevenuePeriod;
   activity: AdminActivity[];
-  revenueTrend: RevenuePoint[];
   loading: boolean;
   error: string | null;
-  fetchDashboard: () => Promise<void>;
+  fetchDashboard: (opts?: { silent?: boolean }) => Promise<void>;
+  setChartPeriod: (period: RevenuePeriod) => void;
   addActivity: (message: string, tone: ActivityTone) => void;
   getRevenueTrend: () => RevenuePoint[];
 }
@@ -53,18 +65,37 @@ function mapTone(tone: string): ActivityTone {
   return "info";
 }
 
+const EMPTY_CHART: RevenueChartSeries = {
+  today: [],
+  week: [],
+  month: [],
+  year: [],
+};
+
+function mapSeries(raw: unknown): RevenuePoint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((p: { label?: string; month?: string; value?: number }) => ({
+    label: String(p.label ?? p.month ?? ""),
+    value: Number(p.value) || 0,
+  }));
+}
+
 export const useAdminStore = create<AdminState>((set, get) => ({
   totalUsers: 0,
   totalGyms: 0,
+  activeGyms: 0,
+  activeSubscriptions: 0,
   platformRevenue: 0,
   revenueStats: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
+  revenueChart: EMPTY_CHART,
+  chartPeriod: "month",
   activity: [],
-  revenueTrend: [],
   loading: false,
   error: null,
 
-  fetchDashboard: async () => {
-    set({ loading: true, error: null });
+  fetchDashboard: async (opts) => {
+    const silent = Boolean(opts?.silent);
+    if (!silent) set({ loading: true, error: null });
     try {
       const { data } = await api.get("/admin/dashboard");
       if (!data.success) {
@@ -72,12 +103,14 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         return;
       }
 
-      const activity = (data.data.activity || []).map((a: any) => ({
-        id: a.id,
-        message: a.message,
-        tone: mapTone(a.tone),
-        createdAt: a.createdAt ? new Date(a.createdAt).getTime() : Date.now(),
-      }));
+      const activity = (data.data.activity || []).map(
+        (a: { id: string; message: string; tone: string; createdAt?: string }) => ({
+          id: a.id,
+          message: a.message,
+          tone: mapTone(a.tone),
+          createdAt: a.createdAt ? new Date(a.createdAt).getTime() : Date.now(),
+        }),
+      );
 
       const stats = data.data.revenueStats || {
         today: 0,
@@ -86,42 +119,49 @@ export const useAdminStore = create<AdminState>((set, get) => ({
         total: data.data.platformRevenue || 0,
       };
 
-      // Build a simple trend from available revenue buckets (DB-derived, not hardcoded demo)
-      const revenueTrend: RevenuePoint[] = [
-        { month: "Today", value: Number(stats.today) || 0 },
-        { month: "Week", value: Number(stats.thisWeek) || 0 },
-        { month: "Month", value: Number(stats.thisMonth) || 0 },
-        { month: "Total", value: Number(stats.total) || 0 },
-      ];
+      const chartRaw = data.data.revenueChart || {};
+      const revenueChart: RevenueChartSeries = {
+        today: mapSeries(chartRaw.today),
+        week: mapSeries(chartRaw.week),
+        month: mapSeries(chartRaw.month),
+        year: mapSeries(chartRaw.year),
+      };
 
       set({
         totalUsers: data.data.totalUsers ?? 0,
         totalGyms: data.data.totalGyms ?? 0,
+        activeGyms: data.data.activeGyms ?? data.data.totalGyms ?? 0,
+        activeSubscriptions: data.data.activeSubscriptions ?? 0,
         platformRevenue: data.data.platformRevenue ?? 0,
         revenueStats: stats,
+        revenueChart,
         activity,
-        revenueTrend,
         loading: false,
         error: null,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load dashboard.",
+        error: err.response?.data?.message || "Failed to load dashboard.",
       });
     }
   },
 
+  setChartPeriod: (period) => set({ chartPeriod: period }),
+
   addActivity: (message, tone) => {
-    // Optimistic local feed entry; server activities come from AdminActivity table on refresh
     const entry: AdminActivity = {
       id: `act-${Date.now()}`,
       message,
       tone,
       createdAt: Date.now(),
     };
-    set({ activity: [entry, ...get().activity].slice(0, 12) });
+    set({ activity: [entry, ...get().activity].slice(0, 20) });
   },
 
-  getRevenueTrend: () => get().revenueTrend,
+  getRevenueTrend: () => {
+    const { revenueChart, chartPeriod } = get();
+    return revenueChart[chartPeriod] || [];
+  },
 }));

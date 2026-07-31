@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 
 export type EquipmentStatus = "available" | "in_use" | "under_maintenance";
 
@@ -10,6 +11,8 @@ export interface GymEquipment {
   name: string;
   quantity: number;
   status: EquipmentStatus;
+  imageUrl: string;
+  imageName: string | null;
 }
 
 export type GymEquipmentInput = Omit<GymEquipment, "id" | "status"> & {
@@ -29,6 +32,8 @@ function mapEquipment(raw: any): GymEquipment {
     name: raw.name,
     quantity: raw.quantity ?? 1,
     status: normalizeStatus(raw.status),
+    imageUrl: resolveMediaUrl(raw.imageUrl || ""),
+    imageName: raw.imageName || null,
   };
 }
 
@@ -39,7 +44,10 @@ interface OwnerEquipmentState {
   loading: boolean;
   fetchEquipment: () => Promise<void>;
   addEquipment: (item: GymEquipmentInput) => Promise<void>;
-  updateEquipment: (id: string, updates: Partial<GymEquipmentInput & { status: EquipmentStatus }>) => Promise<void>;
+  updateEquipment: (
+    id: string,
+    updates: Partial<GymEquipmentInput & { status: EquipmentStatus }>,
+  ) => Promise<void>;
   toggleStatus: (id: string) => Promise<void>;
   removeEquipment: (id: string) => Promise<void>;
 }
@@ -68,6 +76,8 @@ export const useOwnerEquipmentStore = create<OwnerEquipmentState>((set, get) => 
         name: item.name,
         quantity: item.quantity,
         status: (item.status || "available").toUpperCase(),
+        imageUrl: item.imageUrl || "",
+        imageName: item.imageName ?? null,
       });
       if (data.success) {
         set({ equipment: [...get().equipment, mapEquipment(data.data)] });
@@ -83,6 +93,8 @@ export const useOwnerEquipmentStore = create<OwnerEquipmentState>((set, get) => 
       if (typeof updates.name === "string") payload.name = updates.name;
       if (typeof updates.quantity === "number") payload.quantity = updates.quantity;
       if (updates.status) payload.status = updates.status.toUpperCase();
+      if (typeof updates.imageUrl === "string") payload.imageUrl = updates.imageUrl;
+      if (updates.imageName !== undefined) payload.imageName = updates.imageName;
 
       const { data } = await api.put(`/owner/equipment/${id}`, payload);
       if (data.success) {

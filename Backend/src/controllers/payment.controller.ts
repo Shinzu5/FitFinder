@@ -8,7 +8,16 @@ import {
   getPaymentStatus,
   verifyWebhookToken,
 } from "../services/xendit.service";
-import { emitMembershipUpdated } from "../services/realtime.service";
+import {
+  emitAdminGymsUpdated,
+  emitWalkInApprovalsUpdated,
+  emitWalkInStatus,
+} from "../services/realtime.service";
+import { notifyMembershipChange } from "../services/gymMembership.service";
+import { ensureOwnerSubscriptionFromPayment } from "../services/ownerSubscription.service";
+import { getOwnerPlanById } from "../config/ownerPlans";
+import { daysRemainingUntil, storedDurationToDays } from "../utils/ownerPlan";
+import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
 
 /**
  * POST /api/payments/create-gcash
@@ -18,7 +27,7 @@ import { emitMembershipUpdated } from "../services/realtime.service";
  *   - type: "SUBSCRIPTION" | "MEMBERSHIP"
  *   - amount: number
  *   - description: string
- *   - metadata: { planId, planName, months, gymId?, coachId?, ... }
+ *   - metadata: { planId, planName, days, gymId?, coachId?, ... }
  */
 export async function createGcashPaymentHandler(
   req: AuthRequest,
@@ -38,6 +47,29 @@ export async function createGcashPaymentHandler(
       return;
     }
 
+    if (type === "SUBSCRIPTION") {
+      const plan = getOwnerPlanById(String(metadata?.planId || ""));
+      if (!plan) {
+        sendError(res, "Invalid owner subscription plan");
+        return;
+      }
+      if (Math.abs(Number(amount) - plan.price) > 0.01) {
+        sendError(
+          res,
+          `Payment amount must equal plan price (₱${plan.price.toLocaleString()})`,
+        );
+        return;
+      }
+      metadata = {
+        ...metadata,
+        planId: plan.id,
+        planName: plan.name,
+        days: plan.days,
+        durationDays: plan.days,
+        price: plan.price,
+      };
+    }
+
     if (type === "MEMBERSHIP") {
       const gymId = metadata?.gymId as string | undefined;
       const planId = metadata?.planId as string | undefined;
@@ -47,7 +79,7 @@ export async function createGcashPaymentHandler(
         return;
       }
       const plan = await prisma.membershipPlan.findFirst({
-        where: { id: planId, gymId },
+        where: { id: planId, gymId, isActive: true },
       });
       if (!plan) {
         sendError(res, "Membership plan not found for this gym");
@@ -58,10 +90,13 @@ export async function createGcashPaymentHandler(
       let coachName: string | null = null;
       if (coachId) {
         const coach = await prisma.coach.findFirst({
-          where: { id: coachId, gymId },
+          where: { id: coachId, gymId, isActive: true },
         });
         if (!coach) {
-          sendError(res, "Selected coach not found for this gym");
+          sendError(
+            res,
+            "Selected coach is no longer available. Please choose another coach or continue without one.",
+          );
           return;
         }
         coachSessionPrice = coach.sessionPrice;
@@ -80,6 +115,7 @@ export async function createGcashPaymentHandler(
       metadata = {
         ...metadata,
         durationDays: plan.durationDays,
+        planName: plan.name,
         coachId,
         coachName,
         planPrice: plan.price,
@@ -233,6 +269,25 @@ export async function checkPaymentStatus(
     }
 
     let membershipActive = false;
+    let subscription: {
+      id: string;
+      planName: string;
+      months: number;
+      durationDays: number;
+      validUntil: string;
+      daysLeft: number;
+    } | null = null;
+    let authPayload: {
+      accessToken: string;
+      refreshToken: string;
+      user: {
+        id: string;
+        fullName: string;
+        email: string;
+        role: string;
+        avatarUrl: string | null;
+      };
+    } | null = null;
 
     if (status === "SUCCEEDED") {
       membershipActive = await activatePayment({
@@ -260,6 +315,49 @@ export async function checkPaymentStatus(
         }
       } else if (payment.type === "SUBSCRIPTION") {
         membershipActive = true;
+        const sub = await prisma.ownerSubscription.findFirst({
+          where: { referenceNo: payment.referenceId },
+          orderBy: { paidAt: "desc" },
+        });
+        if (sub) {
+          const durationDays = storedDurationToDays(sub.months);
+          subscription = {
+            id: sub.id,
+            planName: sub.planName,
+            months: durationDays,
+            durationDays,
+            validUntil: sub.validUntil.toISOString(),
+            daysLeft: daysRemainingUntil(sub.validUntil),
+          };
+        }
+
+        // Issue fresh tokens so the client becomes OWNER without a page reload
+        const user = await prisma.user.findUnique({ where: { id: payment.userId } });
+        if (user) {
+          const accessToken = generateAccessToken({
+            userId: user.id,
+            role: user.role,
+          });
+          const refreshToken = generateRefreshToken({
+            userId: user.id,
+            role: user.role,
+          });
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken },
+          });
+          authPayload = {
+            accessToken,
+            refreshToken,
+            user: {
+              id: user.id,
+              fullName: user.fullName,
+              email: user.email,
+              role: user.role,
+              avatarUrl: user.avatarUrl,
+            },
+          };
+        }
       }
     }
 
@@ -270,6 +368,14 @@ export async function checkPaymentStatus(
       amount: payment.amount,
       paidAt: paidAt?.toISOString() || null,
       membershipActive,
+      subscription,
+      ...(authPayload
+        ? {
+            accessToken: authPayload.accessToken,
+            refreshToken: authPayload.refreshToken,
+            user: authPayload.user,
+          }
+        : {}),
     });
   } catch (error) {
     console.error("Check payment status error:", error);
@@ -369,41 +475,23 @@ async function activatePayment(payment: {
   const meta = (payment.metadata || {}) as Record<string, unknown>;
 
   if (payment.type === "SUBSCRIPTION") {
-    const existingSub = await prisma.ownerSubscription.findFirst({
-      where: { referenceNo: payment.referenceId },
-    });
-    if (existingSub) return true;
-
-    const months = (meta.months as number) || 1;
-    const validUntil = new Date();
-    validUntil.setMonth(validUntil.getMonth() + months);
-
-    await prisma.ownerSubscription.create({
-      data: {
-        ownerId: payment.userId,
-        planId: (meta.planId as string) || "",
-        planName: (meta.planName as string) || "",
-        price: payment.amount,
-        months,
-        referenceNo: payment.referenceId,
-        method: "Xendit",
-        validUntil,
-      },
-    });
-
-    await prisma.user.update({
-      where: { id: payment.userId },
-      data: { role: "OWNER" },
-    });
-
-    await prisma.adminActivity.create({
-      data: {
-        message: `New subscription purchase: ${meta.planName || "Unknown"} plan via GCash`,
-        tone: "INFO",
-      },
-    });
-
-    return true;
+    try {
+      const sub = await ensureOwnerSubscriptionFromPayment(payment);
+      if (sub?.created) {
+        await prisma.adminActivity.create({
+          data: {
+            message: `New subscription purchase: ${sub.planName || "Unknown"} plan via GCash`,
+            tone: "INFO",
+          },
+        });
+      }
+      // Always refresh admin gyms/transactions when a plan payment succeeds
+      void emitAdminGymsUpdated();
+      return Boolean(sub);
+    } catch (error) {
+      console.error("activatePayment SUBSCRIPTION failed:", error);
+      return false;
+    }
   }
 
   if (payment.type === "MEMBERSHIP") {
@@ -416,53 +504,172 @@ async function activatePayment(payment: {
       return false;
     }
 
-    const existing = await prisma.gymMembership.findFirst({
+    // Idempotent: same Xendit payment must not re-extend dates
+    const alreadyActivated = await prisma.gymMembership.findFirst({
       where: {
         userId: payment.userId,
         gymId,
-        status: { in: ["ACTIVE", "EXPIRING"] },
+        paymentRef: payment.referenceId,
       },
+      select: { id: true },
     });
-    if (existing) return true;
-
-    const plan = await prisma.membershipPlan.findUnique({ where: { id: planId } });
-    const durationDays =
-      plan?.durationDays ||
-      (typeof meta.durationDays === "number" ? meta.durationDays : 0) ||
-      30;
-
-    if (!plan) {
-      console.warn(
-        "activatePayment: plan not found, using durationDays fallback",
-        planId,
-        durationDays,
-      );
+    if (alreadyActivated) {
+      await notifyMembershipChange(payment.userId, gymId);
+      return true;
     }
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + durationDays);
+    const existingApproval = await prisma.walkInApproval.findFirst({
+      where: { paymentRef: payment.referenceId },
+      select: { id: true },
+    });
+    if (existingApproval) {
+      return true;
+    }
 
-    // Ensure planId exists in DB — if missing, create membership only when plan row exists
+    const plan = await prisma.membershipPlan.findUnique({ where: { id: planId } });
     if (!plan) {
       console.error("activatePayment MEMBERSHIP plan missing — cannot create membership", planId);
       return false;
     }
 
-    await prisma.gymMembership.create({
+    const existingMembership = await prisma.gymMembership.findFirst({
+      where: { userId: payment.userId, gymId },
+      orderBy: { joinedAt: "desc" },
+      select: { id: true },
+    });
+
+    // Renewal: paid via GCash → pending Owner/Clerk approval (same as walk-in renew)
+    if (existingMembership) {
+      const user = await prisma.user.findUnique({
+        where: { id: payment.userId },
+        select: { fullName: true, email: true },
+      });
+      const coach = coachId
+        ? await prisma.coach.findFirst({
+            where: { id: coachId, gymId, isActive: true },
+          })
+        : null;
+
+      const approval = await prisma.walkInApproval.create({
+        data: {
+          userId: payment.userId,
+          gymId,
+          planId: plan.id,
+          planName: plan.name,
+          planPrice: plan.price,
+          memberName: user?.fullName || "Member",
+          memberEmail: user?.email || "",
+          coachId: coach?.id || null,
+          coachName: coach?.name || null,
+          coachSessionPrice: coach?.sessionPrice || 0,
+          paymentRef: payment.referenceId,
+          totalPaid: payment.amount,
+          durationDays: plan.durationDays,
+          isRenewal: true,
+          paymentMethod: "XENDIT",
+          paymentStatus: "PAID",
+          status: "PENDING",
+        },
+        include: {
+          plan: { select: { name: true, price: true } },
+          gym: { select: { name: true } },
+        },
+      });
+
+      emitWalkInStatus(payment.userId, {
+        id: approval.id,
+        userId: approval.userId,
+        memberName: approval.memberName,
+        memberEmail: approval.memberEmail,
+        gymId: approval.gymId,
+        gymName: approval.gym.name,
+        planId: approval.planId,
+        planName: approval.planName || approval.plan?.name || "",
+        planPrice: approval.planPrice,
+        coachId: approval.coachId,
+        coachName: approval.coachName,
+        coachSessionPrice: approval.coachSessionPrice,
+        paymentRef: approval.paymentRef,
+        totalPaid: approval.totalPaid,
+        durationDays: approval.durationDays,
+        isRenewal: true,
+        paymentMethod: "Cashless",
+        paymentStatus: "paid",
+        approvalStatus: "pending",
+        status: "pending",
+        submittedAt: approval.submittedAt.getTime(),
+        reviewedAt: null,
+        consumedAt: null,
+        renewalDate: approval.submittedAt.getTime(),
+      });
+      void emitWalkInApprovalsUpdated(gymId);
+      return true;
+    }
+
+    // New GCash join: pending approval only — no ACTIVE membership until staff completes
+    const user = await prisma.user.findUnique({
+      where: { id: payment.userId },
+      select: { fullName: true, email: true },
+    });
+    const coach = coachId
+      ? await prisma.coach.findFirst({
+          where: { id: coachId, gymId, isActive: true },
+        })
+      : null;
+
+    const approval = await prisma.walkInApproval.create({
       data: {
         userId: payment.userId,
         gymId,
         planId: plan.id,
-        coachId,
-        paymentMethod: "XENDIT",
+        planName: plan.name,
+        planPrice: plan.price,
+        memberName: user?.fullName || "Member",
+        memberEmail: user?.email || "",
+        coachId: coach?.id || null,
+        coachName: coach?.name || null,
+        coachSessionPrice: coach?.sessionPrice || 0,
         paymentRef: payment.referenceId,
         totalPaid: payment.amount,
-        status: "ACTIVE",
-        expiresAt,
+        durationDays: plan.durationDays,
+        isRenewal: false,
+        paymentMethod: "XENDIT",
+        paymentStatus: "PAID",
+        status: "PENDING",
+      },
+      include: {
+        plan: { select: { name: true, price: true } },
+        gym: { select: { name: true } },
       },
     });
 
-    emitMembershipUpdated(payment.userId);
+    emitWalkInStatus(payment.userId, {
+      id: approval.id,
+      userId: approval.userId,
+      memberName: approval.memberName,
+      memberEmail: approval.memberEmail,
+      gymId: approval.gymId,
+      gymName: approval.gym.name,
+      planId: approval.planId,
+      planName: approval.planName || approval.plan?.name || "",
+      planPrice: approval.planPrice,
+      coachId: approval.coachId,
+      coachName: approval.coachName,
+      coachSessionPrice: approval.coachSessionPrice,
+      paymentRef: approval.paymentRef,
+      totalPaid: approval.totalPaid,
+      durationDays: approval.durationDays,
+      isRenewal: false,
+      paymentMethod: "Cashless",
+      paymentStatus: "paid",
+      approvalStatus: "pending",
+      status: "pending",
+      submittedAt: approval.submittedAt.getTime(),
+      reviewedAt: null,
+      consumedAt: null,
+      renewalDate: approval.submittedAt.getTime(),
+    });
+    void emitWalkInApprovalsUpdated(gymId);
     return true;
   }
 

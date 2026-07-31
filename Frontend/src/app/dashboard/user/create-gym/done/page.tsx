@@ -33,49 +33,55 @@ export default function CreateGymDonePage() {
   } = useCreateGymStore();
   const plan = getOwnerPlan(selectedPlanId);
 
-  const [verifying, setVerifying] = useState(!paymentComplete && !!xenditPaymentId);
+  const paymentIdFromUrl = searchParams.get("payment_id");
+  const paymentLookupId = xenditPaymentId || paymentIdFromUrl;
+
+  const [verifying, setVerifying] = useState(Boolean(paymentLookupId));
   const [failed, setFailed] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const pollCountRef = useRef(0);
 
-  // On mount, if we have a xenditPaymentId but payment isn't complete, poll for status
+  // Always verify with the API so OwnerSubscription is created even if local state was stale
   useEffect(() => {
-    if (paymentComplete || !xenditPaymentId) return;
+    if (!paymentLookupId) return;
 
     setVerifying(true);
+    pollCountRef.current = 0;
 
     async function poll() {
       pollCountRef.current += 1;
-      const status = await checkPaymentStatus();
+      const status = await checkPaymentStatus(paymentLookupId);
 
       if (status === "SUCCEEDED") {
         setVerifying(false);
+        setFailed(false);
         return;
       }
 
       if (status === "FAILED" || pollCountRef.current >= 30) {
         setVerifying(false);
-        setFailed(true);
+        if (!useCreateGymStore.getState().paymentComplete) {
+          setFailed(true);
+        }
         return;
       }
 
-      // Poll every 2 seconds
       pollRef.current = setTimeout(poll, 2000);
     }
 
-    poll();
+    void poll();
 
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [paymentComplete, xenditPaymentId, checkPaymentStatus]);
+  }, [paymentLookupId, checkPaymentStatus]);
 
   // If no payment in progress and not complete, redirect to plan selection
   useEffect(() => {
-    if (!paymentComplete && !xenditPaymentId) {
+    if (!paymentComplete && !paymentLookupId) {
       router.replace("/dashboard/user/create-gym");
     }
-  }, [paymentComplete, xenditPaymentId, router]);
+  }, [paymentComplete, paymentLookupId, router]);
 
   // Loading/verifying state
   if (verifying) {
@@ -160,7 +166,7 @@ export default function CreateGymDonePage() {
             <ReceiptRow
               icon={CalendarDays}
               label="Plan"
-              value={`${plan.name} — ${plan.months} month${plan.months > 1 ? "s" : ""}`}
+              value={`${plan.name} — ${plan.days} days`}
             />
             <ReceiptRow
               icon={Building2}
@@ -199,19 +205,15 @@ export default function CreateGymDonePage() {
             {[
               {
                 title: "Create your gym",
-                body: "Go to your owner dashboard and register your gym with a name, slug, and description.",
+                body: "Register your gym with a name, address, and description — it goes live immediately.",
               },
               {
-                title: "Set up Xendit API key",
-                body: "In Settings, enter your Xendit secret key so members can pay you directly.",
+                title: "Set up Xendit (optional)",
+                body: "In Payment Settings, add your Xendit key and turn cashless on if you want GCash.",
               },
               {
                 title: "Add coaches & plans",
                 body: "Create membership plans and add coaches with pricing and availability.",
-              },
-              {
-                title: "Wait for admin approval",
-                body: "Your gym goes live after the platform admin approves your listing.",
               },
             ].map((item, index) => (
               <li key={item.title} className="flex gap-3">

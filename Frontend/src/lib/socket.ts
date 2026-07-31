@@ -10,7 +10,11 @@ let socketToken: string | null = null;
 // Reuses a single socket connection for the whole app; reconnects only when
 // the access token actually changes (e.g. after login or token refresh).
 export function getSocket(token: string): Socket {
-  if (socket && socketToken === token && socket.connected) {
+  // Keep the same instance while connecting/reconnecting so listeners stay attached.
+  if (socket && socketToken === token) {
+    if (!socket.connected) {
+      socket.connect();
+    }
     return socket;
   }
 
@@ -22,6 +26,8 @@ export function getSocket(token: string): Socket {
   socket = io(API_BASE_URL, {
     auth: { token },
     transports: ["websocket", "polling"],
+    autoConnect: true,
+    reconnection: true,
   });
 
   return socket;
