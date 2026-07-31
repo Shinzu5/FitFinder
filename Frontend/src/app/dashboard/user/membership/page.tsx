@@ -71,6 +71,15 @@ export default function MembershipPage() {
         <div className="mt-4">
           <p className="text-xl font-bold text-white">{membership.planName}</p>
           <p className="mt-0.5 text-sm text-zinc-500">{membership.gymName}</p>
+          {membership.coachName ? (
+            <p className="mt-2 text-sm text-zinc-300">
+              Assigned coach:{" "}
+              <span className="font-medium text-[#FACC15]">{membership.coachName}</span>
+              {membership.coachSessionPrice
+                ? ` · ₱${membership.coachSessionPrice.toLocaleString()}/session`
+                : null}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-8">

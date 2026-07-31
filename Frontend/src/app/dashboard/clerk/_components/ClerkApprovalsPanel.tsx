@@ -15,7 +15,7 @@ export function ClerkApprovalsPanel() {
 
   useEffect(() => {
     void fetchApprovals();
-    const id = window.setInterval(() => void fetchApprovals(), 8000);
+    const id = window.setInterval(() => void fetchApprovals(), 60000);
     return () => window.clearInterval(id);
   }, [fetchApprovals]);
 
@@ -35,15 +35,14 @@ export function ClerkApprovalsPanel() {
       <div>
         <h2 className="text-2xl font-bold text-white">Walk-in Approvals</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Review membership requests. After you approve, collect payment in Walk-in Payment and
-          click Done to activate the membership.
+          Approve to activate membership. The gymer&apos;s button changes to Done automatically.
         </p>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
         <div className="flex items-center justify-between gap-4 border-b border-zinc-800/70 px-5 py-4">
           <h3 className="font-bold text-white">
-            Pending Clerk Approval
+            Pending Approval
             {pending.length > 0 ? (
               <span className="ml-2 rounded-full bg-[#FACC15]/15 px-2 py-0.5 text-xs font-bold text-[#FACC15]">
                 {pending.length}
@@ -67,7 +66,7 @@ export function ClerkApprovalsPanel() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-lg font-bold text-white">{request.memberName}</h4>
                       <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-400">
-                        Pending Clerk Approval
+                        Pending Approval
                       </span>
                     </div>
                     <p className="text-sm text-zinc-500">{request.memberEmail}</p>
@@ -99,7 +98,7 @@ export function ClerkApprovalsPanel() {
 
                     <p className="text-xl font-bold text-[#FACC15]">
                       ₱{request.totalPaid.toLocaleString()}
-                      <span className="ml-2 text-sm font-medium text-zinc-500">to collect after approve</span>
+                      <span className="ml-2 text-sm font-medium text-zinc-500">paid (walk-in)</span>
                     </p>
                   </div>
 
@@ -153,18 +152,16 @@ export function ClerkApprovalsPanel() {
                     <td className="px-5 py-4">
                       <span
                         className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                          request.status === "approved" && request.consumedAt
+                          request.status === "approved"
                             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                            : request.status === "approved"
-                              ? "border-sky-500/30 bg-sky-500/10 text-sky-400"
-                              : "border-red-500/30 bg-red-500/10 text-red-400"
+                            : "border-red-500/30 bg-red-500/10 text-red-400"
                         }`}
                       >
-                        {request.status === "approved" && request.consumedAt
-                          ? "Paid / Active"
-                          : request.status === "approved"
-                            ? "Awaiting Payment"
-                            : "Rejected"}
+                        {request.status === "approved"
+                          ? request.consumedAt
+                            ? "Active / Done"
+                            : "Approved"
+                          : "Rejected"}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-zinc-500">

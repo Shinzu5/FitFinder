@@ -233,12 +233,18 @@ function PlanCard({
 
 export function MembershipPlansPanel() {
   const plans = useOwnerMembershipPlansStore((state) => state.plans);
+  const loading = useOwnerMembershipPlansStore((state) => state.loading);
+  const fetchPlans = useOwnerMembershipPlansStore((state) => state.fetchPlans);
   const addPlan = useOwnerMembershipPlansStore((state) => state.addPlan);
   const updatePlan = useOwnerMembershipPlansStore((state) => state.updatePlan);
   const deletePlan = useOwnerMembershipPlansStore((state) => state.deletePlan);
 
   const [showNewForm, setShowNewForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchPlans();
+  }, [fetchPlans]);
 
   function parseForm(values: PlanFormValues) {
     const error = validateForm(values);
@@ -312,7 +318,13 @@ export function MembershipPlansPanel() {
         ))}
       </div>
 
-      {plans.length === 0 && !showNewForm ? (
+      {loading && plans.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
+          Loading plans…
+        </p>
+      ) : null}
+
+      {!loading && plans.length === 0 && !showNewForm ? (
         <p className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-zinc-500">
           No membership plans yet. Click Add Plan to create your first one.
         </p>

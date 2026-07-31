@@ -8,6 +8,7 @@ import {
   getPaymentStatus,
   verifyWebhookToken,
 } from "../services/xendit.service";
+import { emitMembershipUpdated } from "../services/realtime.service";
 
 /**
  * POST /api/payments/create-gcash
@@ -24,7 +25,8 @@ export async function createGcashPaymentHandler(
   res: Response
 ): Promise<void> {
   try {
-    const { type, amount, description, metadata } = req.body;
+    const { type, amount, description } = req.body;
+    let metadata = req.body.metadata || {};
 
     if (!type || !amount || amount <= 0) {
       sendError(res, "Invalid payment parameters");
@@ -34,6 +36,55 @@ export async function createGcashPaymentHandler(
     if (!["SUBSCRIPTION", "MEMBERSHIP"].includes(type)) {
       sendError(res, "Payment type must be SUBSCRIPTION or MEMBERSHIP");
       return;
+    }
+
+    if (type === "MEMBERSHIP") {
+      const gymId = metadata?.gymId as string | undefined;
+      const planId = metadata?.planId as string | undefined;
+      const coachId = (metadata?.coachId as string | undefined) || null;
+      if (!gymId || !planId) {
+        sendError(res, "Membership payment requires gymId and planId");
+        return;
+      }
+      const plan = await prisma.membershipPlan.findFirst({
+        where: { id: planId, gymId },
+      });
+      if (!plan) {
+        sendError(res, "Membership plan not found for this gym");
+        return;
+      }
+
+      let coachSessionPrice = 0;
+      let coachName: string | null = null;
+      if (coachId) {
+        const coach = await prisma.coach.findFirst({
+          where: { id: coachId, gymId },
+        });
+        if (!coach) {
+          sendError(res, "Selected coach not found for this gym");
+          return;
+        }
+        coachSessionPrice = coach.sessionPrice;
+        coachName = coach.name;
+      }
+
+      const expectedTotal = plan.price + coachSessionPrice;
+      if (Math.abs(Number(amount) - expectedTotal) > 0.01) {
+        sendError(
+          res,
+          `Payment amount must equal membership + coach session (₱${expectedTotal.toLocaleString()})`,
+        );
+        return;
+      }
+
+      metadata = {
+        ...metadata,
+        durationDays: plan.durationDays,
+        coachId,
+        coachName,
+        planPrice: plan.price,
+        coachSessionPrice,
+      };
     }
 
     // Generate a unique reference ID
@@ -56,6 +107,28 @@ export async function createGcashPaymentHandler(
       failureUrl = `${frontendUrl}/dashboard/user/gym/${gymId}/join/gcash?payment_failed=true`;
     }
 
+    // Membership cashless uses the gym's Xendit key; Owner plan uses platform key
+    let gymApiKey: string | undefined;
+    if (type === "MEMBERSHIP") {
+      const gymId = metadata?.gymId as string;
+      const gym = await prisma.gym.findUnique({ where: { id: gymId } });
+      if (!gym) {
+        sendError(res, "Gym not found", 404);
+        return;
+      }
+      const key = (gym.xenditApiKey || "").trim();
+      const keyOk =
+        key.startsWith("xnd_production_") || key.startsWith("xnd_development_");
+      if (!gym.xenditEnabled || !keyOk) {
+        sendError(
+          res,
+          "Cashless payment is not available for this gym. Choose Walk-in Payment.",
+        );
+        return;
+      }
+      gymApiKey = key;
+    }
+
     // Create the Xendit payment
     const xenditResult = await createGcashPayment({
       referenceId,
@@ -68,6 +141,7 @@ export async function createGcashPaymentHandler(
         type,
         ...metadata,
       },
+      apiKey: gymApiKey,
     });
 
     // Store payment record in database
@@ -105,6 +179,7 @@ export async function createGcashPaymentHandler(
 /**
  * GET /api/payments/:id/status
  * Check payment status (frontend polls this after redirect).
+ * On SUCCEEDED, always re-runs activation (idempotent) so membership unlocks even if the first attempt failed.
  */
 export async function checkPaymentStatus(
   req: AuthRequest,
@@ -128,6 +203,9 @@ export async function checkPaymentStatus(
       return;
     }
 
+    let status = payment.status;
+    let paidAt = payment.paidAt;
+
     // If payment is still pending, check Xendit for the latest status
     if (payment.status === "PENDING") {
       try {
@@ -146,34 +224,52 @@ export async function checkPaymentStatus(
             },
           });
 
-          // If payment succeeded, activate the subscription/membership
-          if (isSucceeded) {
-            await activatePayment(payment);
-          }
-
-          sendSuccess(res, {
-            id: payment.id,
-            status: isSucceeded ? "SUCCEEDED" : xenditStatus.status,
-            referenceId: payment.referenceId,
-            amount: payment.amount,
-            paidAt: isSucceeded
-              ? new Date().toISOString()
-              : null,
-          });
-          return;
+          status = isSucceeded ? "SUCCEEDED" : xenditStatus.status;
+          paidAt = isSucceeded ? new Date() : null;
         }
       } catch (err) {
         console.error("Failed to poll Xendit status:", err);
-        // Continue with cached status
+      }
+    }
+
+    let membershipActive = false;
+
+    if (status === "SUCCEEDED") {
+      membershipActive = await activatePayment({
+        id: payment.id,
+        userId: payment.userId,
+        type: payment.type,
+        amount: payment.amount,
+        referenceId: payment.referenceId,
+        metadata: payment.metadata,
+      });
+
+      // Confirm ACTIVE membership exists for MEMBERSHIP payments
+      if (payment.type === "MEMBERSHIP") {
+        const meta = (payment.metadata || {}) as Record<string, unknown>;
+        const gymId = meta.gymId as string | undefined;
+        if (gymId) {
+          const membership = await prisma.gymMembership.findFirst({
+            where: {
+              userId: payment.userId,
+              gymId,
+              status: { in: ["ACTIVE", "EXPIRING"] },
+            },
+          });
+          membershipActive = Boolean(membership);
+        }
+      } else if (payment.type === "SUBSCRIPTION") {
+        membershipActive = true;
       }
     }
 
     sendSuccess(res, {
       id: payment.id,
-      status: payment.status,
+      status,
       referenceId: payment.referenceId,
       amount: payment.amount,
-      paidAt: payment.paidAt?.toISOString() || null,
+      paidAt: paidAt?.toISOString() || null,
+      membershipActive,
     });
   } catch (error) {
     console.error("Check payment status error:", error);
@@ -242,12 +338,12 @@ export async function xenditWebhook(
       where: { id: payment.id },
       data: {
         status: newStatus,
-        paidAt: isSuccess ? new Date() : null,
+        paidAt: isSuccess ? payment.paidAt || new Date() : null,
       },
     });
 
-    // If payment succeeded, activate the subscription or membership
-    if (isSuccess && payment.status !== "SUCCEEDED") {
+    // Always attempt activation on success (idempotent) — covers first webhook and retries
+    if (isSuccess) {
       await activatePayment(payment);
     }
 
@@ -260,6 +356,7 @@ export async function xenditWebhook(
 
 /**
  * Activate a subscription or membership after successful payment.
+ * Idempotent — safe to call repeatedly for SUCCEEDED payments.
  */
 async function activatePayment(payment: {
   id: string;
@@ -268,11 +365,15 @@ async function activatePayment(payment: {
   amount: number;
   referenceId: string;
   metadata: unknown;
-}): Promise<void> {
-  const meta = payment.metadata as Record<string, unknown>;
+}): Promise<boolean> {
+  const meta = (payment.metadata || {}) as Record<string, unknown>;
 
   if (payment.type === "SUBSCRIPTION") {
-    // Create owner subscription
+    const existingSub = await prisma.ownerSubscription.findFirst({
+      where: { referenceNo: payment.referenceId },
+    });
+    if (existingSub) return true;
+
     const months = (meta.months as number) || 1;
     const validUntil = new Date();
     validUntil.setMonth(validUntil.getMonth() + months);
@@ -290,31 +391,31 @@ async function activatePayment(payment: {
       },
     });
 
-    // Update user role to OWNER
     await prisma.user.update({
       where: { id: payment.userId },
       data: { role: "OWNER" },
     });
 
-    // Record admin activity
     await prisma.adminActivity.create({
       data: {
         message: `New subscription purchase: ${meta.planName || "Unknown"} plan via GCash`,
         tone: "INFO",
       },
     });
-  } else if (payment.type === "MEMBERSHIP") {
-    // Create gym membership
-    const gymId = meta.gymId as string;
-    const planId = meta.planId as string;
+
+    return true;
+  }
+
+  if (payment.type === "MEMBERSHIP") {
+    const gymId = meta.gymId as string | undefined;
+    const planId = meta.planId as string | undefined;
     const coachId = (meta.coachId as string) || null;
 
     if (!gymId || !planId) {
       console.error("activatePayment MEMBERSHIP missing gymId/planId", meta);
-      return;
+      return false;
     }
 
-    // Idempotent: do not create duplicate active memberships
     const existing = await prisma.gymMembership.findFirst({
       where: {
         userId: payment.userId,
@@ -322,30 +423,48 @@ async function activatePayment(payment: {
         status: { in: ["ACTIVE", "EXPIRING"] },
       },
     });
+    if (existing) return true;
 
-    if (existing) return;
+    const plan = await prisma.membershipPlan.findUnique({ where: { id: planId } });
+    const durationDays =
+      plan?.durationDays ||
+      (typeof meta.durationDays === "number" ? meta.durationDays : 0) ||
+      30;
 
-    const plan = await prisma.membershipPlan.findUnique({
-      where: { id: planId },
+    if (!plan) {
+      console.warn(
+        "activatePayment: plan not found, using durationDays fallback",
+        planId,
+        durationDays,
+      );
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + durationDays);
+
+    // Ensure planId exists in DB — if missing, create membership only when plan row exists
+    if (!plan) {
+      console.error("activatePayment MEMBERSHIP plan missing — cannot create membership", planId);
+      return false;
+    }
+
+    await prisma.gymMembership.create({
+      data: {
+        userId: payment.userId,
+        gymId,
+        planId: plan.id,
+        coachId,
+        paymentMethod: "XENDIT",
+        paymentRef: payment.referenceId,
+        totalPaid: payment.amount,
+        status: "ACTIVE",
+        expiresAt,
+      },
     });
 
-    if (plan) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
-
-      await prisma.gymMembership.create({
-        data: {
-          userId: payment.userId,
-          gymId,
-          planId,
-          coachId,
-          paymentMethod: "XENDIT",
-          paymentRef: payment.referenceId,
-          totalPaid: payment.amount,
-          status: "ACTIVE",
-          expiresAt,
-        },
-      });
-    }
+    emitMembershipUpdated(payment.userId);
+    return true;
   }
+
+  return false;
 }

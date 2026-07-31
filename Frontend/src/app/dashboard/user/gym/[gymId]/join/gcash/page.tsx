@@ -9,15 +9,19 @@ export default function JoinGcashPage() {
   const router = useRouter();
   const params = useParams();
   const gymId = params.gymId as string;
-  const profile = useGymProfile(gymId);
+  const { profile, loading } = useGymProfile(gymId);
 
   useEffect(() => {
-    if (profile === null) {
+    if (!loading && !profile) {
       router.replace("/dashboard/user");
+      return;
     }
-  }, [profile, router]);
+    if (!loading && profile && !profile.cashlessEnabled) {
+      router.replace(`/dashboard/user/gym/${gymId}/join`);
+    }
+  }, [loading, profile, router, gymId]);
 
-  if (!profile) {
+  if (loading || !profile || !profile.cashlessEnabled) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-zinc-400">
         Loading…

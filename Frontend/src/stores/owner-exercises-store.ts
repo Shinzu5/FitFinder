@@ -1,8 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import api from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media";
 
 export type ExerciseMediaType = "image" | "video";
 
@@ -25,72 +25,92 @@ export interface GymExercise {
 
 export type GymExerciseInput = Omit<GymExercise, "id">;
 
+function mapExercise(raw: any): GymExercise {
+  return {
+    id: raw.id,
+    name: raw.name,
+    muscle: raw.muscle,
+    category: raw.category || raw.muscle || "",
+    difficulty: raw.difficulty || "Beginner",
+    sets: raw.sets || "3",
+    reps: raw.reps || "8-12",
+    rest: raw.rest || "60s",
+    targetMuscles: raw.targetMuscles || raw.muscle || "",
+    formTips: raw.formTips || "",
+    mediaUrl: raw.mediaUrl ? resolveMediaUrl(raw.mediaUrl) : null,
+    mediaType: (raw.mediaType as ExerciseMediaType) || null,
+    mediaName: raw.mediaName || null,
+    cardImageUrl: resolveMediaUrl(
+      raw.cardImageUrl || (raw.mediaType === "image" ? raw.mediaUrl : ""),
+      "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
+    ),
+  };
+}
+
 interface OwnerExercisesState {
   exercises: GymExercise[];
   loading: boolean;
   fetchExercises: () => Promise<void>;
   addExercise: (exercise: GymExerciseInput) => Promise<void>;
+  updateExercise: (id: string, exercise: GymExerciseInput) => Promise<void>;
   removeExercise: (id: string) => Promise<void>;
 }
 
-export const useOwnerExercisesStore = create<OwnerExercisesState>()(
-  persist(
-    (set, get) => ({
-      exercises: [],
-      loading: false,
+export const useOwnerExercisesStore = create<OwnerExercisesState>((set, get) => ({
+  exercises: [],
+  loading: false,
 
-      fetchExercises: async () => {
-        set({ loading: true });
-        try {
-          const { data } = await api.get("/owner/exercises");
-          if (data.success) {
-            set({ exercises: data.data, loading: false });
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to fetch exercises:", error);
-        }
-        set({ loading: false });
-      },
+  fetchExercises: async () => {
+    set({ loading: true });
+    try {
+      const { data } = await api.get("/owner/exercises");
+      if (data.success) {
+        set({ exercises: (data.data || []).map(mapExercise), loading: false });
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to fetch exercises:", error);
+    }
+    set({ loading: false });
+  },
 
-      addExercise: async (exercise) => {
-        try {
-          const { data } = await api.post("/owner/exercises", exercise);
-          if (data.success) {
-            set({ exercises: [...get().exercises, data.data] });
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to add exercise:", error);
-        }
+  addExercise: async (exercise) => {
+    try {
+      const { data } = await api.post("/owner/exercises", exercise);
+      if (data.success) {
+        set({ exercises: [...get().exercises, mapExercise(data.data)] });
+      }
+    } catch (error) {
+      console.error("Failed to add exercise:", error);
+    }
+  },
+
+  updateExercise: async (id, exercise) => {
+    try {
+      const { data } = await api.put(`/owner/exercises/${id}`, exercise);
+      if (data.success) {
         set({
-          exercises: [
-            ...get().exercises,
-            {
-              id: `exercise-${Date.now()}`,
-              ...exercise,
-              category: exercise.category || exercise.muscle,
-              cardImageUrl: exercise.cardImageUrl || "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
-            },
-          ],
+          exercises: get().exercises.map((item) =>
+            item.id === id ? mapExercise(data.data) : item,
+          ),
         });
-      },
+      }
+    } catch (error) {
+      console.error("Failed to update exercise:", error);
+    }
+  },
 
-      removeExercise: async (id) => {
-        try {
-          await api.delete(`/owner/exercises/${id}`);
-        } catch (error) {
-          console.error("Failed to remove exercise:", error);
-        }
+  removeExercise: async (id) => {
+    try {
+      const { data } = await api.delete(`/owner/exercises/${id}`);
+      if (data.success) {
         set({ exercises: get().exercises.filter((e) => e.id !== id) });
-      },
-    }),
-    {
-      name: "fitfinder-owner-exercises",
-      storage: createJSONStorage(() => localStorage),
-    },
-  ),
-);
+      }
+    } catch (error) {
+      console.error("Failed to remove exercise:", error);
+    }
+  },
+}));
 
 export function getUserDifficultyStyles(difficulty: string) {
   const value = difficulty.toLowerCase();

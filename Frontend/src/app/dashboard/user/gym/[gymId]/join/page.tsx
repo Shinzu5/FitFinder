@@ -9,15 +9,15 @@ export default function JoinGymPage() {
   const router = useRouter();
   const params = useParams();
   const gymId = params.gymId as string;
-  const profile = useGymProfile(gymId);
+  const { profile, loading } = useGymProfile(gymId);
 
   useEffect(() => {
-    if (profile === null) {
+    if (!loading && !profile) {
       router.replace("/dashboard/user");
     }
-  }, [profile, router]);
+  }, [loading, profile, router]);
 
-  if (!profile) {
+  if (loading || !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-zinc-400">
         Loading…

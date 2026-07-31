@@ -6,10 +6,15 @@ import { AuthRequest } from "../middleware/auth";
 // GET /api/admin/dashboard
 export async function getDashboard(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const [totalUsers, totalGyms, pendingGyms, activities, subscriptions] = await Promise.all([
+    // Gyms auto-publish on Owner plan purchase — publish any legacy PENDING rows
+    await prisma.gym.updateMany({
+      where: { status: "PENDING" },
+      data: { status: "ACTIVE" },
+    });
+
+    const [totalUsers, totalGyms, activities, subscriptions] = await Promise.all([
       prisma.user.count(),
       prisma.gym.count({ where: { status: "ACTIVE" } }),
-      prisma.gym.count({ where: { status: "PENDING" } }),
       prisma.adminActivity.findMany({ orderBy: { createdAt: "desc" }, take: 12 }),
       prisma.ownerSubscription.aggregate({ _sum: { price: true } }),
     ]);
@@ -30,7 +35,6 @@ export async function getDashboard(req: AuthRequest, res: Response): Promise<voi
     sendSuccess(res, {
       totalUsers,
       totalGyms,
-      pendingGyms,
       platformRevenue: subscriptions._sum.price || 0,
       revenueStats: {
         today: todayRev._sum.price || 0,
@@ -101,115 +105,6 @@ export async function removeUser(req: AuthRequest, res: Response): Promise<void>
   }
 }
 
-// GET /api/admin/gym-applications
-export async function getGymApplications(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const { status } = req.query;
-
-    const where: any = {};
-    if (status && typeof status === "string") {
-      where.status = status.toUpperCase();
-    }
-
-    const gyms = await prisma.gym.findMany({
-      where,
-      include: {
-        owner: { select: { id: true, fullName: true, email: true } },
-        ownerSubscriptions: { take: 1, orderBy: { paidAt: "desc" } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const applications = gyms.map((gym) => ({
-      id: gym.id,
-      gymName: gym.name,
-      ownerName: gym.owner.fullName,
-      ownerEmail: gym.owner.email,
-      contactNumber: gym.contactNumber,
-      location: gym.address,
-      imageUrl: gym.coverImageUrl,
-      websiteSlug: gym.website,
-      planName: gym.ownerSubscriptions[0]?.planName || "N/A",
-      planPrice: gym.ownerSubscriptions[0]?.price || 0,
-      submittedAt: gym.createdAt.getTime(),
-      status: gym.status.toLowerCase(),
-    }));
-
-    sendSuccess(res, applications);
-  } catch (error) {
-    console.error("Get gym applications error:", error);
-    sendError(res, "Failed to fetch applications", 500);
-  }
-}
-
-// PUT /api/admin/gym-applications/:id/approve
-export async function approveGym(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const gym = await prisma.gym.findUnique({ where: { id: req.params.id as string } });
-
-    if (!gym) {
-      sendError(res, "Gym not found", 404);
-      return;
-    }
-
-    if (gym.status !== "PENDING") {
-      sendError(res, "Gym is not pending approval");
-      return;
-    }
-
-    const updated = await prisma.gym.update({
-      where: { id: req.params.id as string },
-      data: { status: "ACTIVE" },
-    });
-
-    await prisma.adminActivity.create({
-      data: {
-        message: `${gym.name} approved`,
-        tone: "SUCCESS",
-      },
-    });
-
-    sendSuccess(res, updated, "Gym approved");
-  } catch (error) {
-    console.error("Approve gym error:", error);
-    sendError(res, "Failed to approve gym", 500);
-  }
-}
-
-// PUT /api/admin/gym-applications/:id/decline
-export async function declineGym(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const gym = await prisma.gym.findUnique({ where: { id: req.params.id as string } });
-
-    if (!gym) {
-      sendError(res, "Gym not found", 404);
-      return;
-    }
-
-    if (gym.status !== "PENDING") {
-      sendError(res, "Gym is not pending approval");
-      return;
-    }
-
-    const updated = await prisma.gym.update({
-      where: { id: req.params.id as string },
-      data: { status: "DECLINED" },
-    });
-
-    await prisma.adminActivity.create({
-      data: {
-        message: `${gym.name} declined`,
-        tone: "WARNING",
-      },
-    });
-
-    sendSuccess(res, updated, "Gym declined");
-  } catch (error) {
-    console.error("Decline gym error:", error);
-    sendError(res, "Failed to decline gym", 500);
-  }
-}
-
 // GET /api/admin/transactions
 export async function getTransactions(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -240,5 +135,49 @@ export async function getTransactions(req: AuthRequest, res: Response): Promise<
   } catch (error) {
     console.error("Get transactions error:", error);
     sendError(res, "Failed to fetch transactions", 500);
+  }
+}
+
+// GET /api/admin/walk-in-approvals — view all walk-in membership requests
+export async function getWalkInApprovals(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const approvals = await prisma.walkInApproval.findMany({
+      include: {
+        gym: { select: { name: true } },
+        plan: { select: { name: true, price: true } },
+      },
+      orderBy: { submittedAt: "desc" },
+      take: 200,
+    });
+
+    sendSuccess(
+      res,
+      approvals.map((a) => {
+        const row = a as typeof a & { paymentStatus?: string; rejectionReason?: string };
+        return {
+          id: row.id,
+          userId: row.userId,
+          memberName: row.memberName,
+          memberEmail: row.memberEmail,
+          gymId: row.gymId,
+          gymName: row.gym.name,
+          planId: row.planId,
+          planName: row.plan.name,
+          planPrice: row.plan.price,
+          paymentRef: row.paymentRef,
+          totalPaid: row.totalPaid,
+          paymentStatus: String(row.paymentStatus || "PAID").toLowerCase(),
+          approvalStatus: row.status.toLowerCase(),
+          status: row.status.toLowerCase(),
+          rejectionReason: row.rejectionReason || "",
+          submittedAt: row.submittedAt.getTime(),
+          reviewedAt: row.reviewedAt?.getTime() ?? null,
+          consumedAt: row.consumedAt?.getTime() ?? null,
+        };
+      }),
+    );
+  } catch (error) {
+    console.error("Get admin walk-in approvals error:", error);
+    sendError(res, "Failed to fetch walk-in approvals", 500);
   }
 }

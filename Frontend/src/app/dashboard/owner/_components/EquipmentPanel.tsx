@@ -1,26 +1,51 @@
 "use client";
 
-import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   getEquipmentStatusLabel,
   getEquipmentStatusStyles,
   useOwnerEquipmentStore,
+  type GymEquipment,
 } from "@/stores/owner-equipment-store";
 
 export function EquipmentPanel() {
   const equipment = useOwnerEquipmentStore((state) => state.equipment);
+  const loading = useOwnerEquipmentStore((state) => state.loading);
+  const fetchEquipment = useOwnerEquipmentStore((state) => state.fetchEquipment);
   const addEquipment = useOwnerEquipmentStore((state) => state.addEquipment);
+  const updateEquipment = useOwnerEquipmentStore((state) => state.updateEquipment);
   const toggleStatus = useOwnerEquipmentStore((state) => state.toggleStatus);
   const removeEquipment = useOwnerEquipmentStore((state) => state.removeEquipment);
 
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function handleAdd(e: React.FormEvent) {
+  useEffect(() => {
+    void fetchEquipment();
+    const id = window.setInterval(() => void fetchEquipment(), 15000);
+    return () => window.clearInterval(id);
+  }, [fetchEquipment]);
+
+  function resetForm() {
+    setName("");
+    setQuantity("");
+    setEditingId(null);
+    setError(null);
+  }
+
+  function startEdit(item: GymEquipment) {
+    setEditingId(item.id);
+    setName(item.name);
+    setQuantity(String(item.quantity));
+    setError(null);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmedName = name.trim();
     const qty = Number(quantity);
@@ -34,10 +59,12 @@ export function EquipmentPanel() {
       return;
     }
 
-    addEquipment({ name: trimmedName, quantity: qty });
-    setName("");
-    setQuantity("");
-    setError(null);
+    if (editingId) {
+      await updateEquipment(editingId, { name: trimmedName, quantity: qty });
+    } else {
+      await addEquipment({ name: trimmedName, quantity: qty });
+    }
+    resetForm();
   }
 
   return (
@@ -54,7 +81,13 @@ export function EquipmentPanel() {
               </tr>
             </thead>
             <tbody>
-              {equipment.length === 0 ? (
+              {loading && equipment.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-zinc-500">
+                    Loading equipment…
+                  </td>
+                </tr>
+              ) : equipment.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-10 text-center text-zinc-500">
                     No equipment yet. Add your first item on the right.
@@ -68,21 +101,32 @@ export function EquipmentPanel() {
                     <td className="py-4 pr-4">
                       <button
                         type="button"
-                        onClick={() => toggleStatus(item.id)}
+                        onClick={() => void toggleStatus(item.id)}
                         className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${getEquipmentStatusStyles(item.status)}`}
+                        title="Click to cycle status"
                       >
                         {getEquipmentStatusLabel(item.status)}
                       </button>
                     </td>
                     <td className="py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeEquipment(item.id)}
-                        className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400"
-                        aria-label={`Delete ${item.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(item)}
+                          className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white"
+                          aria-label={`Edit ${item.name}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeEquipment(item.id)}
+                          className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400"
+                          aria-label={`Delete ${item.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -91,13 +135,16 @@ export function EquipmentPanel() {
           </table>
         </div>
         <p className="mt-4 text-xs text-zinc-500">
-          Click the status badge to toggle availability. Members see this in real time.
+          Click the status badge to cycle: Available → In Use → Under Maintenance. Members see
+          updates automatically.
         </p>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-[#141414] p-5">
-        <h2 className="mb-5 text-lg font-semibold text-white">Add Equipment</h2>
-        <form onSubmit={handleAdd} className="space-y-4">
+        <h2 className="mb-5 text-lg font-semibold text-white">
+          {editingId ? "Edit Equipment" : "Add Equipment"}
+        </h2>
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="equipmentName">Name</Label>
             <Input
@@ -121,12 +168,23 @@ export function EquipmentPanel() {
 
           {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-[#FFD700] px-4 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200]"
-          >
-            Add Equipment
-          </button>
+          <div className="flex gap-2">
+            {editingId ? (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5"
+              >
+                Cancel
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              className="flex-1 rounded-lg bg-[#FFD700] px-4 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+            >
+              {editingId ? "Save Changes" : "Add Equipment"}
+            </button>
+          </div>
         </form>
       </section>
     </div>

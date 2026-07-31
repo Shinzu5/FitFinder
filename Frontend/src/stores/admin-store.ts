@@ -30,7 +30,6 @@ export function formatActivityTime(timestamp: number) {
 interface AdminState {
   totalUsers: number;
   totalGyms: number;
-  pendingGyms: number;
   platformRevenue: number;
   revenueStats: {
     today: number;
@@ -57,7 +56,6 @@ function mapTone(tone: string): ActivityTone {
 export const useAdminStore = create<AdminState>((set, get) => ({
   totalUsers: 0,
   totalGyms: 0,
-  pendingGyms: 0,
   platformRevenue: 0,
   revenueStats: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
   activity: [],
@@ -99,7 +97,6 @@ export const useAdminStore = create<AdminState>((set, get) => ({
       set({
         totalUsers: data.data.totalUsers ?? 0,
         totalGyms: data.data.totalGyms ?? 0,
-        pendingGyms: data.data.pendingGyms ?? 0,
         platformRevenue: data.data.platformRevenue ?? 0,
         revenueStats: stats,
         activity,

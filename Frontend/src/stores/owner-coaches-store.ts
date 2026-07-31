@@ -50,6 +50,7 @@ interface OwnerCoachesState {
   loading: boolean;
   fetchCoaches: () => Promise<void>;
   addCoach: (coach: GymCoachInput) => Promise<void>;
+  updateCoach: (id: string, coach: GymCoachInput) => Promise<void>;
   removeCoach: (id: string) => Promise<void>;
 }
 
@@ -88,6 +89,23 @@ export const useOwnerCoachesStore = create<OwnerCoachesState>()(
             ...get().coaches,
             { id: `coach-${Date.now()}`, ...coach },
           ],
+        });
+      },
+
+      updateCoach: async (id, coach) => {
+        try {
+          const { data } = await api.put(`/owner/coaches/${id}`, coach);
+          if (data.success) {
+            set({
+              coaches: get().coaches.map((c) => (c.id === id ? data.data : c)),
+            });
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to update coach:", error);
+        }
+        set({
+          coaches: get().coaches.map((c) => (c.id === id ? { ...c, ...coach } : c)),
         });
       },
 

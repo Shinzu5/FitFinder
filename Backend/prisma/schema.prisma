@@ -24,7 +24,8 @@ enum GymStatus {
 
 enum EquipmentStatus {
   AVAILABLE
-  UNAVAILABLE
+  IN_USE
+  UNDER_MAINTENANCE
 }
 
 enum MembershipStatus {
@@ -127,8 +128,12 @@ model Gym {
   coverImageUrl  String    @default("")
   schedule       String    @default("Mon-Sun: 6AM - 10PM")
   pricePerMonth  Float     @default(0)
-  status         GymStatus @default(PENDING)
+  status         GymStatus @default(ACTIVE)
   ownerId        String
+  /** Optional gym-owned Xendit secret key for cashless memberships */
+  xenditApiKey   String    @default("")
+  /** Owner can toggle cashless on/off when a valid key is saved */
+  xenditEnabled  Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -351,15 +356,21 @@ model WalkInApproval {
   paymentRef        String
   totalPaid         Float
   durationDays      Int
+  /** Walk-in OTC: recorded as paid when the gymer submits Proceed */
+  paymentStatus     String         @default("PAID")
   status            ApprovalStatus @default(PENDING)
+  rejectionReason   String         @default("")
   submittedAt       DateTime       @default(now())
   reviewedAt        DateTime?
+  /** Set when gymer clicks Done (onboarding complete — never show wait screen again) */
   consumedAt        DateTime?
 
   user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   gym  Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
   plan MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
+  @@index([userId, gymId, status])
+  @@index([gymId, status])
   @@map("walk_in_approvals")
 }
 

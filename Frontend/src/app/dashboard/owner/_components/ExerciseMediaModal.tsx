@@ -2,6 +2,7 @@
 
 import { ImageIcon, Play, X } from "lucide-react";
 import type { GymExercise } from "@/stores/owner-exercises-store";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface ExerciseMediaModalProps {
   exercise: GymExercise | null;
@@ -10,6 +11,8 @@ interface ExerciseMediaModalProps {
 
 export function ExerciseMediaModal({ exercise, onClose }: ExerciseMediaModalProps) {
   if (!exercise?.mediaUrl || !exercise.mediaType) return null;
+
+  const mediaSrc = resolveMediaUrl(exercise.mediaUrl);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -36,7 +39,7 @@ export function ExerciseMediaModal({ exercise, onClose }: ExerciseMediaModalProp
         </div>
         {exercise.mediaType === "video" ? (
           <video
-            src={exercise.mediaUrl}
+            src={mediaSrc}
             controls
             playsInline
             className="max-h-[70vh] w-full rounded-xl bg-black object-contain"
@@ -46,7 +49,7 @@ export function ExerciseMediaModal({ exercise, onClose }: ExerciseMediaModalProp
         ) : (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={exercise.mediaUrl}
+            src={mediaSrc}
             alt={exercise.name}
             className="max-h-[70vh] w-full rounded-xl object-contain"
           />

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Trash2, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pencil, Trash2, Upload, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resolveMediaUrl, uploadImageFile } from "@/lib/media";
 import {
   getDifficultyStyles,
   type ExerciseMediaType,
@@ -15,7 +16,7 @@ import {
   ExerciseMediaModal,
 } from "./ExerciseMediaModal";
 
-const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
 
 interface ExerciseFormState {
   name: string;
@@ -24,6 +25,7 @@ interface ExerciseFormState {
   mediaUrl: string | null;
   mediaType: ExerciseMediaType | null;
   mediaName: string | null;
+  mediaPreview: string | null;
 }
 
 const EMPTY_FORM: ExerciseFormState = {
@@ -33,68 +35,96 @@ const EMPTY_FORM: ExerciseFormState = {
   mediaUrl: null,
   mediaType: null,
   mediaName: null,
+  mediaPreview: null,
 };
 
 export function ExercisesPanel() {
   const exercises = useOwnerExercisesStore((state) => state.exercises);
+  const loading = useOwnerExercisesStore((state) => state.loading);
+  const fetchExercises = useOwnerExercisesStore((state) => state.fetchExercises);
   const addExercise = useOwnerExercisesStore((state) => state.addExercise);
+  const updateExercise = useOwnerExercisesStore((state) => state.updateExercise);
   const removeExercise = useOwnerExercisesStore((state) => state.removeExercise);
 
   const [form, setForm] = useState<ExerciseFormState>(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [previewExercise, setPreviewExercise] = useState<GymExercise | null>(null);
+
+  useEffect(() => {
+    void fetchExercises();
+  }, [fetchExercises]);
 
   function resetForm() {
     setForm(EMPTY_FORM);
+    setEditingId(null);
     setError(null);
   }
 
-  function handleMediaUpload(file: File | undefined) {
+  function startEdit(exercise: GymExercise) {
+    setEditingId(exercise.id);
+    setForm({
+      name: exercise.name,
+      muscle: exercise.muscle,
+      difficulty: exercise.difficulty,
+      mediaUrl: exercise.mediaUrl,
+      mediaType: exercise.mediaType,
+      mediaName: exercise.mediaName,
+      mediaPreview: exercise.mediaUrl ? resolveMediaUrl(exercise.mediaUrl) : null,
+    });
+    setError(null);
+  }
+
+  async function handleMediaUpload(file: File | undefined) {
     if (!file) return;
 
     const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
+    const isVideo = file.type === "video/mp4" || file.type.startsWith("video/");
     if (!isImage && !isVideo) {
-      setError("Please upload a photo or video file.");
+      setError("Please upload a photo or MP4 video.");
       return;
     }
     if (file.size > MAX_MEDIA_BYTES) {
-      setError("File is too large. Please use a file under 20 MB.");
+      setError("File is too large. Please use a file under 10 MB.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") return;
-      setForm((prev) => ({
-        ...prev,
-        mediaUrl: result,
-        mediaType: isVideo ? "video" : "image",
-        mediaName: file.name,
-      }));
-      setError(null);
-    };
-    reader.onerror = () => setError("Failed to read the file. Try again.");
-    reader.readAsDataURL(file);
+    setUploading(true);
+    setError(null);
+    const uploaded = await uploadImageFile(file);
+    setUploading(false);
+
+    if (!uploaded) {
+      setError("Upload failed. Try another file.");
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      mediaUrl: uploaded.url,
+      mediaType: isVideo ? "video" : "image",
+      mediaName: uploaded.filename,
+      mediaPreview: resolveMediaUrl(uploaded.url),
+    }));
   }
 
-  function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim() || !form.muscle.trim() || !form.difficulty.trim()) {
       setError("Please fill in exercise name, muscle, and difficulty.");
       return;
     }
 
-    addExercise({
-      name: form.name,
-      muscle: form.muscle,
-      category: form.muscle,
-      difficulty: form.difficulty,
+    const payload = {
+      name: form.name.trim(),
+      muscle: form.muscle.trim(),
+      category: form.muscle.trim(),
+      difficulty: form.difficulty.trim(),
       sets: "3",
       reps: "8-12",
       rest: "60s",
-      targetMuscles: form.muscle,
+      targetMuscles: form.muscle.trim(),
       formTips: "Follow your coach's cues and move with control.",
       mediaUrl: form.mediaUrl,
       mediaType: form.mediaType,
@@ -103,7 +133,13 @@ export function ExercisesPanel() {
         form.mediaType === "image" && form.mediaUrl
           ? form.mediaUrl
           : "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
-    });
+    };
+
+    if (editingId) {
+      await updateExercise(editingId, payload);
+    } else {
+      await addExercise(payload);
+    }
     resetForm();
   }
 
@@ -123,7 +159,13 @@ export function ExercisesPanel() {
                 </tr>
               </thead>
               <tbody>
-                {exercises.length === 0 ? (
+                {loading && exercises.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-zinc-500">
+                      Loading exercises…
+                    </td>
+                  </tr>
+                ) : exercises.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-zinc-500">
                       No exercises yet. Add your first exercise on the right.
@@ -148,14 +190,24 @@ export function ExercisesPanel() {
                         />
                       </td>
                       <td className="py-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeExercise(exercise.id)}
-                          className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400"
-                          aria-label={`Delete ${exercise.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(exercise)}
+                            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white"
+                            aria-label={`Edit ${exercise.name}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void removeExercise(exercise.id)}
+                            className="rounded-lg border border-white/10 p-2 text-zinc-400 transition hover:bg-red-500/10 hover:text-red-400"
+                            aria-label={`Delete ${exercise.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -166,8 +218,10 @@ export function ExercisesPanel() {
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-[#141414] p-5">
-          <h2 className="mb-5 text-lg font-semibold text-white">Add Exercise</h2>
-          <form onSubmit={handleAdd} className="space-y-4">
+          <h2 className="mb-5 text-lg font-semibold text-white">
+            {editingId ? "Edit Exercise" : "Add Exercise"}
+          </h2>
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="exerciseName">Exercise Name</Label>
               <Input
@@ -199,20 +253,29 @@ export function ExercisesPanel() {
             <div className="space-y-2">
               <Label>Exercise Media (Photo/Video)</Label>
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-[#0A0A0A] px-4 py-8 text-sm text-zinc-400 transition hover:border-[#FFD700]/40 hover:text-zinc-200">
-                <Upload className="h-5 w-5" />
-                {form.mediaName ? form.mediaName : "Upload Photo or Video"}
+                {uploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Upload className="h-5 w-5" />
+                )}
+                {uploading
+                  ? "Uploading…"
+                  : form.mediaName
+                    ? form.mediaName
+                    : "Upload Photo or Video"}
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4"
                   className="hidden"
-                  onChange={(e) => handleMediaUpload(e.target.files?.[0])}
+                  disabled={uploading}
+                  onChange={(e) => void handleMediaUpload(e.target.files?.[0])}
                 />
               </label>
-              {form.mediaUrl ? (
+              {form.mediaPreview ? (
                 <div className="overflow-hidden rounded-xl border border-white/10 bg-black">
                   {form.mediaType === "video" ? (
                     <video
-                      src={form.mediaUrl}
+                      src={form.mediaPreview}
                       controls
                       playsInline
                       className="max-h-48 w-full object-contain"
@@ -220,7 +283,7 @@ export function ExercisesPanel() {
                   ) : (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
-                      src={form.mediaUrl}
+                      src={form.mediaPreview}
                       alt="Exercise preview"
                       className="max-h-48 w-full object-contain"
                     />
@@ -241,9 +304,10 @@ export function ExercisesPanel() {
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#e6c200]"
+                disabled={uploading}
+                className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-50"
               >
-                Add
+                {editingId ? "Save" : "Add"}
               </button>
             </div>
           </form>

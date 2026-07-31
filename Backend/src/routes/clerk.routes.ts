@@ -11,21 +11,26 @@ import { requireRole } from "../middleware/requireRole";
 
 const router = Router();
 
-// All clerk routes require CLERK role
-router.use(authenticate, requireRole("CLERK"));
+router.use(authenticate);
 
-router.get("/dashboard", getDashboard);
-router.get("/transactions", getTransactions);
-router.post("/transactions", recordPayment);
-router.get("/members", getMembers);
-router.post("/members", registerMember);
-router.get("/plans", getPlans);
-router.get("/approvals", getApprovals);
-router.put("/approvals/:id/approve", approveWalkIn);
-router.put("/approvals/:id/decline", declineWalkIn);
-router.get("/walk-in-payments", getWalkInPayments);
-router.post("/walk-in-payments/:id/complete", completeWalkInPayment);
-router.get("/sales/closing-preview", getClosingPreview);
-router.post("/sales/close", closeDailySales);
+const clerkOnly = requireRole("CLERK");
+/** Owner and Clerk share walk-in approval / Done — reuses same controllers */
+const walkInStaff = requireRole("CLERK", "OWNER");
+
+router.get("/dashboard", clerkOnly, getDashboard);
+router.get("/transactions", clerkOnly, getTransactions);
+router.post("/transactions", clerkOnly, recordPayment);
+router.get("/members", clerkOnly, getMembers);
+router.post("/members", clerkOnly, registerMember);
+router.get("/plans", clerkOnly, getPlans);
+
+router.get("/approvals", walkInStaff, getApprovals);
+router.put("/approvals/:id/approve", walkInStaff, approveWalkIn);
+router.put("/approvals/:id/decline", walkInStaff, declineWalkIn);
+router.get("/walk-in-payments", walkInStaff, getWalkInPayments);
+router.post("/walk-in-payments/:id/complete", walkInStaff, completeWalkInPayment);
+
+router.get("/sales/closing-preview", clerkOnly, getClosingPreview);
+router.post("/sales/close", clerkOnly, closeDailySales);
 
 export default router;

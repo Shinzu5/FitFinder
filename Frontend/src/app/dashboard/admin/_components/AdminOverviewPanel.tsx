@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { useAdminStore, formatActivityTime } from "@/stores/admin-store";
-import { useAdminGymApprovalsStore } from "@/stores/admin-gym-approvals-store";
 import { AdminRevenueChart } from "./AdminRevenueChart";
 
 function ActivityDot({ tone }: { tone: "success" | "info" | "warning" }) {
@@ -19,20 +17,13 @@ export function AdminOverviewPanel() {
   const platformRevenue = useAdminStore((state) => state.platformRevenue);
   const totalUsers = useAdminStore((state) => state.totalUsers);
   const totalGyms = useAdminStore((state) => state.totalGyms);
-  const pendingGyms = useAdminStore((state) => state.pendingGyms);
   const activity = useAdminStore((state) => state.activity);
   const loading = useAdminStore((state) => state.loading);
   const fetchDashboard = useAdminStore((state) => state.fetchDashboard);
-  const fetchApplications = useAdminGymApprovalsStore((state) => state.fetchApplications);
-  const applications = useAdminGymApprovalsStore((state) => state.applications);
 
   useEffect(() => {
     void fetchDashboard();
-    void fetchApplications();
-  }, [fetchDashboard, fetchApplications]);
-
-  const pendingApprovals =
-    pendingGyms || applications.filter((app) => app.status === "pending").length;
+  }, [fetchDashboard]);
 
   const statCards = [
     {
@@ -40,28 +31,24 @@ export function AdminOverviewPanel() {
       value: loading ? "…" : String(totalGyms),
       sub: "Active gyms on platform",
       highlight: false,
-      bordered: false,
     },
     {
       label: "Total Users",
       value: loading ? "…" : totalUsers.toLocaleString(),
       sub: "Registered accounts",
       highlight: false,
-      bordered: false,
     },
     {
       label: "Platform Revenue",
       value: loading ? "…" : `₱${platformRevenue.toLocaleString()}`,
       sub: "Owner subscriptions",
       highlight: false,
-      bordered: false,
     },
     {
-      label: "Pending Approvals",
-      value: String(pendingApprovals),
-      sub: "Requires attention",
+      label: "Active Gyms",
+      value: loading ? "…" : String(totalGyms),
+      sub: "Published automatically after Owner plan purchase",
       highlight: true,
-      bordered: true,
     },
   ];
 
@@ -72,7 +59,7 @@ export function AdminOverviewPanel() {
           <article
             key={stat.label}
             className={`rounded-2xl border bg-[#0e0e10] px-5 py-5 ${
-              stat.bordered
+              stat.highlight
                 ? "border-[#FACC15]/50 shadow-[0_0_30px_rgba(250,204,21,0.08)]"
                 : "border-zinc-800/70"
             }`}
@@ -92,14 +79,6 @@ export function AdminOverviewPanel() {
             >
               {stat.sub}
             </p>
-            {stat.bordered && pendingApprovals > 0 ? (
-              <Link
-                href="/dashboard/admin/gym-approvals"
-                className="mt-3 inline-flex text-xs font-semibold text-[#FACC15] hover:underline"
-              >
-                Review approvals →
-              </Link>
-            ) : null}
           </article>
         ))}
       </div>

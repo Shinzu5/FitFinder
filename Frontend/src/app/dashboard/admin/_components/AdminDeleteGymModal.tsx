@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 interface AdminDeleteGymModalProps {
   open: boolean;
   gymName: string;
+  busy?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -12,6 +13,7 @@ interface AdminDeleteGymModalProps {
 export function AdminDeleteGymModal({
   open,
   gymName,
+  busy = false,
   onClose,
   onConfirm,
 }: AdminDeleteGymModalProps) {
@@ -38,16 +40,18 @@ export function AdminDeleteGymModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5"
+            disabled={busy}
+            className="rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-500"
+            disabled={busy}
+            className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-50"
           >
-            Delete Gym
+            {busy ? "Deleting…" : "Delete Gym"}
           </button>
         </div>
       </div>

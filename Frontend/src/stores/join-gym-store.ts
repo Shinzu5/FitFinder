@@ -29,7 +29,7 @@ interface JoinGymFlowState {
   xenditPaymentId: string | null;
   paymentLoading: boolean;
   paymentError: string | null;
-  initJoin: (gymId: string, defaultPlanId: string) => void;
+  initJoin: (gymId: string, defaultPlanId: string, cashlessEnabled?: boolean) => void;
   setPlanId: (planId: string) => void;
   setPaymentMethod: (method: JoinPaymentMethod) => void;
   setCoachId: (coachId: string | null) => void;
@@ -61,17 +61,17 @@ export const useJoinGymStore = create<JoinGymFlowState>()(
     (set) => ({
       gymId: null,
       selectedPlanId: null,
-      paymentMethod: "cashless",
+      paymentMethod: "walk-in",
       selectedCoachId: null,
       xenditPaymentId: null,
       paymentLoading: false,
       paymentError: null,
 
-      initJoin: (gymId, defaultPlanId) =>
+      initJoin: (gymId, defaultPlanId, cashlessEnabled = false) =>
         set({
           gymId,
           selectedPlanId: defaultPlanId,
-          paymentMethod: "cashless",
+          paymentMethod: cashlessEnabled ? "cashless" : "walk-in",
           selectedCoachId: null,
           xenditPaymentId: null,
           paymentLoading: false,
@@ -89,7 +89,7 @@ export const useJoinGymStore = create<JoinGymFlowState>()(
         set({
           gymId: null,
           selectedPlanId: null,
-          paymentMethod: "cashless",
+          paymentMethod: "walk-in",
           selectedCoachId: null,
           xenditPaymentId: null,
           paymentLoading: false,

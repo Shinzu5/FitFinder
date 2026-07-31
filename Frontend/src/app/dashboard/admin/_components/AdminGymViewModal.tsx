@@ -2,6 +2,7 @@
 
 import { CheckCircle2, MapPin, X } from "lucide-react";
 import type { AdminActiveGym } from "@/stores/admin-gyms-store";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface AdminGymViewModalProps {
   gym: AdminActiveGym | null;
@@ -22,7 +23,11 @@ export function AdminGymViewModal({ gym, onClose }: AdminGymViewModalProps) {
       <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-zinc-800/70 bg-[#0e0e10] shadow-2xl">
         <div className="relative h-52 overflow-hidden sm:h-60">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={gym.imageUrl} alt={gym.name} className="h-full w-full object-cover" />
+          <img
+            src={resolveMediaUrl(gym.imageUrl)}
+            alt={gym.name}
+            className="h-full w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e10] via-[#0e0e10]/30 to-transparent" />
           <button
             type="button"

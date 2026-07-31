@@ -1,20 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, Search, Trash2 } from "lucide-react";
 import { useAdminStore } from "@/stores/admin-store";
 import { type AdminActiveGym, useAdminGymsStore } from "@/stores/admin-gyms-store";
+import { resolveMediaUrl } from "@/lib/media";
 import { AdminDeleteGymModal } from "./AdminDeleteGymModal";
 import { AdminGymViewModal } from "./AdminGymViewModal";
 
 export function AdminGymsPanel() {
   const gyms = useAdminGymsStore((state) => state.gyms);
+  const loading = useAdminGymsStore((state) => state.loading);
+  const error = useAdminGymsStore((state) => state.error);
+  const fetchGyms = useAdminGymsStore((state) => state.fetchGyms);
   const deleteGym = useAdminGymsStore((state) => state.deleteGym);
   const addActivity = useAdminStore((state) => state.addActivity);
 
   const [search, setSearch] = useState("");
   const [viewGym, setViewGym] = useState<AdminActiveGym | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminActiveGym | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchGyms();
+    const onFocus = () => void fetchGyms();
+    window.addEventListener("focus", onFocus);
+    const id = window.setInterval(() => void fetchGyms(), 15000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(id);
+    };
+  }, [fetchGyms]);
 
   const filteredGyms = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -25,9 +42,18 @@ export function AdminGymsPanel() {
     );
   }, [gyms, search]);
 
-  function handleConfirmDelete() {
-    if (!deleteTarget) return;
-    deleteGym(deleteTarget.id);
+  async function handleConfirmDelete() {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const ok = await deleteGym(deleteTarget.id);
+    setDeleting(false);
+    if (!ok) {
+      setDeleteError(
+        useAdminGymsStore.getState().error || "Failed to delete gym. Try again.",
+      );
+      return;
+    }
     addActivity(`${deleteTarget.name} removed from platform`, "warning");
     setDeleteTarget(null);
   }
@@ -48,6 +74,12 @@ export function AdminGymsPanel() {
           </div>
         </div>
 
+        {deleteError || error ? (
+          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {deleteError || error}
+          </p>
+        ) : null}
+
         <section className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
@@ -61,10 +93,16 @@ export function AdminGymsPanel() {
                 </tr>
               </thead>
               <tbody>
-                {filteredGyms.length === 0 ? (
+                {loading && gyms.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-12 text-center text-zinc-500">
-                      No gyms found.
+                      Loading gyms…
+                    </td>
+                  </tr>
+                ) : filteredGyms.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-12 text-center text-zinc-500">
+                      No active gyms found.
                     </td>
                   </tr>
                 ) : (
@@ -75,7 +113,7 @@ export function AdminGymsPanel() {
                           <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-900">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={gym.imageUrl}
+                              src={resolveMediaUrl(gym.imageUrl)}
                               alt={gym.name}
                               className="h-full w-full object-cover"
                             />
@@ -120,12 +158,14 @@ export function AdminGymsPanel() {
       </div>
 
       <AdminGymViewModal gym={viewGym} onClose={() => setViewGym(null)} />
-
       <AdminDeleteGymModal
         open={Boolean(deleteTarget)}
-        gymName={deleteTarget?.name ?? "this gym"}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
+        gymName={deleteTarget?.name ?? ""}
+        busy={deleting}
+        onClose={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+        onConfirm={() => void handleConfirmDelete()}
       />
     </>
   );

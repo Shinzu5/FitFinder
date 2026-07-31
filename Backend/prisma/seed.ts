@@ -286,9 +286,9 @@ async function main() {
   // ─── Equipment ────────────────────────────────────────────────────────────
   const equipmentData = [
     { id: "eq-seed-1", name: "Bench Press", quantity: 2, status: "AVAILABLE" as const },
-    { id: "eq-seed-2", name: "Squat Rack", quantity: 1, status: "UNAVAILABLE" as const },
+    { id: "eq-seed-2", name: "Squat Rack", quantity: 1, status: "UNDER_MAINTENANCE" as const },
     { id: "eq-seed-3", name: "Dumbbell Set", quantity: 3, status: "AVAILABLE" as const },
-    { id: "eq-seed-4", name: "Treadmill", quantity: 2, status: "UNAVAILABLE" as const },
+    { id: "eq-seed-4", name: "Treadmill", quantity: 2, status: "IN_USE" as const },
   ];
 
   for (const eq of equipmentData) {

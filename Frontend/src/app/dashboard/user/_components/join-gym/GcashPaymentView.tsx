@@ -94,11 +94,23 @@ export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
         <article className="rounded-2xl border border-white/10 bg-[#141414] p-5">
           <p className="text-xs text-zinc-500">Total Amount Due</p>
           <p className="mt-1 text-4xl font-bold text-[#FFD700]">₱{total.toLocaleString()}</p>
-          <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
-            <span className="text-zinc-400">Membership</span>
-            <span className="text-white">
-              ₱{total.toLocaleString()} ({selectedPlan?.name})
-            </span>
+          <div className="mt-4 space-y-2 border-t border-white/10 pt-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-400">Membership Plan</span>
+              <span className="text-white">
+                ₱{(selectedPlan?.price ?? 0).toLocaleString()}
+                {selectedPlan?.name ? ` (${selectedPlan.name})` : ""}
+              </span>
+            </div>
+            {selectedCoach ? (
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Coach Session</span>
+                <span className="text-white">
+                  ₱{selectedCoach.sessionPrice.toLocaleString()}
+                  {selectedCoach.name ? ` (${selectedCoach.name})` : ""}
+                </span>
+              </div>
+            ) : null}
           </div>
         </article>
 

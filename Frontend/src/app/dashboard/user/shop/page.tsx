@@ -1,10 +1,38 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMembershipStore } from "@/stores/membership-store";
 import { useOwnerShopStore } from "@/stores/owner-shop-store";
 import { ShopProductCard } from "../_components/ShopProductCard";
 
 export default function ShopPage() {
+  const router = useRouter();
+  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  const fetchMembership = useMembershipStore((state) => state.fetchMembership);
   const products = useOwnerShopStore((state) => state.products);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      await fetchMembership();
+      setReady(true);
+    })();
+  }, [fetchMembership]);
+
+  useEffect(() => {
+    if (ready && !joinedGymId) {
+      router.replace("/dashboard/user");
+    }
+  }, [ready, joinedGymId, router]);
+
+  if (!ready || !joinedGymId) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-500">
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
