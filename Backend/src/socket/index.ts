@@ -13,6 +13,7 @@ export function gymRoom(gymId: string): string {
   return `gym:${gymId}`;
 }
 
+/** Boots Socket.IO with JWT handshake auth and auto-joins user:{id} + gym_catalog rooms. */
 export function initSocket(server: HTTPServer): IOServer {
   io = new IOServer(server, {
     cors: {

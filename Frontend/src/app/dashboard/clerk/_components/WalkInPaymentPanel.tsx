@@ -7,7 +7,7 @@ import { useClerkStore } from "@/stores/clerk-store";
 import {
   formatTransactionTime,
   getPaymentMethodLabel,
-  getTransactionDisplayLabel,
+  getTodaysLogTitle,
 } from "@/stores/clerk-store";
 import {
   formatApprovalTime,
@@ -361,7 +361,7 @@ export function WalkInPaymentPanel() {
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">
-                      {getTransactionDisplayLabel(txn.type)}
+                      {getTodaysLogTitle(txn)}
                     </p>
                     <p className="mt-0.5 text-xs text-zinc-500">
                       {txn.member} · {getPaymentMethodLabel(txn.method)} ·{" "}

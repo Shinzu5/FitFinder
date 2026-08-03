@@ -7,6 +7,7 @@ export interface AuthRequest extends Request {
   userRole?: string;
 }
 
+/** Verifies JWT Bearer token and attaches userId/role to the request (rejects deleted accounts). */
 export async function authenticate(
   req: AuthRequest,
   res: Response,

@@ -15,6 +15,10 @@ import {
   upsertGymMembership,
   type RegisteredBy,
 } from "../services/gymMembership.service";
+import {
+  notifyMembershipApproved,
+  notifyMembershipRejected,
+} from "../services/membershipNotification.service";
 
 // Helper: gym for Clerk (assigned) or Owner (owned) — same walk-in approval flow
 async function getClerkGym(userId: string) {
@@ -50,6 +54,26 @@ const FRONTEND_TO_TXN_TYPE: Record<string, "MONTHLY" | "SESSION" | "SUPPLEMENTS"
 
 function toFrontendTxnType(type: string): string {
   return type.toLowerCase().replace(/_/g, "-");
+}
+
+function shapeClerkTransaction(txn: {
+  id: string;
+  type: string;
+  memberName: string;
+  amount: number;
+  method: string;
+  notes: string;
+  createdAt: Date;
+}) {
+  return {
+    id: txn.id,
+    type: toFrontendTxnType(txn.type),
+    member: txn.memberName,
+    amount: txn.amount,
+    method: txn.method.toLowerCase() === "cash" ? "cash" : "cashless",
+    notes: txn.notes || "",
+    createdAt: txn.createdAt.getTime(),
+  };
 }
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -151,18 +175,7 @@ export async function getTransactions(req: AuthRequest, res: Response): Promise<
       orderBy: { createdAt: "desc" },
     });
 
-    sendSuccess(
-      res,
-      transactions.map((txn) => ({
-        id: txn.id,
-        type: toFrontendTxnType(txn.type),
-        member: txn.memberName,
-        amount: txn.amount,
-        method: txn.method.toLowerCase() === "cash" ? "cash" : "cashless",
-        notes: txn.notes,
-        createdAt: txn.createdAt.getTime(),
-      })),
-    );
+    sendSuccess(res, transactions.map(shapeClerkTransaction));
   } catch (error) {
     console.error("Get transactions error:", error);
     sendError(res, "Failed to fetch transactions", 500);
@@ -195,24 +208,110 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
         memberName: req.body.member || "Guest",
         amount,
         method: req.body.method === "cash" ? "CASH" : "CASHLESS",
-        notes: req.body.notes || "",
+        // Free-text Notes drive Today's Log title on the client
+        notes: String(req.body.notes || "").trim(),
       },
     });
 
     void emitSalesUpdated(gym.id);
 
-    sendCreated(res, {
-      id: txn.id,
-      type: toFrontendTxnType(txn.type),
-      member: txn.memberName,
-      amount: txn.amount,
-      method: txn.method.toLowerCase() === "cash" ? "cash" : "cashless",
-      notes: txn.notes,
-      createdAt: txn.createdAt.getTime(),
-    }, "Payment recorded");
+    sendCreated(res, shapeClerkTransaction(txn), "Payment recorded");
   } catch (error) {
     console.error("Record payment error:", error);
     sendError(res, "Failed to record payment", 500);
+  }
+}
+
+// PUT /api/clerk/transactions/:id — edit an open (not-yet-closed) Today's Log payment
+export async function updatePayment(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getClerkGym(req.userId!);
+    if (!gym) { sendError(res, "Not assigned to any gym", 404); return; }
+
+    const existing = await prisma.clerkTransaction.findFirst({
+      where: {
+        id: String(req.params.id),
+        gymId: gym.id,
+        dailySalesReportId: null,
+      },
+    });
+    if (!existing) {
+      sendError(res, "Open payment not found", 404);
+      return;
+    }
+
+    const data: {
+      memberName?: string;
+      amount?: number;
+      method?: "CASH" | "CASHLESS";
+      notes?: string;
+      type?: "MONTHLY" | "SESSION" | "SUPPLEMENTS" | "DAY_PASS" | "RENEWAL" | "COACH";
+    } = {};
+
+    if (req.body.member !== undefined) {
+      data.memberName = String(req.body.member || "Guest").trim() || "Guest";
+    }
+    if (req.body.notes !== undefined) {
+      data.notes = String(req.body.notes || "").trim();
+    }
+    if (req.body.amount !== undefined) {
+      const amount = Number(req.body.amount);
+      if (!amount || amount <= 0) {
+        sendError(res, "Amount must be greater than 0");
+        return;
+      }
+      data.amount = amount;
+    }
+    if (req.body.method !== undefined) {
+      data.method = req.body.method === "cash" ? "CASH" : "CASHLESS";
+    }
+    if (req.body.type !== undefined) {
+      const mappedType = FRONTEND_TO_TXN_TYPE[String(req.body.type || "")];
+      if (!mappedType) {
+        sendError(res, "Invalid transaction type");
+        return;
+      }
+      data.type = mappedType;
+    }
+
+    const txn = await prisma.clerkTransaction.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    void emitSalesUpdated(gym.id);
+    sendSuccess(res, shapeClerkTransaction(txn), "Payment updated");
+  } catch (error) {
+    console.error("Update payment error:", error);
+    sendError(res, "Failed to update payment", 500);
+  }
+}
+
+// DELETE /api/clerk/transactions/:id — remove an open Today's Log payment
+export async function deletePayment(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gym = await getClerkGym(req.userId!);
+    if (!gym) { sendError(res, "Not assigned to any gym", 404); return; }
+
+    const existing = await prisma.clerkTransaction.findFirst({
+      where: {
+        id: String(req.params.id),
+        gymId: gym.id,
+        dailySalesReportId: null,
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      sendError(res, "Open payment not found", 404);
+      return;
+    }
+
+    await prisma.clerkTransaction.delete({ where: { id: existing.id } });
+    void emitSalesUpdated(gym.id);
+    sendSuccess(res, { id: existing.id }, "Payment removed");
+  } catch (error) {
+    console.error("Delete payment error:", error);
+    sendError(res, "Failed to remove payment", 500);
   }
 }
 
@@ -627,6 +726,13 @@ export async function approveWalkIn(req: AuthRequest, res: Response): Promise<vo
     await notifyMembershipChange(updated.userId, updated.gymId);
     void emitSalesUpdated(updated.gymId);
     void emitAdminGymsUpdated();
+    void notifyMembershipApproved({
+      userId: updated.userId,
+      gymId: updated.gymId,
+      gymName: responsePayload.gymName,
+      approvalId: updated.id,
+      isRenewal,
+    });
 
     sendSuccess(
       res,
@@ -869,6 +975,13 @@ export async function declineWalkIn(req: AuthRequest, res: Response): Promise<vo
 
     emitWalkInStatus(updated.userId, responsePayload);
     void emitWalkInApprovalsUpdated(updated.gymId);
+    void notifyMembershipRejected({
+      userId: updated.userId,
+      gymId: updated.gymId,
+      gymName: updated.gym.name,
+      approvalId: updated.id,
+      reason: updated.rejectionReason || reason,
+    });
 
     sendSuccess(res, responsePayload, "Walk-in declined");
   } catch (error) {

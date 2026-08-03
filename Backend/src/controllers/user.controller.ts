@@ -8,6 +8,7 @@ import {
   emitWalkInStatus,
 } from "../services/realtime.service";
 import { expireOverdueMemberships } from "../services/membershipAccess.service";
+import { notifyMembershipRequestSubmitted } from "../services/membershipNotification.service";
 import { generateAiResponse } from "../services/ai.service";
 
 // POST /api/user/join-gym
@@ -191,6 +192,15 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
     const shaped = shapeWalkInApproval(approval, gym.name);
     emitWalkInStatus(req.userId!, shaped);
     void emitWalkInApprovalsUpdated(gymId);
+    void notifyMembershipRequestSubmitted({
+      userId: req.userId!,
+      gymId,
+      gymName: gym.name,
+      approvalId: approval.id,
+      memberName: user.fullName,
+      isRenewal,
+      paymentMethod: "WALK_IN",
+    });
 
     sendCreated(
       res,

@@ -1,5 +1,6 @@
 import prisma from "../config/database";
 import { emitMembershipUpdated, emitMembersUpdated } from "./realtime.service";
+import { notifyMembershipExpired } from "./membershipNotification.service";
 
 /** Mark overdue ACTIVE/EXPIRING memberships as EXPIRED and notify affected users. */
 export async function expireOverdueMemberships(userId?: string): Promise<number> {
@@ -10,7 +11,12 @@ export async function expireOverdueMemberships(userId?: string): Promise<number>
       status: { in: ["ACTIVE", "EXPIRING"] },
       expiresAt: { lt: now },
     },
-    select: { id: true, userId: true, gymId: true },
+    select: {
+      id: true,
+      userId: true,
+      gymId: true,
+      gym: { select: { name: true } },
+    },
   });
 
   if (overdue.length === 0) return 0;
@@ -28,6 +34,16 @@ export async function expireOverdueMemberships(userId?: string): Promise<number>
   const uniqueGymIds = [...new Set(overdue.map((m) => m.gymId))];
   for (const gymId of uniqueGymIds) {
     void emitMembersUpdated(gymId);
+  }
+
+  // Persist + realtime inbox notifications (deduped per membership)
+  for (const m of overdue) {
+    void notifyMembershipExpired({
+      userId: m.userId,
+      gymId: m.gymId,
+      membershipId: m.id,
+      gymName: m.gym.name,
+    });
   }
 
   return overdue.length;

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  getDashboard, getTransactions, recordPayment,
+  getDashboard, getTransactions, recordPayment, updatePayment, deletePayment,
   getMembers, registerMember, getPlans,
   getApprovals, approveWalkIn, declineWalkIn,
   getWalkInPayments, completeWalkInPayment,
@@ -20,6 +20,8 @@ const walkInStaff = requireRole("CLERK", "OWNER");
 router.get("/dashboard", walkInStaff, getDashboard);
 router.get("/transactions", walkInStaff, getTransactions);
 router.post("/transactions", walkInStaff, recordPayment);
+router.put("/transactions/:id", walkInStaff, updatePayment);
+router.delete("/transactions/:id", walkInStaff, deletePayment);
 router.get("/members", walkInStaff, getMembers);
 router.post("/members", walkInStaff, registerMember);
 router.get("/plans", walkInStaff, getPlans);

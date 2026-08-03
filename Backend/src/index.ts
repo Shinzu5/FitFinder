@@ -10,10 +10,8 @@ import { verifyEmailConfig } from "./config/email";
 import { setEmailEnabled } from "./services/email.service";
 import { errorHandler } from "./middleware/errorHandler";
 import { initSocket } from "./socket";
-import {
-  backfillMissingPlanSnapshots,
-  expireOverdueMemberships,
-} from "./services/membershipAccess.service";
+import { backfillMissingPlanSnapshots } from "./services/membershipAccess.service";
+import { runNotificationJobs } from "./services/notificationJobs.service";
 
 // Routes
 import authRoutes from "./routes/auth.routes";
@@ -26,6 +24,7 @@ import subscriptionRoutes from "./routes/subscription.routes";
 import uploadRoutes from "./routes/upload.routes";
 import messagingRoutes from "./routes/messaging.routes";
 import paymentRoutes from "./routes/payment.routes";
+import notificationRoutes from "./routes/notification.routes";
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +59,7 @@ app.use("/api/subscriptions", subscriptionRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/messages", messagingRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -71,18 +71,19 @@ app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 
+/** Boots email, Neon maintenance jobs, and the HTTP + Socket.IO server. */
 async function start() {
   try {
     const emailOk = await verifyEmailConfig();
     setEmailEnabled(emailOk);
 
-    // Safe one-time-ish backfill + periodic membership expiry (Neon)
+    // Safe one-time-ish backfill + periodic expiry / reminder jobs (Neon)
     void backfillMissingPlanSnapshots().catch((err) =>
       console.error("Plan snapshot backfill failed:", err),
     );
-    void expireOverdueMemberships();
+    void runNotificationJobs();
     setInterval(() => {
-      void expireOverdueMemberships();
+      void runNotificationJobs();
     }, 60_000);
 
     server.listen(env.PORT, () => {
@@ -90,7 +91,7 @@ async function start() {
       console.log(`📦 Environment: ${env.NODE_ENV}`);
       console.log(`🌐 Frontend URL: ${env.FRONTEND_URL}`);
       console.log(`📁 Uploads: ${path.join(process.cwd(), "uploads")}`);
-      console.log(`🔌 Socket.IO ready for real-time messaging\n`);
+      console.log(`🔌 Socket.IO ready for real-time messaging + notifications\n`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);

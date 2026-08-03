@@ -14,7 +14,9 @@ import {
   emitWalkInStatus,
 } from "../services/realtime.service";
 import { notifyMembershipChange } from "../services/gymMembership.service";
+import { notifyMembershipRequestSubmitted } from "../services/membershipNotification.service";
 import { ensureOwnerSubscriptionFromPayment } from "../services/ownerSubscription.service";
+import { createNotification } from "../services/notification.service";
 import { getOwnerPlanById } from "../config/ownerPlans";
 import { daysRemainingUntil, storedDurationToDays } from "../utils/ownerPlan";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
@@ -464,6 +466,7 @@ export async function xenditWebhook(
  * Activate a subscription or membership after successful payment.
  * Idempotent — safe to call repeatedly for SUCCEEDED payments.
  */
+/** Idempotent post-payment activation for owner SUBSCRIPTION or MEMBERSHIP (approval queue). */
 async function activatePayment(payment: {
   id: string;
   userId: string;
@@ -483,6 +486,26 @@ async function activatePayment(payment: {
             message: `New subscription purchase: ${sub.planName || "Unknown"} plan via GCash`,
             tone: "INFO",
           },
+        });
+        // Clear live expiry countdown after renew / purchase
+        await prisma.notification.updateMany({
+          where: {
+            userId: payment.userId,
+            dedupeKey: `owner_plan_live:${payment.userId}`,
+            readAt: null,
+          },
+          data: { readAt: new Date() },
+        });
+        void createNotification({
+          userId: payment.userId,
+          type: "OWNER_PLAN_EXPIRING",
+          title: "Gym subscription renewed",
+          body: "Your gym subscription was renewed successfully.",
+          data: {
+            planName: sub.planName,
+            daysLeft: sub.daysLeft,
+          },
+          dedupeKey: `owner_plan_renewed:${payment.referenceId}`,
         });
       }
       // Always refresh admin gyms/transactions when a plan payment succeeds
@@ -603,6 +626,15 @@ async function activatePayment(payment: {
         renewalDate: approval.submittedAt.getTime(),
       });
       void emitWalkInApprovalsUpdated(gymId);
+      void notifyMembershipRequestSubmitted({
+        userId: payment.userId,
+        gymId,
+        gymName: approval.gym.name,
+        approvalId: approval.id,
+        memberName: approval.memberName,
+        isRenewal: true,
+        paymentMethod: "XENDIT",
+      });
       return true;
     }
 
@@ -670,6 +702,15 @@ async function activatePayment(payment: {
       renewalDate: approval.submittedAt.getTime(),
     });
     void emitWalkInApprovalsUpdated(gymId);
+    void notifyMembershipRequestSubmitted({
+      userId: payment.userId,
+      gymId,
+      gymName: approval.gym.name,
+      approvalId: approval.id,
+      memberName: approval.memberName,
+      isRenewal: false,
+      paymentMethod: "XENDIT",
+    });
     return true;
   }
 
