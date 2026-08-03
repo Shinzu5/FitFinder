@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Bell,
   Brain,
   CreditCard,
   Dumbbell,
@@ -22,11 +21,13 @@ import { useWalkInApprovalSync } from "@/hooks/useWalkInApprovalSync";
 import { useOwnerRepurchaseSync } from "@/hooks/useOwnerRepurchaseSync";
 import { useAccountDeletedSync } from "@/hooks/useAccountDeletedSync";
 import { useDirectMessageSocket } from "@/hooks/useDirectMessageSocket";
+import { useNotificationsSocket } from "@/hooks/useNotificationsSocket";
 import { useMembersListSync } from "@/hooks/useMembersListSync";
 import { useMemberGymContentSync } from "@/hooks/useMemberGymContentSync";
 import { useSalesSync } from "@/hooks/useSalesSync";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard/user", icon: Home, unlockRequired: false },
@@ -52,6 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const sessionSyncedRef = useRef(false);
 
   useDirectMessageSocket();
+  useNotificationsSocket();
   useOwnerRepurchaseSync();
   useMembersListSync();
   useMemberGymContentSync();
@@ -411,9 +413,7 @@ function UserDashboardFrame({
                   : "Dashboard locked — join a gym and complete payment to unlock"}
               </div>
             ) : null}
-            <button type="button" className="rounded-full border border-white/10 p-2 text-zinc-300">
-              <Bell className="h-4 w-4" />
-            </button>
+            <NotificationBell buttonClassName="rounded-full border border-white/10 p-2 text-zinc-300" />
             <UserProfileMenu />
           </div>
         </header>

@@ -92,6 +92,12 @@ export function getTransactionDisplayLabel(type: TransactionType) {
   return labels[type];
 }
 
+/** Today's Log title = Notes value (DB), never hardcoded Day Pass / Monthly labels. */
+export function getTodaysLogTitle(txn: { notes?: string | null }) {
+  const notes = String(txn.notes || "").trim();
+  return notes || "Walk-in Payment";
+}
+
 export function getPaymentMethodLabel(method: PaymentMethod) {
   return method === "cash" ? "Cash" : "Cashless";
 }
@@ -140,6 +146,11 @@ interface ClerkState {
   setPlans: (plans: MembershipPlanOption[]) => void;
   fetchAll: () => Promise<void>;
   recordPayment: (input: RecordPaymentInput) => Promise<boolean>;
+  updatePayment: (
+    id: string,
+    input: Partial<RecordPaymentInput>,
+  ) => Promise<boolean>;
+  deletePayment: (id: string) => Promise<boolean>;
   registerMember: (input: RegisterMemberInput) => Promise<ClerkMember | null>;
   fetchClosingPreview: () => Promise<{
     date: string;
@@ -294,8 +305,10 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       }
 
       const txn = data.data as ClerkTransaction;
+      // Immediate local Today's Log update; sales_updated keeps other clients in sync
+      const withoutDup = get().transactions.filter((t) => t.id !== txn.id);
       set({
-        transactions: [txn, ...get().transactions],
+        transactions: [txn, ...withoutDup],
         walkInsToday: get().walkInsToday + 1,
         revenueToday: get().revenueToday + txn.amount,
         error: null,
@@ -303,6 +316,56 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       return true;
     } catch (error: any) {
       set({ error: error.response?.data?.message || "Failed to record payment." });
+      return false;
+    }
+  },
+
+  updatePayment: async (id, input) => {
+    try {
+      const body: Record<string, unknown> = {};
+      if (input.type !== undefined) body.type = input.type;
+      if (input.member !== undefined) body.member = input.member.trim() || "Guest";
+      if (input.amount !== undefined) body.amount = input.amount;
+      if (input.method !== undefined) body.method = input.method;
+      if (input.notes !== undefined) body.notes = input.notes.trim();
+
+      const { data } = await api.put(`/clerk/transactions/${id}`, body);
+      if (!data.success) {
+        set({ error: data.message || "Failed to update payment." });
+        return false;
+      }
+
+      const txn = data.data as ClerkTransaction;
+      set({
+        transactions: get().transactions.map((t) => (t.id === id ? txn : t)),
+        error: null,
+      });
+      void get().fetchDashboard();
+      return true;
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to update payment." });
+      return false;
+    }
+  },
+
+  deletePayment: async (id) => {
+    try {
+      const prev = get().transactions.find((t) => t.id === id);
+      const { data } = await api.delete(`/clerk/transactions/${id}`);
+      if (!data.success) {
+        set({ error: data.message || "Failed to remove payment." });
+        return false;
+      }
+
+      set({
+        transactions: get().transactions.filter((t) => t.id !== id),
+        walkInsToday: Math.max(0, get().walkInsToday - (prev ? 1 : 0)),
+        revenueToday: Math.max(0, get().revenueToday - (prev?.amount || 0)),
+        error: null,
+      });
+      return true;
+    } catch (error: any) {
+      set({ error: error.response?.data?.message || "Failed to remove payment." });
       return false;
     }
   },

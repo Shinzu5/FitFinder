@@ -5,6 +5,7 @@ import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import { canMessage } from "../utils/messagingRules";
 import { getIO, userRoom } from "../socket";
+import { createNotification } from "../services/notification.service";
 
 const userSummarySelect = {
   id: true,
@@ -393,6 +394,22 @@ export async function sendDirectMessage(req: AuthRequest, res: Response): Promis
       sender,
       // Receiver gets it live; sender's other tabs stay in sync too
       toUserIds: [receiverId, req.userId!],
+    });
+
+    const preview =
+      message.text.length > 80 ? `${message.text.slice(0, 80)}…` : message.text;
+    void createNotification({
+      userId: receiverId,
+      type: "MESSAGE",
+      title: "New message",
+      body: `${sender?.fullName || "Someone"}: ${preview}`,
+      data: {
+        messageId: message.id,
+        senderId: req.userId!,
+        senderName: sender?.fullName || "",
+        senderRole: sender?.role || "",
+      },
+      dedupeKey: `message:${message.id}`,
     });
 
     sendCreated(res, message, "Message sent");

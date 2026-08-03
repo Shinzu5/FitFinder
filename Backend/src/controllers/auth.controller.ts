@@ -190,6 +190,7 @@ export async function resendVerification(req: Request, res: Response): Promise<v
 }
 
 // POST /api/auth/login
+/** Authenticates email/password, returns access token + sets refresh cookie, includes user role. */
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";

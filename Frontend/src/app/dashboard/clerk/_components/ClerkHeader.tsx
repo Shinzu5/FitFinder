@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell } from "lucide-react";
 import { CLERK_NAV_ITEMS } from "./ClerkSidebar";
 import { ClerkProfileMenu } from "./ClerkProfileMenu";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 function getPageTitle(pathname: string) {
   const match = CLERK_NAV_ITEMS.find(
@@ -23,13 +23,7 @@ export function ClerkHeader() {
     <header className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-4 lg:px-8">
       {showTitle ? <h1 className="text-xl font-bold text-white">{title}</h1> : <div />}
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="rounded-full border border-white/10 p-2 text-zinc-300 transition hover:text-white"
-          aria-label="Notifications"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        <NotificationBell />
         <ClerkProfileMenu />
       </div>
     </header>

@@ -30,6 +30,7 @@ Never provide medical diagnoses or prescribe medication.
 Recommend consulting a qualified healthcare professional for medical concerns.
 Keep responses accurate, practical, friendly, concise, and easy to understand.`;
 
+/** Fitness-domain gate → Gemini generation → assistant reply (rejects off-topic questions). */
 export async function generateAiResponse(message: string): Promise<string> {
   const trimmed = message.trim();
   if (!trimmed) {
