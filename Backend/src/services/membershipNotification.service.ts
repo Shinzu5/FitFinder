@@ -84,8 +84,8 @@ export async function notifyMembershipApproved(opts: {
     await createNotification({
       userId,
       type: "MEMBERSHIP_RENEWED",
-      title: "Membership renewed",
-      body: `Your membership at ${gymName} has been renewed.`,
+      title: "Renewal approved",
+      body: `Your renewal at ${gymName} was approved. Tap Done on My Membership to apply your new days.`,
       data: { gymId, gymName, approvalId, isRenewal: true },
       dedupeKey: `membership_renewed:${approvalId}`,
     });
@@ -96,7 +96,7 @@ export async function notifyMembershipApproved(opts: {
     userId,
     type: "MEMBERSHIP_APPROVED",
     title: "Membership approved",
-    body: `Your membership request for ${gymName} was approved.`,
+    body: `Your membership request for ${gymName} was approved. Tap Done to activate access.`,
     data: { gymId, gymName, approvalId, isRenewal: false },
     dedupeKey: `membership_approved:${approvalId}`,
   });

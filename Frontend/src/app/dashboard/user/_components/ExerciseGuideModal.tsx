@@ -34,7 +34,7 @@ function GuideMedia({ exercise }: { exercise: GymExercise }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={
-        exercise.cardImageUrl ??
+        exercise.cardImageUrl ||
         "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80"
       }
       alt={exercise.name}

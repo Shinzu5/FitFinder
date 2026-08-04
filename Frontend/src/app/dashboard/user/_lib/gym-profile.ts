@@ -95,15 +95,18 @@ function mapDbPlans(
 }
 
 function mapDbCoaches(coaches: GymCoach[]): PublicGymCoach[] {
-  return coaches.map((coach) => ({
-    id: coach.id,
-    name: coach.name,
-    specialty: coach.specialty,
-    sessionPrice: coach.sessionPrice,
-    photoUrl: coach.photoUrl,
-    description: coach.description || "",
-    schedule: (coach.schedule as Record<string, string>) || {},
-  }));
+  return coaches.map((coach) => {
+    const rawPhoto = String(coach.photoUrl || "").trim();
+    return {
+      id: coach.id,
+      name: coach.name,
+      specialty: coach.specialty,
+      sessionPrice: coach.sessionPrice,
+      photoUrl: rawPhoto ? resolveMediaUrl(rawPhoto) : null,
+      description: coach.description || "",
+      schedule: (coach.schedule as Record<string, string>) || {},
+    };
+  });
 }
 
 function mapDbEquipment(equipment: GymEquipment[]): string[] {
@@ -152,9 +155,11 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
     owner: {
       name: realGym.owner?.fullName || ownerName,
       bio: `Owner of ${realGym.name}.`,
-      avatarUrl: resolveMediaUrl(
-        realGym.owner?.avatarUrl || ownerAvatarUrl || "",
-      ),
+      // Empty string (not placeholder) so UI can show initials instead of <img src="">
+      avatarUrl: (() => {
+        const raw = String(realGym.owner?.avatarUrl || ownerAvatarUrl || "").trim();
+        return raw ? resolveMediaUrl(raw) : "";
+      })(),
     },
     // Never invent plans — empty array when Owner deleted all active plans
     plans: mapDbPlans(realGym.membershipPlans || []),

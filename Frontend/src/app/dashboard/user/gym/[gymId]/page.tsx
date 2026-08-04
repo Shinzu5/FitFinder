@@ -1,14 +1,30 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { GymProfileView } from "../../_components/GymProfileView";
 import { useGymProfile } from "../../_lib/use-gym-profile";
+import { resolveGymAccessStatus } from "@/lib/gym-access";
+import { useMembershipStore } from "@/stores/membership-store";
+import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 export default function UserGymProfilePage() {
   const params = useParams();
+  const router = useRouter();
   const gymId = typeof params.gymId === "string" ? params.gymId : "";
   const { profile, loading } = useGymProfile(gymId);
+  const enrolledGymIds = useMembershipStore((s) => s.enrolledGymIds);
+  const requests = useWalkInApprovalsStore((s) => s.requests);
+
+  // Pending / approved-not-done for this gym → Membership only (no gym dashboard)
+  useEffect(() => {
+    if (!gymId) return;
+    const status = resolveGymAccessStatus(gymId);
+    if (status === "pending" || status === "approved") {
+      router.replace("/dashboard/user/membership");
+    }
+  }, [gymId, enrolledGymIds, requests, router]);
 
   if (loading) {
     return (
@@ -33,6 +49,15 @@ export default function UserGymProfilePage() {
             Back to Home
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  const access = resolveGymAccessStatus(gymId);
+  if (access === "pending" || access === "approved") {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <p className="text-sm text-zinc-500">Waiting for Owner/Clerk Approval…</p>
       </div>
     );
   }

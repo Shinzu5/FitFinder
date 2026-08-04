@@ -94,6 +94,30 @@ export async function emitMembersUpdated(gymId: string): Promise<void> {
   }
 }
 
+/** Notify Owner + Clerks + gym room that attendance / Active Now changed. */
+export async function emitAttendanceUpdated(
+  gymId: string,
+  payload: { activeNow?: number } = {},
+): Promise<void> {
+  const [gym, clerks] = await Promise.all([
+    prisma.gym.findUnique({ where: { id: gymId }, select: { ownerId: true } }),
+    prisma.user.findMany({
+      where: { clerkGymId: gymId, role: "CLERK" },
+      select: { id: true },
+    }),
+  ]);
+
+  const body = { gymId, ...payload };
+  if (gym?.ownerId) {
+    emitToUser(gym.ownerId, "attendance_updated", body);
+  }
+  for (const clerk of clerks) {
+    emitToUser(clerk.id, "attendance_updated", body);
+  }
+  // Gymers on home / gym rooms hear Active Now changes
+  emitToGym(gymId, "attendance_updated", body);
+}
+
 /** Notify Owner + Clerks that sales / revenue / reports changed. */
 export async function emitSalesUpdated(gymId: string): Promise<void> {
   const [gym, clerks] = await Promise.all([

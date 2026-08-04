@@ -20,7 +20,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (ready && !joinedGymId) {
-      router.replace("/dashboard/user");
+      router.replace("/dashboard/user/membership");
     }
   }, [ready, joinedGymId, router]);
 

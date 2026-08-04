@@ -9,6 +9,8 @@ export interface Gym {
   hours: string;
   website: string;
   members: number;
+  /** Open check-ins for this gym (from Neon attendance) */
+  activeNow?: number;
   /** Lowest active plan price from Neon; null when no active plans */
   pricePerMonth: number | null;
   hasActivePlans?: boolean;

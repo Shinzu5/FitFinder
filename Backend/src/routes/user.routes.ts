@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  joinGym, getMembership, leaveMembership,
+  joinGym, getMembership, getMemberships, switchActiveGym, leaveMembership,
   getMessages, sendUserMessage, aiChat,
   getWalkInStatus,
   completeWalkInOnboarding,
@@ -16,6 +16,8 @@ router.use(authenticate, requireRole("USER", "OWNER"));
 
 router.post("/join-gym", joinGym);
 router.get("/membership", getMembership);
+router.get("/memberships", getMemberships);
+router.patch("/active-gym", switchActiveGym);
 router.delete("/membership", leaveMembership);
 router.get("/messages", getMessages);
 router.post("/messages", sendUserMessage);

@@ -16,21 +16,35 @@ import { UserNewMessageModal } from "./UserNewMessageModal";
 
 function ThreadAvatar({ thread, size = "md" }: { thread: GymMessageThread; size?: "sm" | "md" }) {
   const dim = size === "sm" ? "h-10 w-10" : "h-11 w-11";
+  const src = String(thread.gymImageUrl || "").trim();
+  if (!src) {
+    return (
+      <div
+        className={`${dim} flex shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-[#FFD700]`}
+      >
+        {(thread.gymName || "G").slice(0, 1).toUpperCase()}
+      </div>
+    );
+  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={thread.gymImageUrl}
-      alt={thread.gymName}
-      className={`${dim} shrink-0 rounded-full object-cover`}
-    />
+    <img src={src} alt={thread.gymName} className={`${dim} shrink-0 rounded-full object-cover`} />
   );
 }
 
 function OwnerAvatar({ thread }: { thread: GymMessageThread }) {
+  const src = String(thread.ownerAvatarUrl || "").trim();
+  if (!src) {
+    return (
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[10px] font-bold text-[#FFD700]">
+        {(thread.ownerName || "O").slice(0, 1).toUpperCase()}
+      </div>
+    );
+  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={thread.ownerAvatarUrl}
+      src={src}
       alt={thread.ownerName}
       className="h-8 w-8 shrink-0 rounded-full object-cover"
     />
@@ -99,7 +113,7 @@ export function UserMessagesPanel() {
       setCurrentUserId(authUser.id);
       void fetchThreads();
     }
-  }, [authUser?.id, setCurrentUserId, fetchThreads]);
+  }, [authUser?.id, joinedGymId, setCurrentUserId, fetchThreads]);
 
   useEffect(() => {
     syncJoinedGym(joinedGymId, membership?.gymName ?? null);

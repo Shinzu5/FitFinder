@@ -1,18 +1,20 @@
 "use client";
 
 import type { ShopProduct } from "@/stores/owner-shop-store";
+import { resolveMediaUrl } from "@/lib/media";
 
 interface ShopProductCardProps {
   product: ShopProduct;
 }
 
 export function ShopProductCard({ product }: ShopProductCardProps) {
+  const imageSrc = resolveMediaUrl(product.imageUrl);
   return (
     <article className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
       <div className="aspect-square overflow-hidden bg-[#131315]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={product.imageUrl}
+          src={imageSrc}
           alt={product.name}
           className="h-full w-full object-cover transition duration-300 hover:scale-105"
         />

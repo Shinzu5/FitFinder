@@ -4,12 +4,20 @@ import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import {
   emitMembershipUpdated,
-  emitWalkInApprovalsUpdated,
-  emitWalkInStatus,
 } from "../services/realtime.service";
-import { expireOverdueMemberships } from "../services/membershipAccess.service";
-import { notifyMembershipRequestSubmitted } from "../services/membershipNotification.service";
 import { generateAiResponse } from "../services/ai.service";
+import {
+  ensureActiveGymIfEmpty,
+  listLiveMemberships,
+  listEnrolledMemberships,
+  resolveActiveGymId,
+  setActiveGymId,
+  shapeEnrolledMembership,
+} from "../services/activeGym.service";
+import {
+  createPendingApproval,
+  shapeApprovalPayload,
+} from "../services/membershipApproval.service";
 
 // POST /api/user/join-gym
 export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
@@ -45,22 +53,7 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    // Active membership at another gym blocks join; same gym = renewal request
-    const activeElsewhere = await prisma.gymMembership.findFirst({
-      where: {
-        userId: req.userId!,
-        status: { in: ["ACTIVE", "EXPIRING"] },
-        gymId: { not: gymId },
-        expiresAt: { gt: new Date() },
-      },
-      select: { id: true, gymId: true },
-    });
-    if (activeElsewhere) {
-      sendError(res, "You already have an active membership at another gym", 400);
-      return;
-    }
-
-    // Renewal only while a live membership still exists — expired rows are new joins
+    // Renewal only while a live membership still exists at this gym — multi-gym allowed
     const existingAtGym = await prisma.gymMembership.findFirst({
       where: {
         userId: req.userId!,
@@ -163,41 +156,20 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
     const ref = String(paymentRef || `WI-${Date.now()}`).trim();
     const amount = Number(totalPaid) || plan.price + (coach?.sessionPrice || 0);
 
-    const approval = await prisma.walkInApproval.create({
-      data: {
-        userId: req.userId!,
-        gymId,
-        planId: plan.id,
-        planName: plan.name,
-        planPrice: plan.price,
-        memberName: user.fullName,
-        memberEmail: user.email,
-        coachId: coach?.id || null,
-        coachName: coach?.name || null,
-        coachSessionPrice: coach?.sessionPrice || 0,
-        paymentRef: ref,
-        totalPaid: amount,
-        durationDays: plan.durationDays,
-        isRenewal,
-        paymentMethod: "WALK_IN",
-        paymentStatus: "PAID",
-        status: "PENDING",
-      },
-      include: {
-        plan: { select: { name: true, price: true } },
-        gym: { select: { name: true } },
-      },
-    });
-
-    const shaped = shapeWalkInApproval(approval, gym.name);
-    emitWalkInStatus(req.userId!, shaped);
-    void emitWalkInApprovalsUpdated(gymId);
-    void notifyMembershipRequestSubmitted({
+    const { approval, shaped } = await createPendingApproval({
       userId: req.userId!,
       gymId,
-      gymName: gym.name,
-      approvalId: approval.id,
+      planId: plan.id,
+      planName: plan.name,
+      planPrice: plan.price,
       memberName: user.fullName,
+      memberEmail: user.email,
+      coachId: coach?.id || null,
+      coachName: coach?.name || null,
+      coachSessionPrice: coach?.sessionPrice || 0,
+      paymentRef: ref,
+      totalPaid: amount,
+      durationDays: plan.durationDays,
       isRenewal,
       paymentMethod: "WALK_IN",
     });
@@ -216,74 +188,27 @@ export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
 }
 
 function shapeWalkInApproval(
-  a: {
-    id: string;
-    userId: string;
-    memberName: string;
-    memberEmail: string;
-    gymId: string;
-    planId: string | null;
-    planName?: string;
-    planPrice?: number;
-    coachId: string | null;
-    coachName: string | null;
-    coachSessionPrice: number;
-    paymentRef: string;
-    totalPaid: number;
-    durationDays: number;
-    isRenewal?: boolean;
-    paymentMethod?: string;
-    status: string;
-    paymentStatus?: string;
-    rejectionReason?: string;
-    submittedAt: Date;
-    reviewedAt: Date | null;
-    consumedAt: Date | null;
-    plan?: { name: string; price: number } | null;
-    gym?: { name: string };
-  },
+  a: Parameters<typeof shapeApprovalPayload>[0],
   gymNameFallback?: string,
 ) {
-  const method = String(a.paymentMethod || "WALK_IN").toUpperCase();
-  return {
-    id: a.id,
-    userId: a.userId,
-    memberName: a.memberName,
-    memberEmail: a.memberEmail,
-    gymId: a.gymId,
-    gymName: a.gym?.name || gymNameFallback || "",
-    planId: a.planId,
-    planName: a.planName || a.plan?.name || "",
-    planPrice: a.planPrice && a.planPrice > 0 ? a.planPrice : a.plan?.price ?? 0,
-    coachId: a.coachId,
-    coachName: a.coachName,
-    coachSessionPrice: a.coachSessionPrice,
-    paymentRef: a.paymentRef,
-    totalPaid: a.totalPaid,
-    durationDays: a.durationDays,
-    isRenewal: Boolean(a.isRenewal),
-    paymentMethod: method === "XENDIT" ? "Cashless" : "Walk-in",
-    paymentMethodRaw: method,
-    paymentStatus: String(a.paymentStatus || "PAID").toLowerCase(),
-    approvalStatus: String(a.status).toLowerCase(),
-    status: String(a.status).toLowerCase(),
-    rejectionReason: a.rejectionReason || "",
-    submittedAt: a.submittedAt.getTime(),
-    reviewedAt: a.reviewedAt?.getTime() ?? null,
-    consumedAt: a.consumedAt?.getTime() ?? null,
-    renewalDate: a.submittedAt.getTime(),
-  };
+  return shapeApprovalPayload(a, gymNameFallback);
 }
 
-// GET /api/user/membership
+// GET /api/user/membership — currently selected (active) gym membership
 export async function getMembership(req: AuthRequest, res: Response): Promise<void> {
   try {
-    await expireOverdueMemberships(req.userId!);
+    const activeGymId = await resolveActiveGymId(req.userId!);
+    if (!activeGymId) {
+      sendSuccess(res, null, "No active membership");
+      return;
+    }
 
     const membership = await prisma.gymMembership.findFirst({
       where: {
         userId: req.userId!,
+        gymId: activeGymId,
         status: { in: ["ACTIVE", "EXPIRING"] },
+        expiresAt: { gt: new Date() },
       },
       include: {
         gym: { select: { id: true, name: true, coverImageUrl: true } },
@@ -317,6 +242,8 @@ export async function getMembership(req: AuthRequest, res: Response): Promise<vo
       take: 20,
     });
 
+    const live = await listLiveMemberships(req.userId!);
+
     sendSuccess(res, {
       gymId: membership.gym.id,
       gymName: membership.gym.name,
@@ -332,6 +259,8 @@ export async function getMembership(req: AuthRequest, res: Response): Promise<vo
       joinedAt: membership.joinedAt.toISOString(),
       expiresAt: membership.expiresAt.toISOString(),
       durationDays,
+      activeGymId,
+      enrolledGymIds: live.map((m) => m.gymId),
       renewalHistory: renewals.map((r: any) => ({
         id: r.id,
         planName: r.planName,
@@ -351,11 +280,62 @@ export async function getMembership(req: AuthRequest, res: Response): Promise<vo
   }
 }
 
-// DELETE /api/user/membership
+// GET /api/user/memberships — all live enrolled gyms (switcher)
+export async function getMemberships(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const activeGymId = await resolveActiveGymId(req.userId!);
+    const enrolled = await listEnrolledMemberships(req.userId!);
+    sendSuccess(
+      res,
+      {
+        activeGymId,
+        memberships: enrolled.map((m) => shapeEnrolledMembership(m, activeGymId)),
+      },
+      "Enrolled gyms",
+    );
+  } catch (error) {
+    console.error("Get memberships error:", error);
+    sendError(res, "Failed to fetch enrolled gyms", 500);
+  }
+}
+
+// PATCH /api/user/active-gym — switch selected gym session
+export async function switchActiveGym(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const gymId = String(req.body?.gymId || "").trim();
+    if (!gymId) {
+      sendError(res, "gymId is required");
+      return;
+    }
+
+    const result = await setActiveGymId(req.userId!, gymId);
+    if (!result.ok) {
+      sendError(res, result.message, result.status);
+      return;
+    }
+
+    sendSuccess(res, { gymId: result.gymId }, "Active gym updated");
+  } catch (error) {
+    console.error("Switch active gym error:", error);
+    sendError(res, "Failed to switch gym", 500);
+  }
+}
+
+// DELETE /api/user/membership — leave currently selected gym only
 export async function leaveMembership(req: AuthRequest, res: Response): Promise<void> {
   try {
+    const activeGymId = await resolveActiveGymId(req.userId!);
+    if (!activeGymId) {
+      sendError(res, "No active membership to leave", 404);
+      return;
+    }
+
     const membership = await prisma.gymMembership.findFirst({
-      where: { userId: req.userId!, status: { in: ["ACTIVE", "EXPIRING"] } },
+      where: {
+        userId: req.userId!,
+        gymId: activeGymId,
+        status: { in: ["ACTIVE", "EXPIRING"] },
+      },
     });
 
     if (!membership) {
@@ -368,6 +348,12 @@ export async function leaveMembership(req: AuthRequest, res: Response): Promise<
       data: { status: "EXPIRED" },
     });
 
+    await prisma.user.updateMany({
+      where: { id: req.userId!, activeGymId },
+      data: { activeGymId: null },
+    });
+    await resolveActiveGymId(req.userId!);
+
     emitMembershipUpdated(req.userId!);
     sendSuccess(res, null, "Left the gym successfully");
   } catch (error) {
@@ -379,17 +365,15 @@ export async function leaveMembership(req: AuthRequest, res: Response): Promise<
 // GET /api/user/messages
 export async function getMessages(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const membership = await prisma.gymMembership.findFirst({
-      where: { userId: req.userId!, status: { in: ["ACTIVE", "EXPIRING"] } },
-    });
+    const gymId = await resolveActiveGymId(req.userId!);
 
-    if (!membership) {
+    if (!gymId) {
       sendSuccess(res, []);
       return;
     }
 
     const conversations = await prisma.conversation.findMany({
-      where: { gymId: membership.gymId },
+      where: { gymId },
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
@@ -444,15 +428,18 @@ export async function sendUserMessage(req: AuthRequest, res: Response): Promise<
 // POST /api/user/ai-chat
 export async function aiChat(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { message } = req.body;
-    
+    const { message, history } = req.body;
+
     if (!message || typeof message !== "string") {
       sendError(res, "Invalid message", 400);
       return;
     }
 
-    const reply = await generateAiResponse(message);
-    
+    const reply = await generateAiResponse(message, {
+      userId: req.userId!,
+      history,
+    });
+
     sendSuccess(res, { reply });
   } catch (error) {
     console.error("AI chat error:", error);
@@ -482,7 +469,7 @@ export async function getWalkInStatus(req: AuthRequest, res: Response): Promise<
   }
 }
 
-// POST /api/user/walk-in-done/:id — gymer Done after approval → activate membership
+// POST /api/user/walk-in-done/:id — gymer Done after approval → ACTIVE
 export async function completeWalkInOnboarding(
   req: AuthRequest,
   res: Response,
@@ -501,156 +488,74 @@ export async function completeWalkInOnboarding(
       return;
     }
 
-    if (approval.status !== "APPROVED") {
-      sendError(res, "Membership is not approved yet");
-      return;
-    }
-
-    let membership = await prisma.gymMembership.findFirst({
-      where: {
-        userId: req.userId!,
-        gymId: approval.gymId,
-        status: { in: ["ACTIVE", "EXPIRING"] },
-      },
-    });
-
-    // New walk-in joins: membership is created here (not on Approve)
-    if (!membership) {
-      const now = new Date();
-      const expiresAt = new Date(now);
-      expiresAt.setDate(expiresAt.getDate() + approval.durationDays);
-
-      const payMethodRaw = String((approval as any).paymentMethod || "WALK_IN").toUpperCase();
-      let liveCoachId: string | null = approval.coachId;
-      if (approval.coachId) {
-        const liveCoach = await prisma.coach.findFirst({
-          where: {
-            id: approval.coachId,
-            gymId: approval.gymId,
-            isActive: true,
-          },
-          select: { id: true },
-        });
-        if (!liveCoach) liveCoachId = null;
-      }
-
-      await prisma.$transaction(async (tx: any) => {
-        const { upsertGymMembership } = await import("../services/gymMembership.service");
-        membership = await upsertGymMembership(
-          {
-            userId: approval.userId,
-            gymId: approval.gymId,
-            planId: approval.planId,
-            planName: approval.planName || approval.plan?.name || "",
-            planPrice: approval.planPrice || approval.plan?.price || 0,
-            durationDays: approval.durationDays,
-            coachId: liveCoachId,
-            paymentMethod: payMethodRaw === "XENDIT" ? "XENDIT" : "WALK_IN",
-            paymentRef: approval.paymentRef,
-            totalPaid: approval.totalPaid,
-            memberType: payMethodRaw === "XENDIT" ? "ONLINE" : "WALK_IN",
-            registeredBy: "SELF",
-            registeredById: approval.userId,
-            expiresAt,
-            startsAt: now,
-            status: "ACTIVE",
-          },
-          tx,
-        );
-
-        const dupTxn = await tx.clerkTransaction.findFirst({
-          where: {
-            gymId: approval.gymId,
-            notes: { contains: approval.paymentRef },
-          },
-          select: { id: true },
-        });
-        if (!dupTxn) {
-          const gym = await tx.gym.findUnique({
-            where: { id: approval.gymId },
-            select: { ownerId: true },
-          });
-          if (gym?.ownerId) {
-            await tx.clerkTransaction.create({
-              data: {
-                gymId: approval.gymId,
-                clerkId: gym.ownerId,
-                type: "MONTHLY",
-                memberName: approval.memberName,
-                amount: approval.totalPaid,
-                method: payMethodRaw === "XENDIT" ? "XENDIT" : "CASH",
-                notes: `Membership activated · Ref ${approval.paymentRef}`,
-              },
-            });
-          }
-        }
-
-        await tx.walkInApproval.update({
-          where: { id: approval.id },
-          data: { consumedAt: now },
-        });
-      });
-
-      const { notifyMembershipChange } = await import("../services/gymMembership.service");
-      const { emitSalesUpdated, emitWalkInApprovalsUpdated } = await import(
-        "../services/realtime.service"
-      );
-      await notifyMembershipChange(approval.userId, approval.gymId);
-      void emitSalesUpdated(approval.gymId);
-      void emitWalkInApprovalsUpdated(approval.gymId);
-
-      membership = await prisma.gymMembership.findFirst({
+    // Idempotent: already activated
+    if (approval.status === "APPROVED" && approval.consumedAt) {
+      const membership = await prisma.gymMembership.findFirst({
         where: {
           userId: req.userId!,
           gymId: approval.gymId,
           status: { in: ["ACTIVE", "EXPIRING"] },
         },
       });
-    } else if (!approval.consumedAt) {
-      await prisma.walkInApproval.update({
-        where: { id: approval.id },
-        data: { consumedAt: new Date() },
-      });
-      emitMembershipUpdated(req.userId!);
+      if (membership) {
+        await ensureActiveGymIfEmpty(req.userId!, approval.gymId);
+        sendSuccess(
+          res,
+          {
+            approval: shapeWalkInApproval(approval),
+            membership: {
+              gymId: membership.gymId,
+              gymName: approval.gym.name,
+              planId: membership.planId,
+              planName: membership.planName || approval.planName || approval.plan?.name || "",
+              planPrice: membership.planPrice || approval.planPrice || approval.plan?.price || 0,
+              paymentMethod: "walk-in",
+              paymentRef: membership.paymentRef,
+              totalPaid: membership.totalPaid,
+              joinedAt: membership.joinedAt.toISOString(),
+              expiresAt: membership.expiresAt.toISOString(),
+              durationDays: membership.durationDays || approval.durationDays,
+            },
+          },
+          "Membership already activated",
+        );
+        return;
+      }
     }
 
-    if (!membership) {
-      sendError(res, "Could not activate membership. Contact the gym.");
+    const { activateFromApproval } = await import("../services/membershipApproval.service");
+    const result = await activateFromApproval({
+      approvalId: approval.id,
+      actorId: req.userId!,
+      registeredBy: "SELF",
+    });
+    if (!result.ok) {
+      sendError(res, result.message, result.status);
       return;
     }
-
-    const updated = await prisma.walkInApproval.findUnique({
-      where: { id: approval.id },
-      include: {
-        gym: { select: { name: true } },
-        plan: { select: { name: true, price: true } },
-      },
-    });
 
     sendSuccess(
       res,
       {
-        approval: shapeWalkInApproval(updated || approval),
+        approval: result.shaped,
         membership: {
-          gymId: membership.gymId,
-          gymName: updated?.gym.name || approval.gym.name,
-          planId: membership.planId,
+          gymId: result.membership.gymId,
+          gymName: result.shaped.gymName,
+          planId: result.membership.planId,
           planName:
-            membership.planName ||
-            updated?.planName ||
-            updated?.plan?.name ||
+            result.membership.planName ||
+            result.shaped.planName ||
             "",
           planPrice:
-            membership.planPrice ||
-            updated?.planPrice ||
-            updated?.plan?.price ||
+            result.membership.planPrice ||
+            result.shaped.planPrice ||
             0,
           paymentMethod: "walk-in",
-          paymentRef: membership.paymentRef,
-          totalPaid: membership.totalPaid,
-          joinedAt: membership.joinedAt.toISOString(),
-          expiresAt: membership.expiresAt.toISOString(),
-          durationDays: membership.durationDays || approval.durationDays,
+          paymentRef: result.membership.paymentRef,
+          totalPaid: result.membership.totalPaid,
+          joinedAt: result.membership.joinedAt.toISOString(),
+          expiresAt: result.membership.expiresAt.toISOString(),
+          durationDays: result.membership.durationDays || approval.durationDays,
         },
       },
       "Membership activated",
@@ -661,23 +566,10 @@ export async function completeWalkInOnboarding(
   }
 }
 
-async function getActiveMembershipGymId(userId: string): Promise<string | null> {
-  await expireOverdueMemberships(userId);
-  const membership = await prisma.gymMembership.findFirst({
-    where: {
-      userId,
-      status: { in: ["ACTIVE", "EXPIRING"] },
-    },
-    select: { gymId: true },
-    orderBy: { joinedAt: "desc" },
-  });
-  return membership?.gymId ?? null;
-}
-
-// GET /api/user/exercises — member-only for the gymer's joined gym
+// GET /api/user/exercises — member-only for the gymer's selected gym
 export async function getMemberExercises(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const gymId = await getActiveMembershipGymId(req.userId!);
+    const gymId = await resolveActiveGymId(req.userId!);
     if (!gymId) {
       sendError(res, "Active membership required", 403);
       return;
@@ -695,10 +587,10 @@ export async function getMemberExercises(req: AuthRequest, res: Response): Promi
   }
 }
 
-// GET /api/user/equipment — member-only for the gymer's joined gym
+// GET /api/user/equipment — member-only for the gymer's selected gym
 export async function getMemberEquipment(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const gymId = await getActiveMembershipGymId(req.userId!);
+    const gymId = await resolveActiveGymId(req.userId!);
     if (!gymId) {
       sendError(res, "Active membership required", 403);
       return;
@@ -716,10 +608,10 @@ export async function getMemberEquipment(req: AuthRequest, res: Response): Promi
   }
 }
 
-// GET /api/user/shop — member-only products for the gymer's joined gym
+// GET /api/user/shop — member-only products for the gymer's selected gym
 export async function getMemberShop(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const gymId = await getActiveMembershipGymId(req.userId!);
+    const gymId = await resolveActiveGymId(req.userId!);
     if (!gymId) {
       sendError(res, "Active membership required", 403);
       return;

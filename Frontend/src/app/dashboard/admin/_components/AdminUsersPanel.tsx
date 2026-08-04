@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from "@/stores/auth-store";
 import { getSocket } from "@/lib/socket";
 import { AdminRemoveUserModal } from "./AdminRemoveUserModal";
+import { AdminUserViewModal } from "./AdminUserViewModal";
 import { resolveMediaUrl } from "@/lib/media";
 
 const TABS: { id: AdminUserTab; label: string }[] = [
@@ -28,6 +29,7 @@ export function AdminUsersPanel() {
   const addActivity = useAdminStore((state) => state.addActivity);
 
   const [activeTab, setActiveTab] = useState<AdminUserTab>("users");
+  const [viewTarget, setViewTarget] = useState<PlatformUser | null>(null);
   const [removeTarget, setRemoveTarget] = useState<PlatformUser | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -74,8 +76,6 @@ export function AdminUsersPanel() {
     }
   }
 
-  const colSpan = isClerkTab ? 4 : 4;
-
   return (
     <>
       <div className="mx-auto max-w-6xl space-y-6">
@@ -111,13 +111,16 @@ export function AdminUsersPanel() {
                   {isClerkTab ? <th className="px-5 py-4">Gym</th> : null}
                   <th className="px-5 py-4">Joined</th>
                   <th className="px-5 py-4">Status</th>
-                  {!isClerkTab ? <th className="px-5 py-4">Actions</th> : null}
+                  <th className="px-5 py-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={colSpan} className="px-5 py-12 text-center text-zinc-500">
+                    <td
+                      colSpan={isClerkTab ? 5 : 5}
+                      className="px-5 py-12 text-center text-zinc-500"
+                    >
                       No users found.
                     </td>
                   </tr>
@@ -167,20 +170,29 @@ export function AdminUsersPanel() {
                           {user.status}
                         </span>
                       </td>
-                      {!isClerkTab ? (
-                        <td className="px-5 py-4">
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              setRemoveError(null);
-                              setRemoveTarget(user);
-                            }}
-                            className="rounded-lg border border-red-500/50 px-4 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
+                            onClick={() => setViewTarget(user)}
+                            className="rounded-lg border border-[#FACC15]/40 px-4 py-1.5 text-xs font-semibold text-[#FACC15] transition hover:bg-[#FACC15]/10"
                           >
-                            Remove
+                            View
                           </button>
-                        </td>
-                      ) : null}
+                          {!isClerkTab ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRemoveError(null);
+                                setRemoveTarget(user);
+                              }}
+                              className="rounded-lg border border-red-500/50 px-4 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -189,6 +201,8 @@ export function AdminUsersPanel() {
           </div>
         </section>
       </div>
+
+      <AdminUserViewModal user={viewTarget} onClose={() => setViewTarget(null)} />
 
       <AdminRemoveUserModal
         open={Boolean(removeTarget) && removeTarget?.tab !== "clerk"}

@@ -60,6 +60,10 @@ export function useWalkInApprovalSync() {
       void fetchUserStatus();
     }
 
+    function onActiveGymChanged() {
+      void fetchMembership();
+    }
+
     function onApprovalsUpdated() {
       const role = useAuthStore.getState().role;
       if (role === "OWNER" || role === "CLERK") {
@@ -69,11 +73,13 @@ export function useWalkInApprovalSync() {
 
     socket.on("walk_in_status", onWalkInStatus);
     socket.on("membership_updated", onMembershipUpdated);
+    socket.on("active_gym_changed", onActiveGymChanged);
     socket.on("walk_in_approvals_updated", onApprovalsUpdated);
 
     return () => {
       socket.off("walk_in_status", onWalkInStatus);
       socket.off("membership_updated", onMembershipUpdated);
+      socket.off("active_gym_changed", onActiveGymChanged);
       socket.off("walk_in_approvals_updated", onApprovalsUpdated);
     };
   }, [

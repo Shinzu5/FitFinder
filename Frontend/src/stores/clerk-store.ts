@@ -144,6 +144,7 @@ interface ClerkState {
   fetchMembers: () => Promise<void>;
   fetchPlans: () => Promise<void>;
   setPlans: (plans: MembershipPlanOption[]) => void;
+  setActiveNow: (n: number) => void;
   fetchAll: () => Promise<void>;
   recordPayment: (input: RecordPaymentInput) => Promise<boolean>;
   updatePayment: (
@@ -277,6 +278,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
   },
 
   setPlans: (plans) => set({ plans, error: null }),
+
+  setActiveNow: (n) => set({ activeNow: Math.max(0, Number(n) || 0) }),
 
   fetchAll: async () => {
     set({ loading: true, error: null });
