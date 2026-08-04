@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   ClipboardCheck,
+  ClipboardList,
   CreditCard,
   Dumbbell,
   FileText,
@@ -25,6 +26,7 @@ export const OWNER_NAV_ITEMS = [
   { label: "My Gym", href: "/dashboard/owner/my-gym", icon: Building2 },
   { label: "Memberships", href: "/dashboard/owner/memberships", icon: CreditCard },
   { label: "Members", href: "/dashboard/owner/members", icon: Users },
+  { label: "Attendance", href: "/dashboard/owner/attendance", icon: ClipboardList },
   { label: "Walk-in Payment", href: "/dashboard/owner/walk-in", icon: CreditCard },
   { label: "Approvals", href: "/dashboard/owner/approvals", icon: ClipboardCheck },
   { label: "Exercises", href: "/dashboard/owner/exercises", icon: Dumbbell },

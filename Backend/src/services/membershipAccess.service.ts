@@ -26,6 +26,14 @@ export async function expireOverdueMemberships(userId?: string): Promise<number>
     data: { status: "EXPIRED" },
   });
 
+  // Clear active gym session when that gym's membership expired (multi-gym safe)
+  for (const m of overdue) {
+    await prisma.user.updateMany({
+      where: { id: m.userId, activeGymId: m.gymId },
+      data: { activeGymId: null },
+    });
+  }
+
   const uniqueUserIds = [...new Set(overdue.map((m) => m.userId))];
   for (const id of uniqueUserIds) {
     emitMembershipUpdated(id);

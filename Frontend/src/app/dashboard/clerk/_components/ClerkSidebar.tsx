@@ -4,13 +4,22 @@ import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardCheck, CreditCard, LayoutGrid, MessageSquare, UserPlus, Users } from "lucide-react";
+import {
+  ClipboardCheck,
+  ClipboardList,
+  CreditCard,
+  LayoutGrid,
+  MessageSquare,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
 export const CLERK_NAV_ITEMS = [
   { label: "Overview", href: "/dashboard/clerk", icon: LayoutGrid },
   { label: "Walk-in Payment", href: "/dashboard/clerk/walk-in", icon: CreditCard },
   { label: "Approvals", href: "/dashboard/clerk/approvals", icon: ClipboardCheck },
+  { label: "Attendance", href: "/dashboard/clerk/attendance", icon: ClipboardList },
   { label: "Register Member", href: "/dashboard/clerk/register", icon: UserPlus },
   { label: "Members", href: "/dashboard/clerk/members", icon: Users },
   { label: "Messages", href: "/dashboard/clerk/messages", icon: MessageSquare },

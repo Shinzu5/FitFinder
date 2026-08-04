@@ -239,6 +239,143 @@ export async function getUsers(req: AuthRequest, res: Response): Promise<void> {
   }
 }
 
+// GET /api/admin/users/:id — profile + gym membership history for View modal
+export async function getUserDetail(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = String(req.params.id);
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+        createdAt: true,
+        emailVerified: true,
+        clerkGymId: true,
+        clerkOfGym: {
+          select: { id: true, name: true, owner: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    if (!user) {
+      sendError(res, "User not found", 404);
+      return;
+    }
+
+    const now = new Date();
+    await prisma.gymMembership.updateMany({
+      where: {
+        userId,
+        status: { in: ["ACTIVE", "EXPIRING"] },
+        expiresAt: { lt: now },
+      },
+      data: { status: "EXPIRED" },
+    });
+
+    const [memberships, approvals] = await Promise.all([
+      prisma.gymMembership.findMany({
+        where: { userId },
+        include: {
+          gym: { select: { id: true, name: true } },
+          plan: { select: { name: true } },
+        },
+        orderBy: { joinedAt: "desc" },
+      }),
+      prisma.walkInApproval.findMany({
+        where: { userId },
+        include: { gym: { select: { id: true, name: true } } },
+        orderBy: { submittedAt: "desc" },
+      }),
+    ]);
+
+    const gymRows: Array<{
+      gymId: string;
+      gymName: string;
+      planName: string;
+      planType: string;
+      remainingDays: number | null;
+      status: "Pending" | "Active" | "Expired" | "Cancelled";
+      source: "membership" | "approval";
+      joinedAt: string | null;
+      expiresAt: string | null;
+    }> = [];
+
+    for (const m of memberships) {
+      const remaining = daysRemainingUntil(m.expiresAt, now);
+      const live =
+        (m.status === "ACTIVE" || m.status === "EXPIRING") && remaining > 0;
+      gymRows.push({
+        gymId: m.gymId,
+        gymName: m.gym.name,
+        planName: m.planName || m.plan?.name || "Plan",
+        planType:
+          String(m.memberType || "").toUpperCase() === "ONLINE"
+            ? "Online"
+            : "Walk-in",
+        remainingDays: live ? remaining : 0,
+        status: live ? "Active" : "Expired",
+        source: "membership",
+        joinedAt: m.joinedAt.toISOString(),
+        expiresAt: m.expiresAt.toISOString(),
+      });
+    }
+
+    for (const a of approvals) {
+      if (a.status === "PENDING") {
+        gymRows.push({
+          gymId: a.gymId,
+          gymName: a.gym.name,
+          planName: a.planName || "Plan",
+          planType:
+            String(a.paymentMethod || "").toUpperCase() === "XENDIT"
+              ? "Online"
+              : "Walk-in",
+          remainingDays: null,
+          status: "Pending",
+          source: "approval",
+          joinedAt: a.submittedAt.toISOString(),
+          expiresAt: null,
+        });
+      } else if (a.status === "DECLINED") {
+        gymRows.push({
+          gymId: a.gymId,
+          gymName: a.gym.name,
+          planName: a.planName || "Plan",
+          planType:
+            String(a.paymentMethod || "").toUpperCase() === "XENDIT"
+              ? "Online"
+              : "Walk-in",
+          remainingDays: null,
+          status: "Cancelled",
+          source: "approval",
+          joinedAt: a.submittedAt.toISOString(),
+          expiresAt: null,
+        });
+      }
+    }
+
+    sendSuccess(res, {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      avatarUrl: user.avatarUrl,
+      createdAt: user.createdAt.toISOString(),
+      emailVerified: user.emailVerified,
+      clerkGymId: user.clerkGymId,
+      gymName: user.clerkOfGym?.name ?? null,
+      gymOwnerName: user.clerkOfGym?.owner?.fullName ?? null,
+      gyms: gymRows,
+    });
+  } catch (error) {
+    console.error("Get user detail error:", error);
+    sendError(res, "Failed to fetch user details", 500);
+  }
+}
+
 // DELETE /api/admin/users/:id
 export async function removeUser(req: AuthRequest, res: Response): Promise<void> {
   try {

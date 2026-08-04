@@ -26,7 +26,7 @@ export default function ShopPage() {
   useEffect(() => {
     if (!ready) return;
     if (!joinedGymId) {
-      router.replace("/dashboard/user");
+      router.replace("/dashboard/user/membership");
       return;
     }
     void fetchShop();

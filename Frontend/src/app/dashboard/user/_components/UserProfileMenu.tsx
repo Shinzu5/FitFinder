@@ -21,7 +21,7 @@ function ProfileAvatar({
   name: string;
   large?: boolean;
 }) {
-  if (avatarUrl) {
+  if (String(avatarUrl || "").trim()) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img

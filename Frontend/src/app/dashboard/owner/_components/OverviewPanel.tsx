@@ -51,7 +51,7 @@ export function OverviewPanel() {
 
   const stats = [
     {
-      label: "Active Members",
+      label: "Active Now",
       value: ready || !dashboardLoading ? String(activeNow) : "…",
       highlight: false,
     },

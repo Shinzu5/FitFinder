@@ -1,6 +1,6 @@
 import { Router } from "express";
 import {
-  getDashboard, getUsers, removeUser,
+  getDashboard, getUsers, getUserDetail, removeUser,
   getTransactions, getAdminGyms, getAnalytics,
 } from "../controllers/admin.controller";
 import { authenticate } from "../middleware/auth";
@@ -15,6 +15,7 @@ router.get("/dashboard", getDashboard);
 router.get("/gyms", getAdminGyms);
 router.get("/analytics", getAnalytics);
 router.get("/users", getUsers);
+router.get("/users/:id", getUserDetail);
 router.delete("/users/:id", removeUser);
 router.get("/transactions", getTransactions);
 

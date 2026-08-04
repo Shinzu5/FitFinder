@@ -37,12 +37,14 @@ function normalizeStatus(status: string | undefined): EquipmentStatus {
 }
 
 function mapEquipment(item: any): GymEquipment {
+  const rawImage = String(item.imageUrl || "").trim();
   return {
     id: item.id,
     name: item.name,
     quantity: item.quantity ?? 1,
     status: normalizeStatus(item.status),
-    imageUrl: resolveMediaUrl(item.imageUrl || ""),
+    // Keep empty so equipment table can fall back to icon (not a blank <img>)
+    imageUrl: rawImage ? resolveMediaUrl(rawImage) : "",
     imageName: item.imageName || null,
   };
 }
@@ -52,7 +54,7 @@ function mapShopProduct(raw: any): ShopProduct {
     id: raw.id,
     name: raw.name,
     price: Number(raw.price) || 0,
-    imageUrl: resolveMediaUrl(raw.imageUrl || ""),
+    imageUrl: resolveMediaUrl(raw.imageUrl),
     imageName: raw.imageName || null,
   };
 }

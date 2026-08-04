@@ -25,9 +25,11 @@ import { useNotificationsSocket } from "@/hooks/useNotificationsSocket";
 import { useMembersListSync } from "@/hooks/useMembersListSync";
 import { useMemberGymContentSync } from "@/hooks/useMemberGymContentSync";
 import { useSalesSync } from "@/hooks/useSalesSync";
+import { useAttendanceSync } from "@/hooks/useAttendanceSync";
 import { UserProfileMenu } from "@/app/dashboard/user/_components/UserProfileMenu";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { gymIdFromUserPath } from "@/lib/gym-access";
 
 const NAV_ITEMS = [
   { label: "Home", href: "/dashboard/user", icon: Home, unlockRequired: false },
@@ -58,6 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useMembersListSync();
   useMemberGymContentSync();
   useSalesSync();
+  useAttendanceSync();
 
   // Reconcile persisted localStorage role with Neon after hydrate / login
   useEffect(() => {
@@ -310,11 +313,15 @@ function UserShell({
   children: React.ReactNode;
   pathname: string;
 }) {
-  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  const enrolledGymIds = useMembershipStore((state) => state.enrolledGymIds);
   useWalkInApprovalSync();
 
-  // Join/payment flow stays bare until membership is ACTIVE — then show full Gymer frame
-  const isGymFlowPage = pathname.startsWith("/dashboard/user/gym/") && !joinedGymId;
+  // Join/payment for a gym without LIVE membership at THAT gym → bare shell
+  // (multi-gym: Gym A active must not unlock the Gym B join/waiting chrome)
+  const pathGymId = gymIdFromUserPath(pathname);
+  const liveAtPathGym = pathGymId ? enrolledGymIds.includes(pathGymId) : false;
+  const isGymFlowPage =
+    pathname.startsWith("/dashboard/user/gym/") && !liveAtPathGym;
   if (isGymFlowPage) {
     return <div className="min-h-screen bg-black text-white">{children}</div>;
   }
@@ -329,26 +336,40 @@ function UserDashboardFrame({
   children: React.ReactNode;
   pathname: string;
 }) {
+  const router = useRouter();
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
   const unlocked = Boolean(joinedGymId);
   const walkInRequests = useWalkInApprovalsStore((state) => state.requests);
   const user = useAuthStore((state) => state.user);
-  const pendingWalkIn = Boolean(
+
+  const pendingForSelectedOrFirst = Boolean(
     user?.id &&
-      !joinedGymId &&
       walkInRequests.some(
         (req) =>
           req.userId === user.id &&
-          (req.status === "pending" ||
-            // Brief window after Approve before membership_updated lands
-            (req.status === "approved" && !req.consumedAt)),
+          !req.consumedAt &&
+          (req.status === "pending" || req.status === "approved") &&
+          // Pending for a gym that is not the live selected gym (or no live gym yet)
+          (!joinedGymId || req.gymId !== joinedGymId),
       ),
   );
+
+  // First-gym (or only) pending: no LIVE membership → lock Home + features; Membership only
+  const pendingLockdown = !unlocked && pendingForSelectedOrFirst;
+
+  useEffect(() => {
+    if (pendingLockdown && pathname === "/dashboard/user") {
+      router.replace("/dashboard/user/membership");
+    }
+  }, [pendingLockdown, pathname, router]);
 
   return (
     <div className="flex min-h-screen bg-black text-white">
       <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-4 py-5">
-        <Link href="/dashboard/user" className="mb-8 flex items-center gap-2.5 px-2">
+        <Link
+          href={pendingLockdown ? "/dashboard/user/membership" : "/dashboard/user"}
+          className="mb-8 flex items-center gap-2.5 px-2"
+        >
           <Image
             src="/LOGO.png"
             alt="Fit Finder"
@@ -367,7 +388,10 @@ function UserDashboardFrame({
 
         <nav className="flex flex-1 flex-col gap-1">
           {NAV_ITEMS.map((item) => {
-            const locked = item.unlockRequired && !unlocked;
+            const locked =
+              item.href === "/dashboard/user"
+                ? pendingLockdown
+                : item.unlockRequired && !unlocked;
             const active = pathname === item.href;
             const Icon = item.icon;
 
@@ -405,11 +429,11 @@ function UserDashboardFrame({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-4 border-b border-white/10 px-6 py-3">
           <div className="flex items-center gap-3">
-            {!unlocked ? (
+            {!unlocked || pendingForSelectedOrFirst ? (
               <div className="hidden max-w-md items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
                 <span className="text-[#FFD700]">⚠</span>
-                {pendingWalkIn
-                  ? "Membership pending — waiting for Owner/Clerk approval"
+                {pendingForSelectedOrFirst
+                  ? "Waiting for Owner/Clerk Approval"
                   : "Dashboard locked — join a gym and complete payment to unlock"}
               </div>
             ) : null}

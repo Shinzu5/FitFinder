@@ -30,7 +30,7 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
   const searchParams = useSearchParams();
   const isRenewalFlow = searchParams.get("renew") === "1";
   const user = useAuthStore((state) => state.user);
-  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  const enrolledGymIds = useMembershipStore((state) => state.enrolledGymIds);
   const resetJoin = useJoinGymStore((state) => state.resetJoin);
   const { selectedPlanId, selectedCoachId } = useJoinGymStore();
   const requests = useWalkInApprovalsStore((state) => state.requests);
@@ -111,11 +111,11 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
   // New-join only: finished onboarding → home. Renewals never auto-redirect to Home.
   useEffect(() => {
     if (isRenewalFlow) return;
-    if (onboardingDone && joinedGymId === profile.id) {
+    if (onboardingDone && enrolledGymIds.includes(profile.id)) {
       resetJoin();
       router.replace("/dashboard/user");
     }
-  }, [isRenewalFlow, onboardingDone, joinedGymId, profile.id, resetJoin, router]);
+  }, [isRenewalFlow, onboardingDone, enrolledGymIds, profile.id, resetJoin, router]);
 
   // Pending / rejected requests belong on My Membership (not join shell / Home)
   useEffect(() => {
@@ -188,7 +188,7 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
   ]);
 
   const handleDone = useCallback(async () => {
-    if (!userRequest?.id || !isApproved || completing || isRenewalFlow) return;
+    if (!userRequest?.id || !isApproved || completing) return;
     setCompleting(true);
     setError(null);
     const ok = await completeOnboarding(userRequest.id);
@@ -204,7 +204,6 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     userRequest?.id,
     isApproved,
     completing,
-    isRenewalFlow,
     completeOnboarding,
     fetchMembership,
     resetJoin,
@@ -215,7 +214,7 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     ? "Processing…"
     : completing
       ? "Opening dashboard…"
-      : isApproved && !isRenewalFlow
+      : isApproved
         ? "Done"
         : isPending
           ? "Waiting for Approval"
@@ -228,7 +227,7 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
   const buttonEnabled =
     !submitting &&
     !completing &&
-    ((isApproved && !isRenewalFlow) || (!isPending && !isApproved));
+    (isApproved || (!isPending && !isApproved));
   const showAsWaiting = isPending;
 
   return (
@@ -266,13 +265,13 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
         ) : null}
 
         <article className="rounded-2xl border border-white/10 bg-[#141414] px-6 py-8 text-center">
-          {isApproved && !isRenewalFlow ? (
+          {isApproved ? (
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-400" />
           ) : (
             <Clock3 className="mx-auto h-12 w-12 text-[#FFD700]" />
           )}
           <h2 className="mt-4 text-xl font-bold text-white">
-            {isApproved && !isRenewalFlow
+            {isApproved
               ? "Membership Approved"
               : isPending
                 ? "Waiting for Approval"
@@ -283,8 +282,8 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
                     : "Confirm Walk-in Payment"}
           </h2>
           <p className="mt-2 text-sm text-zinc-400">
-            {isApproved && !isRenewalFlow
-              ? "Your membership is active. Tap Done to open your Gymer dashboard."
+            {isApproved
+              ? "Approved. Tap Done to activate your membership and open your Gymer dashboard."
               : isPending
                 ? "Payment recorded. Waiting for the Gym Owner or Clerk to approve."
                 : isRenewalFlow
@@ -312,13 +311,13 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
         <button
           type="button"
           onClick={() => {
-            if (isApproved && !isRenewalFlow) void handleDone();
+            if (isApproved) void handleDone();
             else if (!isPending) void handleProceed();
           }}
           disabled={!buttonEnabled || showAsWaiting}
           aria-disabled={!buttonEnabled || showAsWaiting}
           className={`w-full rounded-xl py-4 text-sm font-bold transition ${
-            isApproved && !isRenewalFlow
+            isApproved
               ? "bg-[#FFD700] text-black hover:bg-[#e6c200]"
               : showAsWaiting
                 ? "cursor-not-allowed border border-white/10 bg-[#1a1a1a] text-zinc-500"

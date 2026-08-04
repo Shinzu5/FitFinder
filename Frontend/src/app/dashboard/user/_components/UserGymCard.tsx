@@ -72,31 +72,36 @@ export function UserGymCard({ gym, isJoined }: UserGymCardProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <a
-              href={getWebsiteHref(gym.website)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-[#FACC15]/50 px-3 py-2 text-xs font-bold text-[#FACC15] transition hover:bg-[#FACC15]/10"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Visit Website
-            </a>
-            {isJoined ? (
-              <Link
-                href={`/dashboard/user/gym/${gym.id}`}
-                className="rounded-xl bg-[#FACC15] px-4 py-2 text-xs font-bold text-black transition hover:bg-[#e6c200]"
+          <div className="flex flex-col items-end gap-2">
+            <p className="text-sm font-semibold text-[#FACC15]">
+              Active Now: {Number(gym.activeNow) || 0}
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={getWebsiteHref(gym.website)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#FACC15]/50 px-3 py-2 text-xs font-bold text-[#FACC15] transition hover:bg-[#FACC15]/10"
               >
-                My Gym
-              </Link>
-            ) : (
-              <Link
-                href={`/dashboard/user/gym/${gym.id}`}
-                className="rounded-xl border border-[#FACC15] px-4 py-2 text-xs font-bold text-[#FACC15] transition hover:bg-[#FACC15] hover:text-black"
-              >
-                {gym.hasActivePlans === false ? "View Gym" : "Join Gym"}
-              </Link>
-            )}
+                <ExternalLink className="h-3.5 w-3.5" />
+                Visit Website
+              </a>
+              {isJoined ? (
+                <Link
+                  href={`/dashboard/user/gym/${gym.id}`}
+                  className="rounded-xl bg-[#FACC15] px-4 py-2 text-xs font-bold text-black transition hover:bg-[#e6c200]"
+                >
+                  My Gym
+                </Link>
+              ) : (
+                <Link
+                  href={`/dashboard/user/gym/${gym.id}`}
+                  className="rounded-xl border border-[#FACC15] px-4 py-2 text-xs font-bold text-[#FACC15] transition hover:bg-[#FACC15] hover:text-black"
+                >
+                  {gym.hasActivePlans === false ? "View Gym" : "Join Gym"}
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </div>

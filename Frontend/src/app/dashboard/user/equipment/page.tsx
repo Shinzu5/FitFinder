@@ -51,7 +51,7 @@ export default function EquipmentPage() {
   useEffect(() => {
     if (!ready) return;
     if (!joinedGymId) {
-      router.replace("/dashboard/user");
+      router.replace("/dashboard/user/membership");
       return;
     }
     void fetchEquipment();
@@ -104,7 +104,7 @@ export default function EquipmentPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-[#131315]">
-                          {item.imageUrl ? (
+                          {String(item.imageUrl || "").trim() ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={item.imageUrl}

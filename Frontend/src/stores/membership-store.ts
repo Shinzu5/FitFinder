@@ -14,13 +14,45 @@ export interface RenewalHistoryItem {
   renewalDate: string;
 }
 
+export interface EnrolledGymMembership {
+  membershipId: string;
+  gymId: string;
+  gymName: string;
+  gymAddress: string;
+  coverImageUrl: string;
+  planId: string | null;
+  planName: string;
+  planPrice: number;
+  planType: string;
+  durationDays: number;
+  remainingDays: number;
+  status: string;
+  memberType: string;
+  paymentMethod: string;
+  paymentRef: string;
+  totalPaid: number;
+  coachId: string | null;
+  coachName: string | null;
+  coachSessionPrice: number;
+  joinedAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
+}
+
 interface MembershipState {
+  /** Currently selected (active) gym session */
   joinedGymId: string | null;
   membership: CompletedMembership | null;
+  memberships: EnrolledGymMembership[];
+  enrolledGymIds: string[];
   renewalHistory: RenewalHistoryItem[];
   loading: boolean;
+  switching: boolean;
   error: string | null;
   fetchMembership: () => Promise<void>;
+  fetchMemberships: () => Promise<void>;
+  selectActiveGym: (gymId: string) => Promise<boolean>;
+  isEnrolledIn: (gymId: string) => boolean;
   joinGym: (details: CompletedMembership) => Promise<boolean>;
   leaveGym: () => Promise<void>;
 }
@@ -47,6 +79,33 @@ function mapMembership(data: any): CompletedMembership {
   };
 }
 
+function mapEnrolled(raw: any): EnrolledGymMembership {
+  return {
+    membershipId: String(raw.membershipId || ""),
+    gymId: String(raw.gymId || ""),
+    gymName: String(raw.gymName || "Gym"),
+    gymAddress: String(raw.gymAddress || ""),
+    coverImageUrl: String(raw.coverImageUrl || ""),
+    planId: raw.planId ?? null,
+    planName: String(raw.planName || "Plan"),
+    planPrice: Number(raw.planPrice) || 0,
+    planType: String(raw.planType || "Walk-in"),
+    durationDays: Number(raw.durationDays) || 0,
+    remainingDays: Number(raw.remainingDays) || 0,
+    status: String(raw.status || "Active"),
+    memberType: String(raw.memberType || ""),
+    paymentMethod: String(raw.paymentMethod || ""),
+    paymentRef: String(raw.paymentRef || ""),
+    totalPaid: Number(raw.totalPaid) || 0,
+    coachId: raw.coachId ?? null,
+    coachName: raw.coachName ?? null,
+    coachSessionPrice: Number(raw.coachSessionPrice) || 0,
+    joinedAt: String(raw.joinedAt || ""),
+    expiresAt: String(raw.expiresAt || ""),
+    isCurrent: Boolean(raw.isCurrent),
+  };
+}
+
 function mapRenewalHistory(raw: unknown): RenewalHistoryItem[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item: any) => ({
@@ -65,19 +124,53 @@ function isMembershipExpired(membership: CompletedMembership): boolean {
   return new Date(membership.expiresAt).getTime() <= Date.now();
 }
 
-export const useMembershipStore = create<MembershipState>((set) => ({
+export const useMembershipStore = create<MembershipState>((set, get) => ({
   joinedGymId: null,
   membership: null,
+  memberships: [],
+  enrolledGymIds: [],
   renewalHistory: [],
   loading: false,
+  switching: false,
   error: null,
+
+  isEnrolledIn: (gymId: string) => get().enrolledGymIds.includes(gymId),
+
+  fetchMemberships: async () => {
+    try {
+      const { data } = await api.get("/user/memberships");
+      if (!data.success || !data.data) {
+        set({ memberships: [], enrolledGymIds: [] });
+        return;
+      }
+      const list = Array.isArray(data.data.memberships)
+        ? data.data.memberships.map(mapEnrolled)
+        : [];
+      set({
+        memberships: list,
+        enrolledGymIds: list
+          .filter((m: EnrolledGymMembership) => m.status !== "Expired")
+          .map((m: EnrolledGymMembership) => m.gymId),
+      });
+      // Do not overwrite joinedGymId here — fetchMembership owns the active session
+    } catch {
+      // Keep last known list on transient errors
+    }
+  },
 
   fetchMembership: async () => {
     set({ loading: true, error: null });
     try {
       const { data } = await api.get("/user/membership");
       if (!data.success || !data.data) {
-        set({ joinedGymId: null, membership: null, renewalHistory: [], loading: false });
+        set({
+          joinedGymId: null,
+          membership: null,
+          renewalHistory: [],
+          memberships: [],
+          enrolledGymIds: [],
+          loading: false,
+        });
         return;
       }
 
@@ -90,21 +183,56 @@ export const useMembershipStore = create<MembershipState>((set) => ({
           loading: false,
           error: null,
         });
+        await get().fetchMemberships();
         return;
       }
+
+      const enrolledGymIds = Array.isArray(data.data.enrolledGymIds)
+        ? data.data.enrolledGymIds.map(String)
+        : [membership.gymId];
 
       set({
         joinedGymId: membership.gymId,
         membership,
+        enrolledGymIds,
         renewalHistory: mapRenewalHistory(data.data.renewalHistory),
         loading: false,
         error: null,
       });
+
+      void get().fetchMemberships();
     } catch (error: any) {
       set({
         loading: false,
         error: error.response?.data?.message || "Failed to load membership.",
       });
+    }
+  },
+
+  selectActiveGym: async (gymId: string) => {
+    if (!gymId) return false;
+    if (get().joinedGymId === gymId) return true;
+
+    set({ switching: true, error: null });
+    try {
+      const { data } = await api.patch("/user/active-gym", { gymId });
+      if (!data.success) {
+        set({
+          switching: false,
+          error: data.message || "Failed to switch gym.",
+        });
+        return false;
+      }
+
+      await get().fetchMembership();
+      set({ switching: false });
+      return true;
+    } catch (error: any) {
+      set({
+        switching: false,
+        error: error.response?.data?.message || "Failed to switch gym.",
+      });
+      return false;
     }
   },
 
@@ -142,11 +270,17 @@ export const useMembershipStore = create<MembershipState>((set) => ({
           })
         : details;
 
-      set({
-        joinedGymId: membership.gymId,
-        membership,
-        error: null,
-      });
+      // Only replace active session when none is set yet
+      if (!get().joinedGymId) {
+        set({
+          joinedGymId: membership.gymId,
+          membership,
+          error: null,
+        });
+      } else {
+        set({ error: null });
+      }
+      void get().fetchMemberships();
       return true;
     } catch (error: any) {
       set({ error: error.response?.data?.message || "Failed to join gym." });
@@ -160,7 +294,7 @@ export const useMembershipStore = create<MembershipState>((set) => ({
     } catch {
       // Still clear local state if already gone server-side
     }
-    set({ joinedGymId: null, membership: null, renewalHistory: [], error: null });
+    await get().fetchMembership();
   },
 }));
 

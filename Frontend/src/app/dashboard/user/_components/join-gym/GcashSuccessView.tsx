@@ -20,8 +20,14 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
   const isRenewalFlow = searchParams.get("renew") === "1";
   const userId = useAuthStore((state) => state.user?.id);
   const membership = useMembershipStore((state) => state.membership);
+  const memberships = useMembershipStore((state) => state.memberships);
   const joinedGymId = useMembershipStore((state) => state.joinedGymId);
+  const enrolledGymIds = useMembershipStore((state) => state.enrolledGymIds);
   const fetchMembership = useMembershipStore((state) => state.fetchMembership);
+  const gymMembership =
+    membership?.gymId === gymId
+      ? membership
+      : memberships.find((m) => m.gymId === gymId) || null;
   const fetchUserStatus = useWalkInApprovalsStore((state) => state.fetchUserStatus);
   const requests = useWalkInApprovalsStore((state) => state.requests);
   const { xenditPaymentId, setXenditPaymentId, resetJoin } = useJoinGymStore();
@@ -67,11 +73,11 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
       setFailed(false);
       return;
     }
-    if (joinedGymId === gymId && membership?.gymId === gymId) {
+    if (enrolledGymIds.includes(gymId)) {
       setVerifying(false);
       setFailed(false);
     }
-  }, [joinedGymId, membership, gymId, pendingApproval]);
+  }, [enrolledGymIds, gymId, pendingApproval]);
 
   useEffect(() => {
     if (!paymentLookupId) {
@@ -114,8 +120,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
               return;
             }
 
-            const activeGymId = useMembershipStore.getState().joinedGymId;
-            if (activeGymId === gymId) {
+            if (useMembershipStore.getState().enrolledGymIds.includes(gymId)) {
               setVerifying(false);
               return;
             }
@@ -169,7 +174,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
   }
 
   if ((isRenewalFlow || pendingRenewal || pendingNewJoin || paymentDetails) &&
-      !(joinedGymId === gymId && membership?.gymId === gymId) &&
+      !enrolledGymIds.includes(gymId) &&
       paymentDetails) {
     return (
       <div className="min-h-screen bg-black text-white">
@@ -247,10 +252,10 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
 
   const displayData =
     paymentDetails ||
-    (membership && membership.gymId === gymId
+    (gymMembership
       ? {
-          referenceId: membership.paymentRef,
-          amount: membership.totalPaid,
+          referenceId: gymMembership.paymentRef,
+          amount: gymMembership.totalPaid,
           status: "SUCCEEDED",
         }
       : null);
@@ -294,11 +299,11 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
         </div>
 
         <article className="rounded-2xl border border-white/10 bg-[#141414] p-5 text-left text-sm">
-          {membership && membership.gymId === gymId ? (
+          {gymMembership ? (
             <>
-              <DetailRow label="Gym" value={membership.gymName} />
-              <DetailRow label="Plan" value={membership.planName} />
-              <DetailRow label="Coach" value={membership.coachName ?? "None"} />
+              <DetailRow label="Gym" value={gymMembership.gymName} />
+              <DetailRow label="Plan" value={gymMembership.planName} />
+              <DetailRow label="Coach" value={gymMembership.coachName ?? "None"} />
             </>
           ) : null}
           <DetailRow

@@ -9,16 +9,19 @@ import {
   emitWalkInStatus,
 } from "../services/realtime.service";
 import {
-  computeExtendedExpiresAt,
   listGymMembers,
   notifyMembershipChange,
   upsertGymMembership,
   type RegisteredBy,
 } from "../services/gymMembership.service";
 import {
-  notifyMembershipApproved,
+  activateFromApproval,
+  markApprovedOnly,
+} from "../services/membershipApproval.service";
+import {
   notifyMembershipRejected,
 } from "../services/membershipNotification.service";
+import { countActiveNow } from "../services/attendance.service";
 
 // Helper: gym for Clerk (assigned) or Owner (owned) — same walk-in approval flow
 async function getClerkGym(userId: string) {
@@ -108,13 +111,8 @@ export async function getDashboard(req: AuthRequest, res: Response): Promise<voi
       prisma.gymMembership.count({
         where: { gymId: gym.id, joinedAt: { gte: startOfDay } },
       }),
-      prisma.gymMembership.count({
-        where: {
-          gymId: gym.id,
-          status: { in: ["ACTIVE", "EXPIRING"] },
-          expiresAt: { gt: now },
-        },
-      }),
+      // Currently checked-in members + walk-in visitors (not membership count)
+      countActiveNow(gym.id),
     ]);
 
     const revenueToday = todayTxns.reduce((sum, txn) => sum + txn.amount, 0);
@@ -503,146 +501,16 @@ export async function getApprovals(req: AuthRequest, res: Response): Promise<voi
   }
 }
 
-/**
- * Activate ACTIVE GymMembership + sales from an approved request.
- * Used for renewals on Approve, and for new joins on Done / clerk complete.
- */
-async function activateMembershipFromApproval(opts: {
-  approval: {
-    id: string;
-    userId: string;
-    gymId: string;
-    planId: string | null;
-    planName: string;
-    planPrice: number;
-    plan?: { name: string; price: number } | null;
-    coachId: string | null;
-    memberName: string;
-    paymentRef: string;
-    totalPaid: number;
-    durationDays: number;
-    isRenewal?: boolean;
-    paymentMethod?: string | null;
-  };
-  actorId: string;
-  registeredBy: RegisteredBy;
-  isRenewal: boolean;
-  consumeNow: boolean;
-}) {
-  const { approval, actorId, registeredBy, isRenewal, consumeNow } = opts;
-  const now = new Date();
-  const payMethodRaw = String(approval.paymentMethod || "WALK_IN").toUpperCase();
-  const memberType = payMethodRaw === "XENDIT" ? "ONLINE" : "WALK_IN";
-  const txnMethod = payMethodRaw === "XENDIT" ? "XENDIT" : "CASH";
-
-  const existingMembership = await prisma.gymMembership.findFirst({
-    where: { userId: approval.userId, gymId: approval.gymId },
-    orderBy: { joinedAt: "desc" },
-    select: { expiresAt: true, startsAt: true },
-  });
-
-  const expiresAt = isRenewal
-    ? computeExtendedExpiresAt(existingMembership?.expiresAt, approval.durationDays, now)
-    : (() => {
-        const d = new Date(now);
-        d.setDate(d.getDate() + approval.durationDays);
-        return d;
-      })();
-
-  return prisma.$transaction(async (tx) => {
-    const dupTxn = await tx.clerkTransaction.findFirst({
-      where: {
-        gymId: approval.gymId,
-        notes: { contains: approval.paymentRef },
-      },
-      select: { id: true },
-    });
-    if (dupTxn) {
-      throw new Error("DUPLICATE_PAYMENT_REF");
-    }
-
-    let liveCoachId: string | null = approval.coachId;
-    if (approval.coachId) {
-      const liveCoach = await tx.coach.findFirst({
-        where: {
-          id: approval.coachId,
-          gymId: approval.gymId,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (!liveCoach) liveCoachId = null;
-    }
-
-    await upsertGymMembership(
-      {
-        userId: approval.userId,
-        gymId: approval.gymId,
-        planId: approval.planId,
-        planName: approval.planName || approval.plan?.name || "",
-        planPrice: approval.planPrice || approval.plan?.price || 0,
-        durationDays: approval.durationDays,
-        coachId: liveCoachId,
-        paymentMethod: payMethodRaw === "XENDIT" ? "XENDIT" : "WALK_IN",
-        paymentRef: approval.paymentRef,
-        totalPaid: approval.totalPaid,
-        accumulateTotalPaid: isRenewal,
-        memberType,
-        registeredBy,
-        registeredById: actorId,
-        expiresAt,
-        startsAt:
-          isRenewal && existingMembership?.startsAt
-            ? existingMembership.startsAt
-            : now,
-        status: "ACTIVE",
-      },
-      tx,
-    );
-
-    await tx.clerkTransaction.create({
-      data: {
-        gymId: approval.gymId,
-        clerkId: actorId,
-        type: isRenewal ? "RENEWAL" : "MONTHLY",
-        memberName: approval.memberName,
-        amount: approval.totalPaid,
-        method: txnMethod as "CASH" | "XENDIT",
-        notes: isRenewal
-          ? `Membership renewal approved · Ref ${approval.paymentRef}`
-          : `Membership activated · Ref ${approval.paymentRef}`,
-      },
-    });
-
-    return tx.walkInApproval.update({
-      where: { id: approval.id },
-      data: {
-        status: "APPROVED",
-        reviewedAt: now,
-        paymentStatus: "PAID",
-        isRenewal,
-        consumedAt: consumeNow ? now : null,
-      },
-      include: {
-        plan: { select: { name: true, price: true } },
-        gym: { select: { name: true } },
-      },
-    });
-  });
-}
-
 // PUT /api/clerk/approvals/:id/approve
-// Renewals / paid GCash: activate immediately.
-// Walk-in new joins: approve only — ACTIVE membership waits for Done / clerk complete.
+// PENDING → APPROVED only. ACTIVE membership waits for gymer Done / clerk complete.
 export async function approveWalkIn(req: AuthRequest, res: Response): Promise<void> {
   try {
     const approval = await prisma.walkInApproval.findUnique({
       where: { id: req.params.id as string },
-      include: { plan: true, gym: { select: { name: true } } },
+      select: { id: true, gymId: true },
     });
 
     if (!approval) { sendError(res, "Not found", 404); return; }
-    if (approval.status !== "PENDING") { sendError(res, "Already processed"); return; }
 
     const gym = await getClerkGym(req.userId!);
     if (!gym || gym.id !== approval.gymId) {
@@ -650,96 +518,21 @@ export async function approveWalkIn(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const now = new Date();
-    const actor = await prisma.user.findUnique({
-      where: { id: req.userId! },
-      select: { role: true },
+    const result = await markApprovedOnly({
+      approvalId: approval.id,
+      actorId: req.userId!,
     });
-    const registeredBy: RegisteredBy =
-      actor?.role === "OWNER" ? "OWNER" : "CLERK";
-
-    const liveActive = await prisma.gymMembership.findFirst({
-      where: {
-        userId: approval.userId,
-        gymId: approval.gymId,
-        status: { in: ["ACTIVE", "EXPIRING"] },
-        expiresAt: { gt: now },
-      },
-      select: { id: true },
-    });
-
-    const isRenewal = Boolean((approval as any).isRenewal) || Boolean(liveActive);
-    const payMethodRaw = String((approval as any).paymentMethod || "WALK_IN").toUpperCase();
-
-    // Owner/Clerk Approve activates ACTIVE membership — gymer unlocks only after this step
-    let updated;
-    try {
-      updated = await activateMembershipFromApproval({
-        approval,
-        actorId: req.userId!,
-        registeredBy,
-        isRenewal,
-        consumeNow: true,
-      });
-    } catch (err: any) {
-      if (err?.message === "DUPLICATE_PAYMENT_REF") {
-        sendError(res, "This payment was already applied", 409);
-        return;
-      }
-      throw err;
+    if (!result.ok) {
+      sendError(res, result.message, result.status);
+      return;
     }
-
-    const methodLabel = payMethodRaw === "XENDIT" ? "Cashless" : "Walk-in";
-    const responsePayload = {
-      id: updated.id,
-      userId: updated.userId,
-      memberName: updated.memberName,
-      memberEmail: updated.memberEmail,
-      gymId: updated.gymId,
-      gymName: updated.gym?.name || approval.gym?.name || gym.name,
-      planId: updated.planId,
-      planName: updated.planName || updated.plan?.name || approval.planName || "",
-      planPrice:
-        updated.planPrice > 0
-          ? updated.planPrice
-          : updated.plan?.price ?? approval.planPrice ?? 0,
-      coachId: updated.coachId,
-      coachName: updated.coachName,
-      coachSessionPrice: updated.coachSessionPrice,
-      paymentRef: updated.paymentRef,
-      totalPaid: updated.totalPaid,
-      durationDays: updated.durationDays,
-      isRenewal,
-      paymentMethod: methodLabel,
-      paymentStatus: String(updated.paymentStatus || "PAID").toLowerCase(),
-      approvalStatus: "approved",
-      status: "approved",
-      rejectionReason: updated.rejectionReason || "",
-      submittedAt: updated.submittedAt.getTime(),
-      reviewedAt: updated.reviewedAt?.getTime() ?? null,
-      consumedAt: updated.consumedAt?.getTime() ?? null,
-      renewalDate: updated.submittedAt.getTime(),
-    };
-
-    emitWalkInStatus(updated.userId, responsePayload);
-    void emitWalkInApprovalsUpdated(updated.gymId);
-    await notifyMembershipChange(updated.userId, updated.gymId);
-    void emitSalesUpdated(updated.gymId);
-    void emitAdminGymsUpdated();
-    void notifyMembershipApproved({
-      userId: updated.userId,
-      gymId: updated.gymId,
-      gymName: responsePayload.gymName,
-      approvalId: updated.id,
-      isRenewal,
-    });
 
     sendSuccess(
       res,
-      responsePayload,
-      isRenewal
-        ? "Renewal approved — membership days extended"
-        : "Membership approved — gymer dashboard unlocked",
+      result.shaped,
+      result.isRenewal
+        ? "Renewal approved — gymer must tap Done to apply days"
+        : "Membership approved — gymer must tap Done to activate",
     );
   } catch (error) {
     console.error("Approve walk-in error:", error);
@@ -798,12 +591,12 @@ export async function getWalkInPayments(req: AuthRequest, res: Response): Promis
 }
 
 // POST /api/clerk/walk-in-payments/:id/complete
-// Confirms walk-in cash and activates ACTIVE membership for new joins.
+// Staff Done: APPROVED → ACTIVE (same shared activation as gymer Done).
 export async function completeWalkInPayment(req: AuthRequest, res: Response): Promise<void> {
   try {
     const approval = await prisma.walkInApproval.findUnique({
       where: { id: req.params.id as string },
-      include: { plan: true, gym: { select: { name: true } } },
+      select: { id: true, gymId: true },
     });
 
     if (!approval) { sendError(res, "Not found", 404); return; }
@@ -814,16 +607,6 @@ export async function completeWalkInPayment(req: AuthRequest, res: Response): Pr
       return;
     }
 
-    if (approval.status !== "APPROVED") {
-      sendError(res, "Request must be approved before payment can be completed");
-      return;
-    }
-
-    if (approval.consumedAt) {
-      sendError(res, "Payment already confirmed for this request");
-      return;
-    }
-
     const actor = await prisma.user.findUnique({
       where: { id: req.userId! },
       select: { role: true },
@@ -831,81 +614,33 @@ export async function completeWalkInPayment(req: AuthRequest, res: Response): Pr
     const registeredBy: RegisteredBy =
       actor?.role === "OWNER" ? "OWNER" : "CLERK";
 
-    const existingActive = await prisma.gymMembership.findFirst({
-      where: {
-        userId: approval.userId,
-        gymId: approval.gymId,
-        status: { in: ["ACTIVE", "EXPIRING"] },
-      },
-      select: { id: true },
+    const result = await activateFromApproval({
+      approvalId: approval.id,
+      actorId: req.userId!,
+      registeredBy,
     });
-
-    let consumedAtMs = Date.now();
-    try {
-      if (!existingActive) {
-        const activated = await activateMembershipFromApproval({
-          approval,
-          actorId: req.userId!,
-          registeredBy,
-          isRenewal: false,
-          consumeNow: true,
-        });
-        consumedAtMs = activated.consumedAt?.getTime() ?? Date.now();
-      } else {
-        const marked = await prisma.walkInApproval.update({
-          where: { id: approval.id },
-          data: { consumedAt: new Date() },
-        });
-        consumedAtMs = marked.consumedAt?.getTime() ?? Date.now();
-      }
-    } catch (err: any) {
-      if (err?.message === "DUPLICATE_PAYMENT_REF") {
-        sendError(res, "This payment was already applied", 409);
-        return;
-      }
-      throw err;
+    if (!result.ok) {
+      sendError(res, result.message, result.status);
+      return;
     }
-
-    await notifyMembershipChange(approval.userId, approval.gymId);
-    void emitSalesUpdated(approval.gymId);
-    void emitWalkInApprovalsUpdated(approval.gymId);
-    void emitAdminGymsUpdated();
-
-    emitWalkInStatus(approval.userId, {
-      id: approval.id,
-      userId: approval.userId,
-      memberName: approval.memberName,
-      memberEmail: approval.memberEmail,
-      gymId: approval.gymId,
-      gymName: gym.name,
-      planId: approval.planId,
-      planName: approval.planName || approval.plan?.name || "",
-      planPrice: approval.planPrice || approval.plan?.price || 0,
-      paymentRef: approval.paymentRef,
-      totalPaid: approval.totalPaid,
-      durationDays: approval.durationDays,
-      status: "approved",
-      approvalStatus: "approved",
-      consumedAt: consumedAtMs,
-      isRenewal: Boolean((approval as any).isRenewal),
-    });
 
     sendSuccess(
       res,
       {
-        approval: {
-          id: approval.id,
-          status: "approved",
-          consumedAt: consumedAtMs,
-          paymentRef: approval.paymentRef,
-          totalPaid: approval.totalPaid,
-          memberName: approval.memberName,
-          planName: approval.planName || approval.plan?.name || "",
-          gymName: gym.name,
-          isRenewal: Boolean((approval as any).isRenewal),
+        approval: result.shaped,
+        membership: {
+          gymId: result.membership.gymId,
+          planId: result.membership.planId,
+          paymentRef: result.membership.paymentRef,
+          totalPaid: result.membership.totalPaid,
+          joinedAt: result.membership.joinedAt.toISOString(),
+          expiresAt: result.membership.expiresAt.toISOString(),
+          durationDays: result.membership.durationDays,
         },
       },
-      "Walk-in completed — membership is now Active.",
+      result.isRenewal
+        ? "Renewal activated — membership days extended"
+        : "Walk-in completed — membership is now Active.",
     );
   } catch (error) {
     console.error("Complete walk-in payment error:", error);

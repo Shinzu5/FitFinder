@@ -63,6 +63,19 @@ export async function listGyms(req: Request, res: Response): Promise<void> {
       orderBy: { createdAt: "desc" },
     });
 
+    const gymIds = gyms.map((g) => g.id);
+    const activeGroups =
+      gymIds.length > 0
+        ? await prisma.attendance.groupBy({
+            by: ["gymId"],
+            where: { gymId: { in: gymIds }, checkedOutAt: null },
+            _count: { _all: true },
+          })
+        : [];
+    const activeNowByGym = new Map(
+      activeGroups.map((g) => [g.gymId, g._count._all]),
+    );
+
     const result = gyms.map((gym) => ({
       id: gym.id,
       name: gym.name,
@@ -71,6 +84,7 @@ export async function listGyms(req: Request, res: Response): Promise<void> {
       hours: gym.schedule,
       website: gym.website,
       members: gym._count.gymMemberships,
+      activeNow: activeNowByGym.get(gym.id) ?? 0,
       pricePerMonth: gym.membershipPlans[0]?.price ?? null,
       hasActivePlans: gym.membershipPlans.length > 0,
       image: gym.coverImageUrl,

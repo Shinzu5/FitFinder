@@ -80,11 +80,17 @@ export default function MembershipPage() {
     return superseded ? null : declined;
   }, [requests, userId, joinedGymId]);
 
-  // Open walk-in / GCash request while gymer has no ACTIVE membership yet
+  // Open walk-in / GCash join for a gym the user is not enrolled in yet (multi-gym safe)
   const openJoinRequest = useMemo(() => {
-    if (!userId || joinedGymId) return null;
+    if (!userId) return null;
+    const enrolled = useMembershipStore.getState().enrolledGymIds;
     const mine = requests
-      .filter((req) => req.userId === userId)
+      .filter(
+        (req) =>
+          req.userId === userId &&
+          !req.isRenewal &&
+          !enrolled.includes(req.gymId),
+      )
       .sort((a, b) => b.submittedAt - a.submittedAt);
 
     const pending = mine.find((req) => req.status === "pending");
@@ -102,7 +108,7 @@ export default function MembershipPage() {
         req.status !== "declined",
     );
     return superseded ? null : declined;
-  }, [requests, userId, joinedGymId]);
+  }, [requests, userId, membership, joinedGymId]);
 
   if (!membership || !joinedGymId) {
     const pendingJoin = openJoinRequest?.status === "pending" ? openJoinRequest : null;
@@ -233,7 +239,15 @@ export default function MembershipPage() {
 
   const { daysRemaining, progressPercent, expiresAt } = getMembershipProgress(membership);
   const pendingRenewal = renewalRequest?.status === "pending" ? renewalRequest : null;
+  const approvedRenewal =
+    renewalRequest?.status === "approved" && !renewalRequest.consumedAt
+      ? renewalRequest
+      : null;
   const rejectedRenewal = renewalRequest?.status === "declined" ? renewalRequest : null;
+  const pendingOtherJoin =
+    openJoinRequest?.status === "pending" ? openJoinRequest : null;
+  const approvedOtherJoin =
+    openJoinRequest?.status === "approved" ? openJoinRequest : null;
 
   function handleCancel() {
     void leaveGym().then(() => {
@@ -244,6 +258,67 @@ export default function MembershipPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <h1 className="text-3xl font-bold text-white">My Membership</h1>
+
+      {pendingOtherJoin ? (
+        <section className="rounded-2xl border border-amber-500/30 bg-[#0e0e10] p-6">
+          <div className="flex items-center gap-2 text-amber-400">
+            <Clock3 className="h-4 w-4 shrink-0" />
+            <h2 className="text-sm font-bold">Pending Approval — Another Gym</h2>
+          </div>
+          <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+            <p className="text-zinc-400">
+              <span className="text-zinc-600">Gym:</span> {pendingOtherJoin.gymName}
+            </p>
+            <p className="text-zinc-400">
+              <span className="text-zinc-600">Status:</span>{" "}
+              <span className="font-semibold text-amber-400">
+                Waiting for Owner/Clerk Approval
+              </span>
+            </p>
+            <p className="text-zinc-400">
+              <span className="text-zinc-600">Selected Plan:</span> {pendingOtherJoin.planName}
+            </p>
+            <p className="text-zinc-400">
+              <span className="text-zinc-600">Reference Number:</span>{" "}
+              <span className="font-mono font-semibold text-[#FACC15]">
+                {pendingOtherJoin.paymentRef}
+              </span>
+            </p>
+          </div>
+          <p className="mt-4 text-xs text-zinc-500">
+            Your current gym membership stays active. This request is independent.
+          </p>
+        </section>
+      ) : null}
+
+      {approvedOtherJoin ? (
+        <section className="rounded-2xl border border-emerald-500/30 bg-[#0e0e10] p-6">
+          <div className="flex items-center gap-2 text-emerald-400">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <h2 className="text-sm font-bold">Membership Approved — Another Gym</h2>
+          </div>
+          <p className="mt-3 text-sm text-zinc-400">
+            Your request for {approvedOtherJoin.gymName} was approved. Confirm to activate that
+            membership (your current gym stays selected until you switch).
+          </p>
+          <button
+            type="button"
+            disabled={completing}
+            onClick={() => {
+              void (async () => {
+                setCompleting(true);
+                const ok = await completeOnboarding(approvedOtherJoin.id);
+                await fetchMembership();
+                setCompleting(false);
+                if (!ok) return;
+              })();
+            }}
+            className="mt-4 inline-flex rounded-xl bg-[#FACC15] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-60"
+          >
+            {completing ? "Activating…" : "Activate Membership"}
+          </button>
+        </section>
+      ) : null}
 
       {pendingRenewal ? (
         <section className="rounded-2xl border border-amber-500/30 bg-[#0e0e10] p-6">
@@ -279,9 +354,38 @@ export default function MembershipPage() {
             </p>
           </div>
           <p className="mt-4 text-xs text-zinc-500">
-            Your current membership stays active. Days are extended only after the gym Owner or
-            Clerk approves.
+            Your current membership stays active. Days are extended only after approval and you tap
+            Done / Activate Membership.
           </p>
+        </section>
+      ) : null}
+
+      {approvedRenewal ? (
+        <section className="rounded-2xl border border-emerald-500/30 bg-[#0e0e10] p-6">
+          <div className="flex items-center gap-2 text-emerald-400">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <h2 className="text-sm font-bold">Renewal Approved</h2>
+          </div>
+          <p className="mt-3 text-sm text-zinc-400">
+            Your renewal for {approvedRenewal.gymName || "your gym"} was approved. Confirm to apply
+            your new plan days.
+          </p>
+          <button
+            type="button"
+            disabled={completing}
+            onClick={() => {
+              void (async () => {
+                setCompleting(true);
+                const ok = await completeOnboarding(approvedRenewal.id);
+                await fetchMembership();
+                setCompleting(false);
+                if (!ok) return;
+              })();
+            }}
+            className="mt-4 inline-flex rounded-xl bg-[#FACC15] px-5 py-2.5 text-sm font-bold text-black transition hover:bg-[#e6c200] disabled:opacity-60"
+          >
+            {completing ? "Activating…" : "Activate Membership"}
+          </button>
         </section>
       ) : null}
 

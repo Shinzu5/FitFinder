@@ -10,11 +10,9 @@ import {
 } from "../services/xendit.service";
 import {
   emitAdminGymsUpdated,
-  emitWalkInApprovalsUpdated,
-  emitWalkInStatus,
 } from "../services/realtime.service";
 import { notifyMembershipChange } from "../services/gymMembership.service";
-import { notifyMembershipRequestSubmitted } from "../services/membershipNotification.service";
+import { createPendingApproval } from "../services/membershipApproval.service";
 import { ensureOwnerSubscriptionFromPayment } from "../services/ownerSubscription.service";
 import { createNotification } from "../services/notification.service";
 import { getOwnerPlanById } from "../config/ownerPlans";
@@ -556,89 +554,17 @@ async function activatePayment(payment: {
     }
 
     const existingMembership = await prisma.gymMembership.findFirst({
-      where: { userId: payment.userId, gymId },
+      where: {
+        userId: payment.userId,
+        gymId,
+        status: { in: ["ACTIVE", "EXPIRING"] },
+        expiresAt: { gt: new Date() },
+      },
       orderBy: { joinedAt: "desc" },
       select: { id: true },
     });
 
-    // Renewal: paid via GCash → pending Owner/Clerk approval (same as walk-in renew)
-    if (existingMembership) {
-      const user = await prisma.user.findUnique({
-        where: { id: payment.userId },
-        select: { fullName: true, email: true },
-      });
-      const coach = coachId
-        ? await prisma.coach.findFirst({
-            where: { id: coachId, gymId, isActive: true },
-          })
-        : null;
-
-      const approval = await prisma.walkInApproval.create({
-        data: {
-          userId: payment.userId,
-          gymId,
-          planId: plan.id,
-          planName: plan.name,
-          planPrice: plan.price,
-          memberName: user?.fullName || "Member",
-          memberEmail: user?.email || "",
-          coachId: coach?.id || null,
-          coachName: coach?.name || null,
-          coachSessionPrice: coach?.sessionPrice || 0,
-          paymentRef: payment.referenceId,
-          totalPaid: payment.amount,
-          durationDays: plan.durationDays,
-          isRenewal: true,
-          paymentMethod: "XENDIT",
-          paymentStatus: "PAID",
-          status: "PENDING",
-        },
-        include: {
-          plan: { select: { name: true, price: true } },
-          gym: { select: { name: true } },
-        },
-      });
-
-      emitWalkInStatus(payment.userId, {
-        id: approval.id,
-        userId: approval.userId,
-        memberName: approval.memberName,
-        memberEmail: approval.memberEmail,
-        gymId: approval.gymId,
-        gymName: approval.gym.name,
-        planId: approval.planId,
-        planName: approval.planName || approval.plan?.name || "",
-        planPrice: approval.planPrice,
-        coachId: approval.coachId,
-        coachName: approval.coachName,
-        coachSessionPrice: approval.coachSessionPrice,
-        paymentRef: approval.paymentRef,
-        totalPaid: approval.totalPaid,
-        durationDays: approval.durationDays,
-        isRenewal: true,
-        paymentMethod: "Cashless",
-        paymentStatus: "paid",
-        approvalStatus: "pending",
-        status: "pending",
-        submittedAt: approval.submittedAt.getTime(),
-        reviewedAt: null,
-        consumedAt: null,
-        renewalDate: approval.submittedAt.getTime(),
-      });
-      void emitWalkInApprovalsUpdated(gymId);
-      void notifyMembershipRequestSubmitted({
-        userId: payment.userId,
-        gymId,
-        gymName: approval.gym.name,
-        approvalId: approval.id,
-        memberName: approval.memberName,
-        isRenewal: true,
-        paymentMethod: "XENDIT",
-      });
-      return true;
-    }
-
-    // New GCash join: pending approval only — no ACTIVE membership until staff completes
+    // Renewal or new join via GCash → PENDING approval only (ACTIVE waits for Done)
     const user = await prisma.user.findUnique({
       where: { id: payment.userId },
       select: { fullName: true, email: true },
@@ -649,66 +575,21 @@ async function activatePayment(payment: {
         })
       : null;
 
-    const approval = await prisma.walkInApproval.create({
-      data: {
-        userId: payment.userId,
-        gymId,
-        planId: plan.id,
-        planName: plan.name,
-        planPrice: plan.price,
-        memberName: user?.fullName || "Member",
-        memberEmail: user?.email || "",
-        coachId: coach?.id || null,
-        coachName: coach?.name || null,
-        coachSessionPrice: coach?.sessionPrice || 0,
-        paymentRef: payment.referenceId,
-        totalPaid: payment.amount,
-        durationDays: plan.durationDays,
-        isRenewal: false,
-        paymentMethod: "XENDIT",
-        paymentStatus: "PAID",
-        status: "PENDING",
-      },
-      include: {
-        plan: { select: { name: true, price: true } },
-        gym: { select: { name: true } },
-      },
-    });
-
-    emitWalkInStatus(payment.userId, {
-      id: approval.id,
-      userId: approval.userId,
-      memberName: approval.memberName,
-      memberEmail: approval.memberEmail,
-      gymId: approval.gymId,
-      gymName: approval.gym.name,
-      planId: approval.planId,
-      planName: approval.planName || approval.plan?.name || "",
-      planPrice: approval.planPrice,
-      coachId: approval.coachId,
-      coachName: approval.coachName,
-      coachSessionPrice: approval.coachSessionPrice,
-      paymentRef: approval.paymentRef,
-      totalPaid: approval.totalPaid,
-      durationDays: approval.durationDays,
-      isRenewal: false,
-      paymentMethod: "Cashless",
-      paymentStatus: "paid",
-      approvalStatus: "pending",
-      status: "pending",
-      submittedAt: approval.submittedAt.getTime(),
-      reviewedAt: null,
-      consumedAt: null,
-      renewalDate: approval.submittedAt.getTime(),
-    });
-    void emitWalkInApprovalsUpdated(gymId);
-    void notifyMembershipRequestSubmitted({
+    await createPendingApproval({
       userId: payment.userId,
       gymId,
-      gymName: approval.gym.name,
-      approvalId: approval.id,
-      memberName: approval.memberName,
-      isRenewal: false,
+      planId: plan.id,
+      planName: plan.name,
+      planPrice: plan.price,
+      memberName: user?.fullName || "Member",
+      memberEmail: user?.email || "",
+      coachId: coach?.id || null,
+      coachName: coach?.name || null,
+      coachSessionPrice: coach?.sessionPrice || 0,
+      paymentRef: payment.referenceId,
+      totalPaid: payment.amount,
+      durationDays: plan.durationDays,
+      isRenewal: Boolean(existingMembership),
       paymentMethod: "XENDIT",
     });
     return true;

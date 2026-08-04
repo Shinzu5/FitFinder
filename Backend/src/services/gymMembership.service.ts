@@ -222,6 +222,8 @@ export async function listGymMembers(gymId: string) {
 
 /** Notify gymer + Owner/Clerk members lists after create/update/expire. */
 export async function notifyMembershipChange(userId: string, gymId: string): Promise<void> {
+  const { ensureActiveGymIfEmpty } = await import("./activeGym.service");
+  await ensureActiveGymIfEmpty(userId, gymId);
   emitMembershipUpdated(userId);
   await emitMembersUpdated(gymId);
 }

@@ -24,8 +24,7 @@ interface GymProfileViewProps {
 
 export function GymProfileView({ profile }: GymProfileViewProps) {
   const router = useRouter();
-  const joinedGymId = useMembershipStore((state) => state.joinedGymId);
-  const isJoined = joinedGymId === profile.id;
+  const isJoined = useMembershipStore((state) => state.enrolledGymIds.includes(profile.id));
 
   function handleJoin() {
     router.push(`/dashboard/user/gym/${profile.id}/join`);
@@ -86,12 +85,18 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
           <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
             <div className="flex flex-col gap-5 sm:flex-row">
               <div className="relative shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={profile.owner.avatarUrl}
-                  alt={profile.owner.name}
-                  className="h-20 w-20 rounded-full object-cover ring-2 ring-[#FFD700]/30"
-                />
+                {String(profile.owner.avatarUrl || "").trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profile.owner.avatarUrl}
+                    alt={profile.owner.name}
+                    className="h-20 w-20 rounded-full object-cover ring-2 ring-[#FFD700]/30"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-zinc-800 text-xl font-bold text-[#FFD700] ring-2 ring-[#FFD700]/30">
+                    {(profile.owner.name || "O").slice(0, 1).toUpperCase()}
+                  </div>
+                )}
                 <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-[#FFD700] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
                   Owner
                 </span>

@@ -103,12 +103,18 @@ export function UserNewMessageModal({ open, onClose, onSelectContact }: UserNewM
                 }}
                 className="flex w-full items-center gap-3 rounded-xl border border-zinc-800/80 bg-[#0b0b0d] px-4 py-3 text-left transition hover:border-[#FACC15]/40 hover:bg-white/5"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={contact.avatarUrl}
-                  alt={contact.name}
-                  className="h-10 w-10 shrink-0 rounded-full object-cover"
-                />
+                {String(contact.avatarUrl || "").trim() ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={contact.avatarUrl}
+                    alt={contact.name}
+                    className="h-10 w-10 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-[#FFD700]">
+                    {(contact.name || "U").slice(0, 1).toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-white">{contact.name}</p>
                   <p className="truncate text-sm text-zinc-500">{contact.subtitle}</p>

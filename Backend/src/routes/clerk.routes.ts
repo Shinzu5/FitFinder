@@ -6,6 +6,12 @@ import {
   getWalkInPayments, completeWalkInPayment,
   getClosingPreview, closeDailySales,
 } from "../controllers/clerk.controller";
+import {
+  getAttendance,
+  postMemberCheckIn,
+  postWalkInCheckIn,
+  postCheckOut,
+} from "../controllers/attendance.controller";
 import { authenticate } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 
@@ -34,5 +40,11 @@ router.post("/walk-in-payments/:id/complete", walkInStaff, completeWalkInPayment
 
 router.get("/sales/closing-preview", walkInStaff, getClosingPreview);
 router.post("/sales/close", walkInStaff, closeDailySales);
+
+/** Attendance tracker (members + walk-in visitors) */
+router.get("/attendance", walkInStaff, getAttendance);
+router.post("/attendance/check-in", walkInStaff, postMemberCheckIn);
+router.post("/attendance/walk-in", walkInStaff, postWalkInCheckIn);
+router.post("/attendance/:id/check-out", walkInStaff, postCheckOut);
 
 export default router;

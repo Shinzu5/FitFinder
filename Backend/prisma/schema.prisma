@@ -81,6 +81,8 @@ model User {
   /// Failed OTP verification attempts (brute-force protection)
   resetAttempts       Int       @default(0)
   refreshToken        String?
+  /// Currently selected gym for multi-gym gymers (session context)
+  activeGymId         String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -95,10 +97,12 @@ model User {
   dailySalesReports   DailySalesReport[] @relation("DailySalesClerk")
   clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id], onDelete: SetNull)
   clerkGymId          String?
+  activeGym           Gym?               @relation("UserActiveGym", fields: [activeGymId], references: [id], onDelete: SetNull)
   sentDirectMessages     DirectMessage[] @relation("SentDirectMessages")
   receivedDirectMessages DirectMessage[] @relation("ReceivedDirectMessages")
   hiddenDirectConversations DirectConversationHide[] @relation("HiddenDirectConversations")
   notifications          Notification[]
+  attendances            Attendance[]
 
   @@map("users")
 }
@@ -191,8 +195,35 @@ model Gym {
   walkInApprovals    WalkInApproval[]
   dailySalesReports  DailySalesReport[]
   clerks             User[]              @relation("GymClerks")
+  activeGymUsers     User[]              @relation("UserActiveGym")
+  attendances        Attendance[]
 
   @@map("gyms")
+}
+
+/** Manual check-in / check-out for members and walk-in visitors (Active Now). */
+model Attendance {
+  id            String    @id @default(uuid())
+  gymId         String
+  /** Null for walk-in visitors without an account */
+  userId        String?
+  memberName    String
+  /** MEMBER | WALK_IN */
+  type          String
+  /** Walk-in payment/price (0 for registered members) */
+  paymentAmount Float     @default(0)
+  checkedInAt   DateTime  @default(now())
+  checkedOutAt  DateTime?
+  checkedInById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  gym  Gym   @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([gymId, checkedOutAt])
+  @@index([userId, gymId, checkedOutAt])
+  @@map("attendances")
 }
 
 model OwnerSubscription {
