@@ -1,0 +1,511 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  OWNER
+  CLERK
+  ADMIN
+}
+
+enum GymStatus {
+  PENDING
+  ACTIVE
+  DECLINED
+}
+
+enum EquipmentStatus {
+  AVAILABLE
+  IN_USE
+  UNDER_MAINTENANCE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum PaymentMethod {
+  CASH
+  CASHLESS
+  XENDIT
+}
+
+enum TransactionType {
+  MONTHLY
+  SESSION
+  SUPPLEMENTS
+  DAY_PASS
+  RENEWAL
+  COACH
+}
+
+enum ActivityTone {
+  SUCCESS
+  INFO
+  WARNING
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String    @id @default(uuid())
+  fullName            String
+  email               String    @unique
+  passwordHash        String
+  role                UserRole  @default(USER)
+  avatarUrl           String?
+  emailVerified       Boolean   @default(false)
+  verificationCode    String?
+  verificationExpires DateTime?
+  /// SHA-256 hash of the password-reset OTP (before verify) or one-time session token (after verify)
+  resetToken          String?
+  resetExpires        DateTime?
+  /// True after OTP is verified; resetToken then holds the hashed session token
+  resetVerified       Boolean   @default(false)
+  /// Failed OTP verification attempts (brute-force protection)
+  resetAttempts       Int       @default(0)
+  refreshToken        String?
+  /// Currently selected gym for multi-gym gymers (session context)
+  activeGymId         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  ownedGyms           Gym[]              @relation("GymOwner")
+  ownerSubscriptions  OwnerSubscription[]
+  gymMemberships      GymMembership[]
+  sentMessages        Message[]
+  clerkTransactions   ClerkTransaction[]
+  walkInApprovals     WalkInApproval[]
+  xenditPayments      XenditPayment[]
+  dailySalesReports   DailySalesReport[] @relation("DailySalesClerk")
+  clerkOfGym          Gym?               @relation("GymClerks", fields: [clerkGymId], references: [id], onDelete: SetNull)
+  clerkGymId          String?
+  activeGym           Gym?               @relation("UserActiveGym", fields: [activeGymId], references: [id], onDelete: SetNull)
+  sentDirectMessages     DirectMessage[] @relation("SentDirectMessages")
+  receivedDirectMessages DirectMessage[] @relation("ReceivedDirectMessages")
+  hiddenDirectConversations DirectConversationHide[] @relation("HiddenDirectConversations")
+  notifications          Notification[]
+  attendances            Attendance[]
+
+  @@map("users")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json      @default("{}")
+  /// Prevents duplicate scheduled reminders (e.g. membership:{id}:7d)
+  dedupeKey String?   @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// Direct 1:1 messages between any two registered users (cross-role inbox).
+model DirectMessage {
+  id           String    @id @default(uuid())
+  senderId     String
+  receiverId   String
+  senderRole   UserRole
+  receiverRole UserRole  @default(USER)
+  text         String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  readAt       DateTime?
+
+  sender   User @relation("SentDirectMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedDirectMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, senderId])
+  @@index([receiverId, readAt])
+  @@map("direct_messages")
+}
+
+/** Soft-hide a DM thread for one participant (messages stay in DB). */
+model DirectConversationHide {
+  id        String   @id @default(uuid())
+  userId    String
+  peerId    String
+  deletedAt DateTime @default(now())
+
+  user User @relation("HiddenDirectConversations", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, peerId])
+  @@index([userId])
+  @@map("direct_conversation_hides")
+}
+
+model Gym {
+  id             String    @id @default(uuid())
+  name           String
+  address        String
+  description    String    @default("")
+  contactNumber  String    @default("")
+  website        String    @default("")
+  coverImageUrl  String    @default("")
+  schedule       String    @default("Mon-Sun: 6AM - 10PM")
+  pricePerMonth  Float     @default(0)
+  status         GymStatus @default(ACTIVE)
+  ownerId        String
+  /** Optional gym-owned Xendit secret key for cashless memberships */
+  xenditApiKey   String    @default("")
+  /** Owner can toggle cashless on/off when a valid key is saved */
+  xenditEnabled  Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  owner              User                @relation("GymOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerSubscriptions OwnerSubscription[]
+  membershipPlans    MembershipPlan[]
+  gymMemberships     GymMembership[]
+  coaches            Coach[]
+  equipment          Equipment[]
+  exercises          Exercise[]
+  shopProducts       ShopProduct[]
+  conversations      Conversation[]
+  clerkTransactions  ClerkTransaction[]
+  walkInApprovals    WalkInApproval[]
+  dailySalesReports  DailySalesReport[]
+  clerks             User[]              @relation("GymClerks")
+  activeGymUsers     User[]              @relation("UserActiveGym")
+  attendances        Attendance[]
+
+  @@map("gyms")
+}
+
+/** Manual check-in / check-out for members and walk-in visitors (Active Now). */
+model Attendance {
+  id            String    @id @default(uuid())
+  gymId         String
+  /** Null for walk-in visitors without an account */
+  userId        String?
+  memberName    String
+  /** MEMBER | WALK_IN */
+  type          String
+  /** Walk-in payment/price (0 for registered members) */
+  paymentAmount Float     @default(0)
+  checkedInAt   DateTime  @default(now())
+  checkedOutAt  DateTime?
+  checkedInById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  gym  Gym   @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([gymId, checkedOutAt])
+  @@index([userId, gymId, checkedOutAt])
+  @@map("attendances")
+}
+
+model OwnerSubscription {
+  id          String   @id @default(uuid())
+  ownerId     String
+  gymId       String?
+  planId      String
+  planName    String
+  price       Float
+  /** Duration in days for current plans (15/30/60). Legacy rows may store months (1–12). */
+  months      Int
+  referenceNo String   @unique
+  method      String   @default("Xendit")
+  paidAt      DateTime @default(now())
+  validUntil  DateTime
+
+  owner User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  gym   Gym?  @relation(fields: [gymId], references: [id], onDelete: SetNull)
+
+  @@map("owner_subscriptions")
+}
+
+model MembershipPlan {
+  id                String          @id @default(uuid())
+  gymId             String
+  name              String
+  price             Float
+  durationDays      Int
+  activeSubscribers Int             @default(0)
+  /** false = soft-deleted; hidden from new purchases, existing memberships keep access */
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+
+  gym            Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymMemberships GymMembership[]
+  walkInApprovals WalkInApproval[]
+
+  @@index([gymId, isActive])
+  @@map("membership_plans")
+}
+
+model GymMembership {
+  id            String           @id @default(uuid())
+  userId        String
+  gymId         String
+  planId        String?
+  /** Snapshot of purchased plan — survives plan soft/hard delete */
+  planName      String           @default("")
+  planPrice     Float            @default(0)
+  durationDays  Int              @default(0)
+  coachId       String?
+  paymentMethod String
+  paymentRef    String
+  totalPaid     Float
+  status        MembershipStatus @default(ACTIVE)
+  /** WALK_IN | ONLINE — how the membership was purchased */
+  memberType    String           @default("WALK_IN")
+  /** OWNER | CLERK | SELF — who registered the membership */
+  registeredBy  String           @default("SELF")
+  registeredById String?
+  /** Current period start (updated on renew) */
+  startsAt      DateTime         @default(now())
+  /** First registration date (immutable after create) */
+  joinedAt      DateTime         @default(now())
+  expiresAt     DateTime
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym   Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan  MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  coach Coach?          @relation(fields: [coachId], references: [id], onDelete: SetNull)
+
+  @@index([userId, gymId])
+  @@index([userId, status])
+  @@index([gymId, status])
+  @@index([expiresAt, status])
+  @@map("gym_memberships")
+}
+
+model Coach {
+  id           String   @id @default(uuid())
+  gymId        String
+  name         String
+  specialty    String
+  sessionPrice Float
+  description  String   @default("")
+  photoUrl     String?
+  photoName    String?
+  schedule     Json     @default("{}")
+  /** false = hidden from Gymers; cannot be booked */
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  gym            Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymMemberships GymMembership[]
+
+  @@index([gymId, isActive])
+  @@map("coaches")
+}
+
+model Equipment {
+  id        String          @id @default(uuid())
+  gymId     String
+  name      String
+  quantity  Int             @default(1)
+  status    EquipmentStatus @default(AVAILABLE)
+  imageUrl  String          @default("")
+  imageName String?
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("equipment")
+}
+
+model Exercise {
+  id            String  @id @default(uuid())
+  gymId         String
+  name          String
+  muscle        String
+  category      String  @default("")
+  difficulty    String  @default("Beginner")
+  sets          String  @default("3")
+  reps          String  @default("8-12")
+  rest          String  @default("60s")
+  targetMuscles String  @default("")
+  formTips      String  @default("")
+  mediaUrl      String?
+  mediaType     String?
+  mediaName     String?
+  cardImageUrl  String  @default("")
+  createdAt     DateTime @default(now())
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("exercises")
+}
+
+model ShopProduct {
+  id        String  @id @default(uuid())
+  gymId     String
+  name      String
+  price     Float
+  imageUrl  String  @default("")
+  imageName String?
+  createdAt DateTime @default(now())
+
+  gym Gym @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@map("shop_products")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  gymId     String
+  type      String   @default("MEMBER")
+  createdAt DateTime @default(now())
+
+  gym      Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  senderRole     String   @default("user")
+  text           String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model ClerkTransaction {
+  id                String          @id @default(uuid())
+  gymId             String
+  clerkId           String
+  type              TransactionType
+  memberName        String
+  amount            Float
+  method            PaymentMethod
+  notes             String          @default("")
+  createdAt         DateTime        @default(now())
+  dailySalesReportId String?
+
+  gym              Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  clerk            User             @relation(fields: [clerkId], references: [id], onDelete: Cascade)
+  dailySalesReport DailySalesReport? @relation(fields: [dailySalesReportId], references: [id], onDelete: SetNull)
+
+  @@index([gymId, createdAt])
+  @@index([dailySalesReportId])
+  @@map("clerk_transactions")
+}
+
+model DailySalesReport {
+  id                String   @id @default(uuid())
+  gymId             String
+  clerkId           String
+  /** OWNER | CLERK — who closed the day (Owner closings stay off Clerk Approvals) */
+  closedByRole      String   @default("CLERK")
+  reportDate        DateTime @db.Date
+  totalTransactions Int
+  totalRevenue      Float
+  closedAt          DateTime @default(now())
+
+  gym          Gym                @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  clerk        User               @relation("DailySalesClerk", fields: [clerkId], references: [id], onDelete: Cascade)
+  transactions ClerkTransaction[]
+
+  @@index([gymId, reportDate])
+  @@index([clerkId])
+  @@index([gymId, closedAt])
+  @@map("daily_sales_reports")
+}
+
+model WalkInApproval {
+  id                String         @id @default(uuid())
+  userId            String
+  gymId             String
+  planId            String?
+  /** Snapshot so approvals survive plan removal */
+  planName          String         @default("")
+  planPrice         Float          @default(0)
+  memberName        String
+  memberEmail       String
+  coachId           String?
+  coachName         String?
+  coachSessionPrice Float          @default(0)
+  paymentRef        String
+  totalPaid         Float
+  durationDays      Int
+  /** true = extend existing membership after Owner/Clerk approve */
+  isRenewal         Boolean        @default(false)
+  /** WALK_IN | XENDIT — how the gymer paid before approval */
+  paymentMethod     String         @default("WALK_IN")
+  /** Walk-in OTC: recorded as paid when the gymer submits Proceed */
+  paymentStatus     String         @default("PAID")
+  status            ApprovalStatus @default(PENDING)
+  rejectionReason   String         @default("")
+  submittedAt       DateTime       @default(now())
+  reviewedAt        DateTime?
+  /** Set when gymer clicks Done (onboarding complete — never show wait screen again) */
+  consumedAt        DateTime?
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan MembershipPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([userId, gymId, status])
+  @@index([gymId, status])
+  @@map("walk_in_approvals")
+}
+
+model AdminActivity {
+  id        String       @id @default(uuid())
+  message   String
+  tone      ActivityTone @default(INFO)
+  createdAt DateTime     @default(now())
+
+  @@map("admin_activities")
+}
+
+model XenditPayment {
+  id              String    @id @default(uuid())
+  xenditPaymentId String    @unique
+  referenceId     String    @unique
+  userId          String
+  type            String                    // "SUBSCRIPTION" or "MEMBERSHIP"
+  amount          Float
+  currency        String    @default("PHP")
+  status          String    @default("PENDING") // PENDING, SUCCEEDED, FAILED, EXPIRED
+  channelCode     String    @default("GCASH")
+  redirectUrl     String?
+  metadata        Json      @default("{}")
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("xendit_payments")
+}
