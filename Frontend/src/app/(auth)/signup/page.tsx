@@ -5,7 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore, getDashboardPathForRole } from "@/stores/auth-store";
 import { AuthShell } from "@/components/features/auth/AuthShell";
 import { Alert } from "@/components/ui/alert";
@@ -42,6 +42,8 @@ function SignupForm() {
   const { register: registerUser, loading, error, success, isAuthenticated, role: authRole } =
     useAuthStore();
   const [formError, setFormError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const initialRole = parseSignupRole(searchParams.get("role"));
 
   const {
@@ -92,6 +94,8 @@ function SignupForm() {
       footerText="Already have an account?"
       footerLink="/login"
       footerLinkText="Sign in"
+      backLink="/login"
+      backLinkText="Back to Login"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {error || formError ? <Alert variant="destructive">{formError ?? error}</Alert> : null}
@@ -140,13 +144,24 @@ function SignupForm() {
 
         <div className="space-y-2">
           <Label htmlFor="registerPassword">Password</Label>
-          <Input
-            id="registerPassword"
-            type="password"
-            placeholder="••••••••"
-            autoComplete="new-password"
-            {...register("password")}
-          />
+          <div className="relative">
+            <Input
+              id="registerPassword"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              className="pr-11"
+              {...register("password")}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-white"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           {errors.password ? (
             <p className="text-sm text-red-300">{errors.password.message}</p>
           ) : null}
@@ -154,13 +169,24 @@ function SignupForm() {
 
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            placeholder="••••••••"
-            autoComplete="new-password"
-            {...register("confirmPassword")}
-          />
+          <div className="relative">
+            <Input
+              id="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              className="pr-11"
+              {...register("confirmPassword")}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-white"
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+            >
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           {errors.confirmPassword ? (
             <p className="text-sm text-red-300">{errors.confirmPassword.message}</p>
           ) : null}

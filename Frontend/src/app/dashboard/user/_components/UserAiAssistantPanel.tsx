@@ -25,7 +25,7 @@ function AssistantBubble({ message }: { message: AiChatMessage }) {
   return (
     <div className="flex items-start gap-3">
       <AiAvatar size="sm" />
-      <div className="max-w-[85%] rounded-2xl rounded-tl-md border border-[#FACC15]/25 bg-[#1a1810] px-4 py-3 text-sm leading-relaxed text-zinc-200 prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-zinc-900 prose-ul:my-1 prose-li:my-0">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-md border border-[#FACC15]/25 bg-[#1a1810] px-4 py-3 text-sm leading-relaxed text-zinc-200 prose prose-invert prose-sm prose-p:leading-relaxed prose-pre:bg-zinc-900 prose-ul:my-1 prose-li:my-0">
         <ReactMarkdown>{message.text}</ReactMarkdown>
       </div>
     </div>
@@ -106,7 +106,7 @@ export function UserAiAssistantPanel() {
   const groupOrder = ["Today", "Yesterday", "Last 7 Days", "Older"];
 
   return (
-    <div className="relative mx-auto flex h-[calc(100vh-8.5rem)] min-h-[520px] max-w-5xl overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
+    <div className="relative mx-auto flex h-[calc(100vh-8.5rem)] min-h-130 max-w-5xl overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
       
       {/* Mobile Sidebar Toggle */}
       <button 
