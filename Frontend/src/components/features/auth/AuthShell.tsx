@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
 import { ReactNode } from "react";
 
 interface AuthShellProps {
@@ -12,6 +13,8 @@ interface AuthShellProps {
   footerText: string;
   footerLink: string;
   footerLinkText: string;
+  backLink?: string;
+  backLinkText?: string;
 }
 
 export function AuthShell({
@@ -21,6 +24,8 @@ export function AuthShell({
   footerText,
   footerLink,
   footerLinkText,
+  backLink,
+  backLinkText,
 }: AuthShellProps) {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4 py-12 text-white">
@@ -34,6 +39,17 @@ export function AuthShell({
         transition={{ duration: 0.4 }}
         className="relative z-10 w-full max-w-[420px]"
       >
+        {backLink ? (
+          <div className="mb-4">
+            <Link
+              href={backLink}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#141414]/80 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-[#FFD700]/50 hover:bg-white/5 hover:text-[#FFD700]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>{backLinkText || "Back"}</span>
+            </Link>
+          </div>
+        ) : null}
         <div className="mb-8 flex flex-col items-center text-center">
           <Link href="/" className="mb-6 flex items-center gap-2.5 transition hover:opacity-90">
             <Image
