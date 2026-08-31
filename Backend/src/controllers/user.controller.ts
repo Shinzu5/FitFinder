@@ -348,8 +348,8 @@ export async function leaveMembership(req: AuthRequest, res: Response): Promise<
       data: { status: "EXPIRED" },
     });
 
-    await prisma.user.updateMany({
-      where: { id: req.userId!, activeGymId },
+    await prisma.user.update({
+      where: { id: req.userId! },
       data: { activeGymId: null },
     });
     await resolveActiveGymId(req.userId!);
