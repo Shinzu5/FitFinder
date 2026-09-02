@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
@@ -158,11 +159,14 @@ const PRICING = [
 
 function LogoIcon() {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#FFD700]">
-      <svg className="h-5 w-5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-      </svg>
-    </div>
+    <Image
+      src="/LOGO.png"
+      alt="Fit Finder"
+      width={36}
+      height={36}
+      className="h-9 w-9 rounded-md object-contain"
+      priority
+    />
   );
 }
 
