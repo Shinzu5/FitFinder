@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Send, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
 import {
@@ -136,15 +136,7 @@ export function UserMessagesPanel() {
     });
   }, [search, threads]);
 
-  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? threads[0];
-
-  // Mirror Admin: select the first thread without forcing a getThread reload on mount.
-  // Reloading here races Socket.IO and wipes live messages (Owner/Clerk/Gymer bug).
-  useEffect(() => {
-    if (!activeThreadId && activeThread?.id) {
-      useUserMessagesStore.setState({ activeThreadId: activeThread.id });
-    }
-  }, [activeThreadId, activeThread?.id]);
+  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,7 +152,7 @@ export function UserMessagesPanel() {
   return (
     <>
     <div className="flex h-[calc(100vh-8.5rem)] min-h-[520px] overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
-      <aside className="flex w-full max-w-xs shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d]">
+      <aside className={`w-full max-w-full shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d] md:w-80 md:max-w-xs ${activeThreadId ? "hidden md:flex" : "flex"}`}>
         <div className="border-b border-zinc-800/70 px-4 py-4">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-white">Messages</h2>
@@ -223,10 +215,18 @@ export function UserMessagesPanel() {
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col bg-[#0a0a0b]">
+      <section className={`min-w-0 flex-1 flex-col bg-[#0a0a0b] ${activeThread ? "flex" : "hidden md:flex"}`}>
         {activeThread ? (
           <>
-            <div className="flex items-center gap-3 border-b border-zinc-800/70 px-5 py-4">
+            <div className="flex items-center gap-3 border-b border-zinc-800/70 px-4 py-3 sm:px-5 sm:py-4">
+              <button
+                type="button"
+                onClick={() => useUserMessagesStore.setState({ activeThreadId: "" })}
+                className="rounded-lg border border-zinc-800 p-1.5 text-zinc-400 hover:text-white md:hidden"
+                aria-label="Back to conversations"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
               <div className="relative">
                 <OwnerAvatar thread={activeThread} />
               </div>
@@ -240,7 +240,7 @@ export function UserMessagesPanel() {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Delete
+                <span className="hidden sm:inline">Delete</span>
               </button>
             </div>
 
