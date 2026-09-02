@@ -86,14 +86,15 @@ export async function register(req: Request, res: Response): Promise<void> {
       console.error("Failed to send verification email:", emailError);
     }
 
-    // Admin Users page updates live (no refresh)
-    void emitAdminUsersUpdated();
-
-    sendCreated(res, {
-      userId: user.id,
-      email: user.email,
-      requiresVerification: true,
-    }, "Account created. Please check your email for the verification code.");
+    sendCreated(
+      res,
+      {
+        userId: user.id,
+        email: user.email,
+        requiresVerification: true,
+      },
+      "Account created. Please check your email for the verification code."
+    );
   } catch (error) {
     console.error("Register error:", error);
     sendError(res, "Registration failed", 500);
@@ -182,7 +183,11 @@ export async function resendVerification(req: Request, res: Response): Promise<v
 
     await sendVerificationEmail(user.email, user.fullName, verificationCode);
 
-    sendSuccess(res, null, "A new verification code has been sent to your email.");
+    sendSuccess(
+      res,
+      null,
+      "A new verification code has been sent to your email."
+    );
   } catch (error) {
     console.error("Resend verification error:", error);
     sendError(res, "Failed to resend verification", 500);
@@ -374,7 +379,11 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
       console.error("Failed to send password reset email:", emailError);
     }
 
-    sendSuccess(res, { email: user.email }, genericMessage);
+    sendSuccess(
+      res,
+      { email: user.email },
+      genericMessage
+    );
   } catch (error) {
     console.error("Forgot password error:", error);
     sendError(res, "Failed to process request", 500);

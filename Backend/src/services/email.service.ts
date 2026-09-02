@@ -1,10 +1,45 @@
-import { transporter } from "../config/email";
+import { resend } from "../config/email";
 import { env } from "../config/env";
 
 let emailEnabled = false;
 
 export function setEmailEnabled(enabled: boolean) {
   emailEnabled = enabled;
+}
+
+export interface SendEmailOptions {
+  to: string | string[];
+  subject: string;
+  html: string;
+}
+
+export async function sendEmail({ to, subject, html }: SendEmailOptions) {
+  if (!emailEnabled) {
+    console.log(`\n📧 EMAIL NOT SENT (Resend API key not configured)`);
+    console.log(`   To: ${Array.isArray(to) ? to.join(", ") : to}`);
+    console.log(`   Subject: ${subject}`);
+    return null;
+  }
+
+  try {
+    const from = env.RESEND_FROM || "FitFinder <noreply@fitfinder.fun>";
+    const { data, error } = await resend.emails.send({
+      from,
+      to,
+      subject,
+      html,
+    });
+
+    if (error) {
+      console.error("Resend email error:", error);
+      throw new Error(`Failed to send email: ${error.message}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Email service error:", error);
+    throw error;
+  }
 }
 
 export async function sendVerificationEmail(
@@ -28,19 +63,18 @@ export async function sendVerificationEmail(
   `;
 
   if (!emailEnabled) {
-    console.log(`\n📧 VERIFICATION EMAIL (not sent — SMTP not configured)`);
+    console.log(`\n📧 VERIFICATION EMAIL (not sent — Resend not configured)`);
     console.log(`   To: ${to}`);
-    console.log(`   Code: ${code}`);
-    console.log("");
+    console.log(`   Code: ${code}\n`);
     return;
   }
 
-  await transporter.sendMail({
-    from: env.SMTP_FROM || `"FitFinder" <${env.SMTP_USER}>`,
+  await sendEmail({
     to,
     subject: "FitFinder — Verify Your Email",
     html,
   });
+  console.log(`✅ Verification email sent via Resend to ${to}`);
 }
 
 export async function sendPasswordResetEmail(
@@ -65,18 +99,16 @@ export async function sendPasswordResetEmail(
   `;
 
   if (!emailEnabled) {
-    console.log(`\n📧 PASSWORD RESET EMAIL (not sent — SMTP not configured)`);
+    console.log(`\n📧 PASSWORD RESET EMAIL (not sent — Resend not configured)`);
     console.log(`   To: ${to}`);
-    console.log(`   Code: ${code}`);
-    console.log(`   Expires in: ${minutes} minutes`);
-    console.log("");
+    console.log(`   Code: ${code}\n`);
     return;
   }
 
-  await transporter.sendMail({
-    from: env.SMTP_FROM || `"FitFinder" <${env.SMTP_USER}>`,
+  await sendEmail({
     to,
     subject: "FitFinder — Reset Your Password",
     html,
   });
+  console.log(`✅ Password reset email sent via Resend to ${to}`);
 }

@@ -10,11 +10,8 @@ export const env = {
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || "refresh-secret",
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
-  SMTP_HOST: process.env.SMTP_HOST || "smtp.gmail.com",
-  SMTP_PORT: parseInt(process.env.SMTP_PORT || "587", 10),
-  SMTP_USER: process.env.SMTP_USER || "",
-  SMTP_PASS: process.env.SMTP_PASS || "",
-  SMTP_FROM: process.env.SMTP_FROM || "",
+  RESEND_API_KEY: process.env.RESEND_API_KEY || "",
+  RESEND_FROM: process.env.RESEND_FROM || "",
   /** Password-reset OTP / session token lifetime in minutes */
   PASSWORD_RESET_EXPIRES_MINUTES: parseInt(process.env.PASSWORD_RESET_EXPIRES_MINUTES || "10", 10),
   /** Max failed OTP verification attempts before the code is locked */
