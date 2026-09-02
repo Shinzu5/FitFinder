@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Send, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   getOwnerThreadPreview,
@@ -123,7 +123,7 @@ export function AdminMessagesPanel() {
   return (
     <>
       <div className="mx-auto flex h-[calc(100vh-8.5rem)] min-h-[520px] max-w-6xl overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
-        <aside className="flex w-full max-w-xs shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d]">
+        <aside className={`w-full max-w-full shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d] md:w-80 md:max-w-xs ${activeThreadId ? "hidden md:flex" : "flex"}`}>
           <div className="border-b border-zinc-800/70 px-4 py-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-bold text-white">Messages</h2>
@@ -192,10 +192,18 @@ export function AdminMessagesPanel() {
           </div>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col bg-[#0a0a0b]">
+        <section className={`min-w-0 flex-1 flex-col bg-[#0a0a0b] ${activeThread ? "flex" : "hidden md:flex"}`}>
           {activeThread ? (
             <>
-              <div className="flex items-center gap-3 border-b border-zinc-800/70 px-5 py-4">
+              <div className="flex items-center gap-3 border-b border-zinc-800/70 px-4 py-3 sm:px-5 sm:py-4">
+                <button
+                  type="button"
+                  onClick={() => useAdminMessagesStore.setState({ activeThreadId: "" })}
+                  className="rounded-lg border border-zinc-800 p-1.5 text-zinc-400 hover:text-white md:hidden"
+                  aria-label="Back to conversations"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
                 <div className="relative">
                   <OwnerAvatar thread={activeThread} />
                 </div>

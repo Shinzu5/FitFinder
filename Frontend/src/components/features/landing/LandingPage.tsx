@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Menu, X } from "lucide-react";
 
 const HERO_WORDS = ["Gyms", "Gym Owners", "Coaches", "Members"];
 
@@ -182,6 +183,7 @@ function CheckIcon({ highlight = false }: { highlight?: boolean }) {
 export default function LandingPage() {
   const [wordIndex, setWordIndex] = useState(0);
   const [fade, setFade] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -197,8 +199,8 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-black text-white">
       <header className="sticky top-0 z-50 border-b border-zinc-800/60 bg-black/80 backdrop-blur-md">
-        <nav className="relative mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5 justify-self-start">
+        <nav className="relative mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5">
             <LogoIcon />
             <span className="text-lg font-bold tracking-wider">
               <span className="text-white">FIT</span>
@@ -216,18 +218,70 @@ export default function LandingPage() {
               Pricing
             </a>
           </div>
-          <div className="flex items-center gap-4 justify-self-end">
+          <div className="flex items-center gap-3">
             <Link href="/login" className="hidden text-sm text-zinc-400 transition hover:text-white sm:block">
               Log in
             </Link>
             <Link
               href="/signup"
-              className="rounded-lg bg-[#FFD700] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#e6c200]"
+              className="rounded-lg bg-[#FFD700] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[#e6c200] sm:text-sm"
             >
               Sign up
             </Link>
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              className="rounded-lg border border-zinc-800 p-2 text-zinc-300 transition hover:bg-zinc-800 md:hidden"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
         </nav>
+
+        {mobileNavOpen && (
+          <div className="border-t border-zinc-800/80 bg-[#0a0a0b] px-6 py-5 md:hidden">
+            <div className="flex flex-col gap-4">
+              <a
+                href="#features"
+                onClick={() => setMobileNavOpen(false)}
+                className="text-sm font-medium text-zinc-300 transition hover:text-white"
+              >
+                Features
+              </a>
+              <a
+                href="#solutions"
+                onClick={() => setMobileNavOpen(false)}
+                className="text-sm font-medium text-zinc-300 transition hover:text-white"
+              >
+                Solutions
+              </a>
+              <a
+                href="#pricing"
+                onClick={() => setMobileNavOpen(false)}
+                className="text-sm font-medium text-zinc-300 transition hover:text-white"
+              >
+                Pricing
+              </a>
+              <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+                <Link
+                  href="/login"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="text-sm font-medium text-zinc-300 transition hover:text-white"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="rounded-lg bg-[#FFD700] px-4 py-2 text-xs font-semibold text-black transition hover:bg-[#e6c200]"
+                >
+                  Sign up
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <section className="relative px-6 pb-16 pt-20">

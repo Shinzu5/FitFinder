@@ -18,6 +18,7 @@ import {
   UserCircle2,
   Users,
   Wrench,
+  X,
 } from "lucide-react";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
@@ -38,7 +39,12 @@ export const OWNER_NAV_ITEMS = [
   { label: "Payment Settings", href: "/dashboard/owner/payment-settings", icon: Settings },
 ] as const;
 
-export function OwnerSidebar() {
+interface OwnerSidebarProps {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function OwnerSidebar({ mobileOpen = false, onClose }: OwnerSidebarProps) {
   const pathname = usePathname();
   const fetchApprovals = useWalkInApprovalsStore((state) => state.fetchApprovals);
   const requests = useWalkInApprovalsStore((state) => state.requests);
@@ -53,56 +59,101 @@ export function OwnerSidebar() {
     return () => window.clearInterval(id);
   }, [fetchApprovals]);
 
+  const renderNavItems = () => (
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+      {OWNER_NAV_ITEMS.map((item) => {
+        const active =
+          pathname === item.href ||
+          (item.href !== "/dashboard/owner" && pathname.startsWith(item.href));
+        const Icon = item.icon;
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClose}
+            className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+              active
+                ? "bg-[#FFD700]/10 font-medium text-[#FFD700]"
+                : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            {active ? (
+              <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#FFD700]" />
+            ) : null}
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{item.label}</span>
+            {item.href === "/dashboard/owner/approvals" && pendingCount > 0 ? (
+              <span className="rounded-full bg-[#FFD700] px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {pendingCount}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5">
-      <Link href="/dashboard/owner" className="mb-8 flex items-center gap-2.5 px-2">
-        <Image
-          src="/LOGO.png"
-          alt="Fit Finder"
-          width={32}
-          height={32}
-          className="h-8 w-8 rounded-md object-contain"
-        />
-        <span className="text-sm font-bold tracking-wider">
-          <span className="text-white">FIT</span>
-          <span className="text-[#FFD700]"> FINDER</span>
-        </span>
-        <span className="rounded-full bg-[#FFD700]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">
-          Owner
-        </span>
-      </Link>
-
-      <nav className="flex flex-1 flex-col gap-0.5">
-        {OWNER_NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/dashboard/owner" && pathname.startsWith(item.href));
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                active
-                  ? "bg-[#FFD700]/10 font-medium text-[#FFD700]"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              {active ? (
-                <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#FFD700]" />
-              ) : null}
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {item.href === "/dashboard/owner/approvals" && pendingCount > 0 ? (
-                <span className="rounded-full bg-[#FFD700] px-1.5 py-0.5 text-[10px] font-bold text-black">
-                  {pendingCount}
+    <>
+      {/* Mobile Nav Drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={onClose}
+          />
+          <div className="relative flex w-4/5 max-w-xs flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between px-2">
+              <Link href="/dashboard/owner" onClick={onClose} className="flex items-center gap-2.5">
+                <Image
+                  src="/LOGO.png"
+                  alt="Fit Finder"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 rounded-md object-contain"
+                />
+                <span className="text-sm font-bold tracking-wider">
+                  <span className="text-white">FIT</span>
+                  <span className="text-[#FFD700]"> FINDER</span>
                 </span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+                <span className="rounded-full bg-[#FFD700]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">
+                  Owner
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {renderNavItems()}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5 md:flex">
+        <Link href="/dashboard/owner" className="mb-8 flex items-center gap-2.5 px-2">
+          <Image
+            src="/LOGO.png"
+            alt="Fit Finder"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-md object-contain"
+          />
+          <span className="text-sm font-bold tracking-wider">
+            <span className="text-white">FIT</span>
+            <span className="text-[#FFD700]"> FINDER</span>
+          </span>
+          <span className="rounded-full bg-[#FFD700]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#FFD700]">
+            Owner
+          </span>
+        </Link>
+        {renderNavItems()}
+      </aside>
+    </>
   );
 }

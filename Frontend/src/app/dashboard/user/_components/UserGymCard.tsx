@@ -55,7 +55,7 @@ export function UserGymCard({ gym, isJoined }: UserGymCardProps) {
           </p>
         </div>
 
-        <div className="flex items-end justify-between gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-1">
           <div className="flex items-start gap-2">
             <div className="mt-1 h-9 w-1 shrink-0 rounded-full bg-[#FACC15]" />
             <div>
@@ -72,11 +72,11 @@ export function UserGymCard({ gym, isJoined }: UserGymCardProps) {
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center justify-between sm:flex-col sm:items-end gap-2">
             <p className="text-sm font-semibold text-[#FACC15]">
               Active Now: {Number(gym.activeNow) || 0}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <a
                 href={getWebsiteHref(gym.website)}
                 target="_blank"

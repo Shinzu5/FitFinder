@@ -10,9 +10,11 @@ import {
   Dumbbell,
   Home,
   Lock,
+  Menu,
   MessageSquare,
   ShoppingBag,
   Wrench,
+  X,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
@@ -341,6 +343,7 @@ function UserDashboardFrame({
   const unlocked = Boolean(joinedGymId);
   const walkInRequests = useWalkInApprovalsStore((state) => state.requests);
   const user = useAuthStore((state) => state.user);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const pendingForSelectedOrFirst = Boolean(
     user?.id &&
@@ -363,9 +366,133 @@ function UserDashboardFrame({
     }
   }, [pendingLockdown, pathname, router]);
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  const renderNavItems = () => (
+    <nav className="flex flex-1 flex-col gap-1">
+      {NAV_ITEMS.map((item) => {
+        const locked =
+          item.href === "/dashboard/user"
+            ? pendingLockdown
+            : item.unlockRequired && !unlocked;
+        const active = pathname === item.href;
+        const Icon = item.icon;
+
+        if (locked) {
+          return (
+            <div
+              key={item.label}
+              className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-600"
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{item.label}</span>
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+            </div>
+          );
+        }
+
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={() => setMobileMenuOpen(false)}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+              active
+                ? "border-l-2 border-[#FACC15] bg-[#FACC15]/10 font-medium text-[#FACC15]"
+                : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
-    <div className="flex min-h-screen bg-black text-white">
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-4 py-5">
+    <div className="flex min-h-screen flex-col bg-black text-white md:flex-row">
+      {/* Mobile Top Navigation Bar */}
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-[#0A0A0A] px-4 py-3 md:hidden">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="rounded-lg border border-white/10 p-2 text-zinc-300 transition hover:bg-white/5"
+            aria-label="Toggle Navigation Menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <Link
+            href={pendingLockdown ? "/dashboard/user/membership" : "/dashboard/user"}
+            className="flex items-center gap-2"
+          >
+            <Image
+              src="/LOGO.png"
+              alt="Fit Finder"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-md object-contain"
+            />
+            <span className="text-xs font-bold tracking-wider">
+              <span className="text-white">FIT</span>
+              <span className="text-[#FFD700]"> FINDER</span>
+            </span>
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          <NotificationBell buttonClassName="rounded-full border border-white/10 p-1.5 text-zinc-300" />
+          <UserProfileMenu />
+        </div>
+      </div>
+
+      {/* Mobile Sidebar Navigation Drawer */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="relative flex w-4/5 max-w-xs flex-col border-r border-white/10 bg-[#0A0A0A] px-4 py-5 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between px-2">
+              <Link
+                href={pendingLockdown ? "/dashboard/user/membership" : "/dashboard/user"}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5"
+              >
+                <Image
+                  src="/LOGO.png"
+                  alt="Fit Finder"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 rounded-md object-contain"
+                />
+                <span className="text-sm font-bold tracking-wider">
+                  <span className="text-white">FIT</span>
+                  <span className="text-[#FFD700]"> FINDER</span>
+                </span>
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+                  Gymer
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {renderNavItems()}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Aside Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-4 py-5 md:flex">
         <Link
           href={pendingLockdown ? "/dashboard/user/membership" : "/dashboard/user"}
           className="mb-8 flex items-center gap-2.5 px-2"
@@ -385,49 +512,12 @@ function UserDashboardFrame({
             Gymer
           </span>
         </Link>
-
-        <nav className="flex flex-1 flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
-            const locked =
-              item.href === "/dashboard/user"
-                ? pendingLockdown
-                : item.unlockRequired && !unlocked;
-            const active = pathname === item.href;
-            const Icon = item.icon;
-
-            if (locked) {
-              return (
-                <div
-                  key={item.label}
-                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-600"
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">{item.label}</span>
-                  <Lock className="h-3.5 w-3.5 shrink-0" />
-                </div>
-              );
-            }
-
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                  active
-                    ? "border-l-2 border-[#FACC15] bg-[#FACC15]/10 font-medium text-[#FACC15]"
-                    : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="flex-1">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        {renderNavItems()}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-end gap-4 border-b border-white/10 px-6 py-3">
+        {/* Desktop Header */}
+        <header className="hidden items-center justify-end gap-4 border-b border-white/10 px-6 py-3 md:flex">
           <div className="flex items-center gap-3">
             {!unlocked || pendingForSelectedOrFirst ? (
               <div className="hidden max-w-md items-center gap-2 rounded-full border border-white/10 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 sm:flex">
@@ -441,7 +531,7 @@ function UserDashboardFrame({
             <UserProfileMenu />
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto px-6 py-6 lg:px-8">{children}</main>
+        <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

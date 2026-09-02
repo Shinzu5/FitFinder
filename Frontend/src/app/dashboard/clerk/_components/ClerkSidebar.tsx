@@ -12,6 +12,7 @@ import {
   MessageSquare,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { useWalkInApprovalsStore } from "@/stores/walk-in-approvals-store";
 
@@ -25,7 +26,12 @@ export const CLERK_NAV_ITEMS = [
   { label: "Messages", href: "/dashboard/clerk/messages", icon: MessageSquare },
 ] as const;
 
-export function ClerkSidebar() {
+interface ClerkSidebarProps {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function ClerkSidebar({ mobileOpen = false, onClose }: ClerkSidebarProps) {
   const pathname = usePathname();
   const fetchApprovals = useWalkInApprovalsStore((state) => state.fetchApprovals);
   const requests = useWalkInApprovalsStore((state) => state.requests);
@@ -38,53 +44,98 @@ export function ClerkSidebar() {
     void fetchApprovals();
   }, [fetchApprovals]);
 
+  const renderNavItems = () => (
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+      {CLERK_NAV_ITEMS.map((item) => {
+        const active =
+          pathname === item.href ||
+          (item.href !== "/dashboard/clerk" && pathname.startsWith(item.href));
+        const Icon = item.icon;
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClose}
+            className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+              active
+                ? "border-l-2 border-[#FACC15] bg-[#FACC15]/10 font-medium text-[#FACC15]"
+                : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{item.label}</span>
+            {item.href === "/dashboard/clerk/approvals" && pendingCount > 0 ? (
+              <span className="rounded-full bg-[#FACC15] px-1.5 py-0.5 text-[10px] font-bold text-black">
+                {pendingCount}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5">
-      <Link href="/dashboard/clerk" className="mb-8 flex items-center gap-2.5 px-2">
-        <Image
-          src="/LOGO.png"
-          alt="Fit Finder"
-          width={32}
-          height={32}
-          className="h-8 w-8 rounded-md object-contain"
-        />
-        <span className="text-sm font-bold tracking-wider">
-          <span className="text-white">FIT</span>
-          <span className="text-[#FFD700]"> FINDER</span>
-        </span>
-        <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-400">
-          Clerk
-        </span>
-      </Link>
-
-      <nav className="flex flex-1 flex-col gap-0.5">
-        {CLERK_NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/dashboard/clerk" && pathname.startsWith(item.href));
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
-                active
-                  ? "border-l-2 border-[#FACC15] bg-[#FACC15]/10 font-medium text-[#FACC15]"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {item.href === "/dashboard/clerk/approvals" && pendingCount > 0 ? (
-                <span className="rounded-full bg-[#FACC15] px-1.5 py-0.5 text-[10px] font-bold text-black">
-                  {pendingCount}
+    <>
+      {/* Mobile Nav Drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={onClose}
+          />
+          <div className="relative flex w-4/5 max-w-xs flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between px-2">
+              <Link href="/dashboard/clerk" onClick={onClose} className="flex items-center gap-2.5">
+                <Image
+                  src="/LOGO.png"
+                  alt="Fit Finder"
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 rounded-md object-contain"
+                />
+                <span className="text-sm font-bold tracking-wider">
+                  <span className="text-white">FIT</span>
+                  <span className="text-[#FFD700]"> FINDER</span>
                 </span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+                <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-400">
+                  Clerk
+                </span>
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {renderNavItems()}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-white/10 bg-[#0A0A0A] px-3 py-5 md:flex">
+        <Link href="/dashboard/clerk" className="mb-8 flex items-center gap-2.5 px-2">
+          <Image
+            src="/LOGO.png"
+            alt="Fit Finder"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-md object-contain"
+          />
+          <span className="text-sm font-bold tracking-wider">
+            <span className="text-white">FIT</span>
+            <span className="text-[#FFD700]"> FINDER</span>
+          </span>
+          <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-400">
+            Clerk
+          </span>
+        </Link>
+        {renderNavItems()}
+      </aside>
+    </>
   );
 }
