@@ -48,7 +48,7 @@ interface TransactionsTableProps {
 export function TransactionsTable({ transactions, emptyMessage }: TransactionsTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
+      <table className="w-full min-w-180 text-left text-sm">
         <thead>
           <tr className="border-b border-zinc-800/80 text-xs font-semibold uppercase tracking-wide text-zinc-500">
             <th className="px-5 py-4 font-semibold">Type</th>

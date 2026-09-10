@@ -151,7 +151,7 @@ export function UserMessagesPanel() {
 
   return (
     <>
-    <div className="flex h-[calc(100vh-8.5rem)] min-h-[520px] overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
+    <div className="flex h-[calc(100vh-8.5rem)] min-h-130 overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
       <aside className={`w-full max-w-full shrink-0 flex-col border-r border-zinc-800/70 bg-[#0b0b0d] md:w-80 md:max-w-xs ${activeThreadId ? "hidden md:flex" : "flex"}`}>
         <div className="border-b border-zinc-800/70 px-4 py-4">
           <div className="flex items-center justify-between">

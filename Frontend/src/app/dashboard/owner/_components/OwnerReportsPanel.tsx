@@ -125,7 +125,7 @@ export function OwnerReportsPanel() {
 
       <section className="overflow-hidden rounded-2xl border border-zinc-800/70 bg-[#0e0e10]">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
+          <table className="w-full min-w-190 text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-800/80 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                 <th className="px-5 py-4">Date</th>

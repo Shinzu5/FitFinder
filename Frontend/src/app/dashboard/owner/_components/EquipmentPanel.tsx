@@ -105,7 +105,7 @@ export function EquipmentPanel() {
     <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
       <section className="rounded-2xl border border-white/10 bg-[#141414] p-5">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-sm">
+          <table className="w-full min-w-140 text-left text-sm">
             <thead>
               <tr className="border-b border-white/10 text-xs text-zinc-500">
                 <th className="pb-3 pr-4 font-medium">Equipment</th>

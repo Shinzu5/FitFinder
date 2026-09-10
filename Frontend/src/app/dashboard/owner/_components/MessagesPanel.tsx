@@ -192,7 +192,7 @@ export function MessagesPanel() {
 
   return (
     <>
-      <div className="flex h-[calc(100vh-8.5rem)] min-h-[520px] overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
+      <div className="flex h-[calc(100vh-8.5rem)] min-h-130 overflow-hidden rounded-2xl border border-white/10 bg-[#141414]">
         <aside className={`w-full max-w-full shrink-0 flex-col border-r border-white/10 bg-[#111111] md:w-80 md:max-w-xs ${activeConversationId ? "hidden md:flex" : "flex"}`}>
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
             <h2 className="font-semibold text-white">Messages</h2>

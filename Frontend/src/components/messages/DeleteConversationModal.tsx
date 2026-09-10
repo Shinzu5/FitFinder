@@ -47,7 +47,7 @@ export function DeleteConversationModal({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="min-w-[100px] rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
+            className="min-w-25 rounded-lg border border-zinc-700 px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -55,7 +55,7 @@ export function DeleteConversationModal({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="min-w-[100px] rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-50"
+            className="min-w-25 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-50"
           >
             {busy ? "Deleting…" : "Yes"}
           </button>

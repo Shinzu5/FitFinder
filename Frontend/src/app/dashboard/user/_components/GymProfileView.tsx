@@ -32,7 +32,7 @@ export function GymProfileView({ profile }: GymProfileViewProps) {
 
   return (
     <div className="relative min-h-screen pb-28">
-      <section className="relative min-h-[380px] overflow-hidden">
+      <section className="relative min-h-95 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={resolveMediaUrl(profile.image)}

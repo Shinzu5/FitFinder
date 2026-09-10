@@ -30,14 +30,14 @@ export function AuthShell({
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-black px-4 py-12 text-white">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-[420px] w-[420px] rounded-full bg-[#FFD700]/10 blur-[120px]" />
+        <div className="h-105 w-105 rounded-full bg-[#FFD700]/10 blur-[120px]" />
       </div>
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative z-10 w-full max-w-[420px]"
+        className="relative z-10 w-full max-w-105"
       >
         {backLink ? (
           <div className="mb-4">

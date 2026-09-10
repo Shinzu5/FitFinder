@@ -116,7 +116,7 @@ export function AdminUserViewModal({ user, onClose }: AdminUserViewModalProps) {
           </p>
 
           <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-800/70">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-160 text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-800/80 bg-[#131315] text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <th className="px-4 py-3">Gym</th>

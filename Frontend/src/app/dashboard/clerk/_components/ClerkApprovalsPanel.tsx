@@ -150,7 +150,7 @@ export function ClerkApprovalsPanel() {
             <h3 className="font-bold text-white">Recently Reviewed Memberships</h3>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-180 text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-800/80 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <th className="px-5 py-4">Gymer Name</th>

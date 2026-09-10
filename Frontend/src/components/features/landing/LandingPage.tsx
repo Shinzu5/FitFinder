@@ -290,7 +290,7 @@ export default function LandingPage() {
 
       <section className="relative px-6 pb-16 pt-20">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-[#FFD700]/10 blur-3xl" />
+          <div className="absolute left-1/2 top-0 h-125 w-200 -translate-x-1/2 rounded-full bg-[#FFD700]/10 blur-3xl" />
         </div>
         <div className="relative mx-auto max-w-4xl text-center">
           <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
