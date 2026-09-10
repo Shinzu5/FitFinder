@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { asRecord, getApiErrorMessage } from "@/lib/api-error";
 import type { OwnerPlanId } from "@/lib/owner-plans";
 import { getOwnerPlan } from "@/lib/owner-plans";
 
@@ -83,23 +84,26 @@ export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>(
           ? payload.transactions
           : [];
 
-      const transactions: OwnerPlanTransaction[] = list.map((txn: any) => ({
-        id: txn.id,
-        gymName: txn.gymName || "Pending setup",
-        ownerId: txn.ownerId,
-        ownerName: txn.ownerName || "Owner",
-        ownerEmail: txn.ownerEmail || "",
-        planId: txn.planId || "standard",
-        planName: txn.planName || "Plan",
-        type: "Owner Plan" as const,
-        amount: Number(txn.amount) || 0,
-        method: txn.method || "Xendit",
-        referenceNo: txn.referenceNo || "",
-        createdAt: txn.createdAt,
-        validUntil: txn.validUntil,
-        daysLeft: typeof txn.daysLeft === "number" ? txn.daysLeft : undefined,
-        months: typeof txn.months === "number" ? txn.months : undefined,
-      }));
+      const transactions: OwnerPlanTransaction[] = list.map((value: unknown) => {
+        const txn = asRecord(value);
+        return {
+          id: String(txn.id ?? ""),
+          gymName: String(txn.gymName || "Pending setup"),
+          ownerId: String(txn.ownerId ?? ""),
+          ownerName: String(txn.ownerName || "Owner"),
+          ownerEmail: String(txn.ownerEmail || ""),
+          planId: String(txn.planId || "standard"),
+          planName: String(txn.planName || "Plan"),
+          type: "Owner Plan" as const,
+          amount: Number(txn.amount) || 0,
+          method: String(txn.method || "Xendit"),
+          referenceNo: String(txn.referenceNo || ""),
+          createdAt: String(txn.createdAt ?? ""),
+          validUntil: txn.validUntil ? String(txn.validUntil) : undefined,
+          daysLeft: typeof txn.daysLeft === "number" ? txn.daysLeft : undefined,
+          months: typeof txn.months === "number" ? txn.months : undefined,
+        };
+      });
 
       const stats = !Array.isArray(payload) && payload?.stats
         ? {
@@ -111,10 +115,10 @@ export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>(
         : EMPTY_STATS;
 
       set({ transactions, stats, loading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load transactions.",
+        error: getApiErrorMessage(error, "Failed to load transactions."),
       });
     }
   },

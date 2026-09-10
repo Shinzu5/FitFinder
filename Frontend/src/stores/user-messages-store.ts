@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { asRecord } from "@/lib/api-error";
 import { mergeChatMessages } from "@/lib/merge-chat-messages";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -167,20 +168,30 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
           set({ currentUserId });
         }
         const previous = get().threads;
-        const dbThreads: GymMessageThread[] = data.data.map((row: any) => {
+        const dbThreads: GymMessageThread[] = (Array.isArray(data.data) ? data.data : []).map(
+          (value: unknown) => {
+          const row = asRecord(value);
+          const user = asRecord(row.user);
           const previewMessage: UserChatMessage | null = currentUserId
             ? toChatMessage(
                 {
-                  id: `preview-${row.user.id}`,
-                  senderId: row.lastSenderId,
+                  id: `preview-${String(user.id ?? "")}`,
+                  senderId: String(row.lastSenderId ?? ""),
                   receiverId: currentUserId,
-                  text: row.lastMessage,
-                  createdAt: row.lastMessageAt,
+                  text: String(row.lastMessage ?? ""),
+                  createdAt: String(row.lastMessageAt ?? ""),
                 },
                 currentUserId,
               )
             : null;
-          const thread = threadFromContact(toSearchContact(row.user));
+          const thread = threadFromContact(
+            toSearchContact({
+              id: String(user.id ?? ""),
+              fullName: String(user.fullName ?? ""),
+              role: String(user.role ?? ""),
+              avatarUrl: user.avatarUrl ? String(user.avatarUrl) : null,
+            }),
+          );
           return { ...thread, messages: previewMessage ? [previewMessage] : [] };
         });
 

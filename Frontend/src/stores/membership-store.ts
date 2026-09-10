@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { asRecord, getApiErrorMessage } from "@/lib/api-error";
 import type { CompletedMembership, JoinPaymentMethod } from "./join-gym-store";
 
 export interface RenewalHistoryItem {
@@ -57,36 +58,38 @@ interface MembershipState {
   leaveGym: () => Promise<void>;
 }
 
-function mapMembership(data: any): CompletedMembership {
+function mapMembership(value: unknown): CompletedMembership {
+  const data = asRecord(value);
   return {
-    gymId: data.gymId,
-    gymName: data.gymName,
-    planId: data.planId,
-    planName: data.planName,
-    planPrice: data.planPrice,
-    coachId: data.coachId ?? null,
-    coachName: data.coachName ?? null,
-    coachSessionPrice: data.coachSessionPrice ?? 0,
+    gymId: String(data.gymId ?? ""),
+    gymName: String(data.gymName ?? ""),
+    planId: data.planId == null ? null : String(data.planId),
+    planName: String(data.planName ?? ""),
+    planPrice: Number(data.planPrice) || 0,
+    coachId: data.coachId == null ? null : String(data.coachId),
+    coachName: data.coachName == null ? null : String(data.coachName),
+    coachSessionPrice: Number(data.coachSessionPrice ?? 0) || 0,
     paymentMethod: (String(data.paymentMethod || "cashless").toLowerCase() === "cash" ||
     String(data.paymentMethod || "").toLowerCase() === "walk-in"
       ? String(data.paymentMethod).toLowerCase()
       : "cashless") as JoinPaymentMethod,
-    paymentRef: data.paymentRef,
-    totalPaid: data.totalPaid,
-    joinedAt: data.joinedAt,
-    expiresAt: data.expiresAt,
-    durationDays: data.durationDays,
+    paymentRef: String(data.paymentRef ?? ""),
+    totalPaid: Number(data.totalPaid) || 0,
+    joinedAt: String(data.joinedAt ?? ""),
+    expiresAt: data.expiresAt ? String(data.expiresAt) : undefined,
+    durationDays: Number(data.durationDays) || 0,
   };
 }
 
-function mapEnrolled(raw: any): EnrolledGymMembership {
+function mapEnrolled(value: unknown): EnrolledGymMembership {
+  const raw = asRecord(value);
   return {
     membershipId: String(raw.membershipId || ""),
     gymId: String(raw.gymId || ""),
     gymName: String(raw.gymName || "Gym"),
     gymAddress: String(raw.gymAddress || ""),
     coverImageUrl: String(raw.coverImageUrl || ""),
-    planId: raw.planId ?? null,
+    planId: raw.planId == null ? null : String(raw.planId),
     planName: String(raw.planName || "Plan"),
     planPrice: Number(raw.planPrice) || 0,
     planType: String(raw.planType || "Walk-in"),
@@ -97,8 +100,8 @@ function mapEnrolled(raw: any): EnrolledGymMembership {
     paymentMethod: String(raw.paymentMethod || ""),
     paymentRef: String(raw.paymentRef || ""),
     totalPaid: Number(raw.totalPaid) || 0,
-    coachId: raw.coachId ?? null,
-    coachName: raw.coachName ?? null,
+    coachId: raw.coachId == null ? null : String(raw.coachId),
+    coachName: raw.coachName == null ? null : String(raw.coachName),
     coachSessionPrice: Number(raw.coachSessionPrice) || 0,
     joinedAt: String(raw.joinedAt || ""),
     expiresAt: String(raw.expiresAt || ""),
@@ -108,15 +111,18 @@ function mapEnrolled(raw: any): EnrolledGymMembership {
 
 function mapRenewalHistory(raw: unknown): RenewalHistoryItem[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((item: any) => ({
-    id: String(item.id),
-    planName: String(item.planName || "Plan"),
-    planPrice: Number(item.planPrice) || 0,
-    durationDays: Number(item.durationDays) || 0,
-    totalPaid: Number(item.totalPaid) || 0,
-    paymentMethod: String(item.paymentMethod || "Walk-in"),
-    renewalDate: String(item.renewalDate || ""),
-  }));
+  return raw.map((value) => {
+    const item = asRecord(value);
+    return {
+      id: String(item.id),
+      planName: String(item.planName || "Plan"),
+      planPrice: Number(item.planPrice) || 0,
+      durationDays: Number(item.durationDays) || 0,
+      totalPaid: Number(item.totalPaid) || 0,
+      paymentMethod: String(item.paymentMethod || "Walk-in"),
+      renewalDate: String(item.renewalDate || ""),
+    };
+  });
 }
 
 function isMembershipExpired(membership: CompletedMembership): boolean {
@@ -201,10 +207,10 @@ export const useMembershipStore = create<MembershipState>((set, get) => ({
       });
 
       void get().fetchMemberships();
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load membership.",
+        error: getApiErrorMessage(error, "Failed to load membership."),
       });
     }
   },
@@ -227,10 +233,10 @@ export const useMembershipStore = create<MembershipState>((set, get) => ({
       await get().fetchMembership();
       set({ switching: false });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         switching: false,
-        error: error.response?.data?.message || "Failed to switch gym.",
+        error: getApiErrorMessage(error, "Failed to switch gym."),
       });
       return false;
     }
@@ -282,8 +288,8 @@ export const useMembershipStore = create<MembershipState>((set, get) => ({
       }
       void get().fetchMemberships();
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to join gym." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to join gym.") });
       return false;
     }
   },

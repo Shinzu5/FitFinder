@@ -115,9 +115,29 @@ function mapDbEquipment(equipment: GymEquipment[]): string[] {
     .map((item) => `${item.name} (x${item.quantity})`);
 }
 
+export interface GymApiPayload {
+  id: string;
+  name?: string;
+  address?: string;
+  location?: string;
+  description?: string;
+  schedule?: string;
+  hours?: string;
+  website?: string;
+  contactNumber?: string;
+  coverImageUrl?: string;
+  image?: string;
+  cashlessEnabled?: boolean;
+  membershipPlans?: Array<{ id: string; name: string; price: number; durationDays: number }>;
+  coaches?: GymCoach[];
+  equipment?: GymEquipment[];
+  owner?: { fullName?: string; avatarUrl?: string };
+  _count?: { gymMemberships?: number };
+}
+
 export interface ResolveGymProfileInput {
   gymId: string;
-  realGym?: any | null;
+  realGym?: GymApiPayload | null;
   ownerName?: string;
   ownerAvatarUrl?: string;
   ownerPlans?: MembershipPlan[];
@@ -139,7 +159,7 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
 
   return {
     id: realGym.id,
-    name: realGym.name,
+    name: realGym.name || "Gym",
     location: realGym.address || realGym.location || "",
     description: realGym.description || "",
     hours: realGym.schedule || realGym.hours || "",

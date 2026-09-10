@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { asRecord, getApiErrorMessage } from "@/lib/api-error";
 
 export type PaymentMethod = "cash" | "cashless";
 export type TransactionType = "monthly" | "session" | "supplements" | "day-pass" | "renewal" | "coach";
@@ -198,8 +199,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         activeNow: data.data.activeNow ?? 0,
         error: null,
       });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load dashboard." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to load dashboard.") });
     }
   },
 
@@ -211,8 +212,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         transactions: (data.data || []) as ClerkTransaction[],
         error: null,
       });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load transactions." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to load transactions.") });
     }
   },
 
@@ -220,34 +221,35 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
     try {
       const { data } = await api.get("/clerk/members");
       if (!data.success) return;
-      const members = (data.data || []).map((m: any) => {
+      const members = (data.data || []).map((raw: unknown) => {
+        const m = asRecord(raw);
         const joinedAt =
           typeof m.joinedAt === "number"
             ? m.joinedAt
             : m.joinedAt
-              ? new Date(m.joinedAt).getTime()
+              ? new Date(String(m.joinedAt)).getTime()
               : 0;
         const expiresAt =
           typeof m.expiresAt === "number"
             ? m.expiresAt
             : m.expiresAt
-              ? new Date(m.expiresAt).getTime()
+              ? new Date(String(m.expiresAt)).getTime()
               : 0;
         const startsAt =
           typeof m.startsAt === "number"
             ? m.startsAt
             : m.startsAt
-              ? new Date(m.startsAt).getTime()
+              ? new Date(String(m.startsAt)).getTime()
               : joinedAt;
         return {
-          id: m.id,
-          firstName: m.firstName || "",
-          lastName: m.lastName || "",
-          fullName: m.fullName || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
-          email: m.email,
-          plan: m.plan || m.planName || "Plan",
+          id: String(m.id ?? ""),
+          firstName: String(m.firstName || ""),
+          lastName: String(m.lastName || ""),
+          fullName: String(m.fullName || `${m.firstName || ""} ${m.lastName || ""}`.trim()),
+          email: m.email ? String(m.email) : undefined,
+          plan: String(m.plan || m.planName || "Plan"),
           planPrice: Number(m.planPrice) || 0,
-          status: (m.status || "active") as MemberStatus,
+          status: (String(m.status || "active") as MemberStatus),
           joinedAt,
           expiresAt,
           startsAt,
@@ -262,8 +264,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         } as ClerkMember;
       });
       set({ members, error: null });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load members." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to load members.") });
     }
   },
 
@@ -272,8 +274,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       const { data } = await api.get("/clerk/plans");
       if (!data.success) return;
       set({ plans: (data.data || []) as MembershipPlanOption[], error: null });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load plans." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to load plans.") });
     }
   },
 
@@ -317,8 +319,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         error: null,
       });
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to record payment." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to record payment.") });
       return false;
     }
   },
@@ -345,8 +347,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       });
       void get().fetchDashboard();
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to update payment." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to update payment.") });
       return false;
     }
   },
@@ -367,8 +369,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         error: null,
       });
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to remove payment." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to remove payment.") });
       return false;
     }
   },
@@ -403,8 +405,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         expiresAt: Date.now() + (plan?.durationDays || 30) * 24 * 60 * 60 * 1000,
         remainingDays: plan?.durationDays || 30,
       };
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to register member." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to register member.") });
       return null;
     }
   },
@@ -423,8 +425,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         canClose: Boolean(data.data.canClose),
         message: data.data.message || "",
       };
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load closing preview." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to load closing preview.") });
       return null;
     }
   },
@@ -446,8 +448,8 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       });
       await Promise.all([get().fetchTransactions(), get().fetchDashboard()]);
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to close daily sales." });
+    } catch (error: unknown) {
+      set({ error: getApiErrorMessage(error, "Failed to close daily sales.") });
       return false;
     }
   },

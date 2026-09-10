@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
+import { asRecord } from "@/lib/api-error";
 import { Plus } from "lucide-react";
 import type { Gym } from "@/lib/mock-gyms";
 import { resolveMediaUrl } from "@/lib/media";
@@ -15,23 +16,24 @@ function getFirstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] || fullName;
 }
 
-function mapApiGymToListItem(gym: any): Gym {
+function mapApiGymToListItem(raw: unknown): Gym {
+  const gym = asRecord(raw);
   const hasActivePlans =
     typeof gym.hasActivePlans === "boolean"
       ? gym.hasActivePlans
       : gym.pricePerMonth != null;
   return {
-    id: gym.id,
-    name: gym.name,
-    location: gym.location || gym.address || "",
-    description: gym.description || "",
-    hours: gym.hours || gym.schedule || "",
-    website: gym.website || "",
-    members: gym.members ?? 0,
+    id: String(gym.id ?? ""),
+    name: String(gym.name ?? ""),
+    location: String(gym.location || gym.address || ""),
+    description: String(gym.description || ""),
+    hours: String(gym.hours || gym.schedule || ""),
+    website: String(gym.website || ""),
+    members: Number(gym.members) || 0,
     activeNow: Number(gym.activeNow) || 0,
     pricePerMonth: hasActivePlans ? Number(gym.pricePerMonth) : null,
     hasActivePlans,
-    image: resolveMediaUrl(gym.image || gym.coverImageUrl),
+    image: resolveMediaUrl(String(gym.image || gym.coverImageUrl || "")),
     status: "ACTIVE",
   };
 }

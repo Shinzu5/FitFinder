@@ -7,7 +7,6 @@ import type { PublicGymProfile } from "../../_lib/gym-profile";
 import {
   useJoinGymStore,
 } from "@/stores/join-gym-store";
-import { useAuthStore } from "@/stores/auth-store";
 import { JoinGymHeader } from "./JoinGymHeader";
 import api from "@/lib/api";
 
@@ -17,7 +16,6 @@ interface GcashPaymentViewProps {
 
 export function GcashPaymentView({ profile }: GcashPaymentViewProps) {
   const router = useRouter();
-  const user = useAuthStore((state) => state.user);
   const {
     selectedPlanId,
     selectedCoachId,

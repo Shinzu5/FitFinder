@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { asRecord } from "@/lib/api-error";
 
 export interface GymCoach {
   id: string;
@@ -50,17 +51,20 @@ export const EMPTY_SCHEDULE: CoachSchedule = {
   sunday: "",
 };
 
-function mapCoach(raw: any): GymCoach {
+function mapCoach(value: unknown): GymCoach {
+  const raw = asRecord(value);
   return {
-    id: String(raw.id),
+    id: String(raw.id ?? ""),
     name: String(raw.name || ""),
     specialty: String(raw.specialty || ""),
     sessionPrice: Number(raw.sessionPrice) || 0,
     schedule:
-      raw.schedule && typeof raw.schedule === "object" ? { ...raw.schedule } : {},
+      raw.schedule && typeof raw.schedule === "object"
+        ? { ...asRecord(raw.schedule) } as Record<string, string>
+        : {},
     description: String(raw.description || ""),
-    photoUrl: raw.photoUrl ?? null,
-    photoName: raw.photoName ?? null,
+    photoUrl: raw.photoUrl == null ? null : String(raw.photoUrl),
+    photoName: raw.photoName == null ? null : String(raw.photoName),
     isActive: raw.isActive !== false,
   };
 }

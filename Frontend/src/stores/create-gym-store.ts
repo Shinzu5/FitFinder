@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api, { setMemoryAccessToken } from "@/lib/api";
+import { asRecord, getApiErrorStatus } from "@/lib/api-error";
 import { getAccessUntilDate, getOwnerPlan, type OwnerPlanId } from "@/lib/owner-plans";
 import { useAuthStore } from "@/stores/auth-store";
 
@@ -63,20 +64,22 @@ interface CreateGymState {
   resetFlow: () => void;
 }
 
-function mapApiGymToRegistered(gym: any): RegisteredGym {
+function mapApiGymToRegistered(value: unknown): RegisteredGym {
+  const gym = asRecord(value);
+  const count = asRecord(gym._count);
   return {
-    id: gym.id,
-    name: gym.name,
-    address: gym.address || "",
-    contactNumber: gym.contactNumber || "",
-    description: gym.description || "",
-    websiteOrSlug: gym.website || gym.websiteOrSlug || "",
+    id: String(gym.id ?? ""),
+    name: String(gym.name ?? ""),
+    address: String(gym.address || ""),
+    contactNumber: String(gym.contactNumber || ""),
+    description: String(gym.description || ""),
+    websiteOrSlug: String(gym.website || gym.websiteOrSlug || ""),
     coverPhotoName: null,
-    coverImageUrl: gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE,
-    schedule: gym.schedule || "Mon-Sun: 6AM - 10PM",
-    memberCount: gym.memberCount ?? gym._count?.gymMemberships ?? 0,
-    createdAt: gym.createdAt || new Date().toISOString(),
-    status: gym.status || "PENDING",
+    coverImageUrl: String(gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE),
+    schedule: String(gym.schedule || "Mon-Sun: 6AM - 10PM"),
+    memberCount: Number(gym.memberCount ?? count.gymMemberships ?? 0) || 0,
+    createdAt: String(gym.createdAt || new Date().toISOString()),
+    status: (gym.status as RegisteredGym["status"]) || "PENDING",
   };
 }
 
@@ -151,8 +154,8 @@ export const useCreateGymStore = create<CreateGymState>()(
             set({ paymentComplete: true });
           }
           return false;
-        } catch (error: any) {
-          const status = error?.response?.status;
+        } catch (error: unknown) {
+          const status = getApiErrorStatus(error);
           if (status === 401 || status === 403 || status === 404) {
             const hasActivePlan = await hasActiveOwnerPlan();
             set({ hasOwnedGym: false, registeredGym: null, checkingOwnedGym: false });

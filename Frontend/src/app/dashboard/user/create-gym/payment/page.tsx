@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { CalendarDays, Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { CreateGymShell } from "@/components/features/create-gym/CreateGymShell";
 import {
@@ -12,7 +11,6 @@ import {
 import { useCreateGymStore } from "@/stores/create-gym-store";
 
 export default function CreateGymPaymentPage() {
-  const router = useRouter();
   const {
     selectedPlanId,
     paymentLoading,

@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export interface SalesReportListItem {
   id: string;
@@ -87,10 +88,10 @@ export const useOwnerSalesReportsStore = create<OwnerSalesReportsState>((set, ge
         return;
       }
       set({ reports: data.data || [], loading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load reports.",
+        error: getApiErrorMessage(error, "Failed to load reports."),
       });
     }
   },
@@ -105,10 +106,10 @@ export const useOwnerSalesReportsStore = create<OwnerSalesReportsState>((set, ge
       }
       set({ receipt: data.data, receiptLoading: false, error: null });
       return data.data as SalesReportReceipt;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         receiptLoading: false,
-        error: error.response?.data?.message || "Failed to load receipt.",
+        error: getApiErrorMessage(error, "Failed to load receipt."),
       });
       return null;
     }

@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import api from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media";
+import { asRecord } from "@/lib/api-error";
 
 export type EquipmentStatus = "available" | "in_use" | "under_maintenance";
 
@@ -26,14 +27,15 @@ function normalizeStatus(status: string | undefined): EquipmentStatus {
   return "available";
 }
 
-function mapEquipment(raw: any): GymEquipment {
+function mapEquipment(value: unknown): GymEquipment {
+  const raw = asRecord(value);
   return {
-    id: raw.id,
-    name: raw.name,
-    quantity: raw.quantity ?? 1,
-    status: normalizeStatus(raw.status),
-    imageUrl: resolveMediaUrl(raw.imageUrl || ""),
-    imageName: raw.imageName || null,
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? ""),
+    quantity: Number(raw.quantity ?? 1) || 1,
+    status: normalizeStatus(raw.status == null ? undefined : String(raw.status)),
+    imageUrl: resolveMediaUrl(String(raw.imageUrl || "")),
+    imageName: raw.imageName ? String(raw.imageName) : null,
   };
 }
 

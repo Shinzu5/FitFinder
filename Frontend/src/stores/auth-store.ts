@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api, { setMemoryAccessToken } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { type UserRole, roleToDashboardPath } from "@/lib/mock-users";
 
 export interface AuthUser {
@@ -106,8 +107,8 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Login failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Invalid email or password.";
+        } catch (error: unknown) {
+          const message = getApiErrorMessage(error, "Invalid email or password.");
           set({ loading: false, error: message, success: null });
           return false;
         }
@@ -139,13 +140,8 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Registration failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Registration failed.";
-          // Handle validation errors
-          const errors = error.response?.data?.errors;
-          const errorMsg = errors?.length
-            ? errors.map((e: any) => e.message).join(". ")
-            : message;
+        } catch (error: unknown) {
+          const errorMsg = getApiErrorMessage(error, "Registration failed.");
           set({ loading: false, error: errorMsg, success: null });
           return false;
         }
@@ -163,8 +159,8 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Verification failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Verification failed.";
+        } catch (error: unknown) {
+          const message = getApiErrorMessage(error, "Verification failed.");
           set({ loading: false, error: message, success: null });
           return false;
         }
@@ -180,10 +176,10 @@ export const useAuthStore = create<AuthState>()(
             success: data.message || "A new verification code has been sent.",
           });
           return true;
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
             loading: false,
-            error: error.response?.data?.message || "Failed to resend code.",
+            error: getApiErrorMessage(error, "Failed to resend code."),
             success: null,
           });
           return false;
@@ -232,10 +228,10 @@ export const useAuthStore = create<AuthState>()(
             success: null,
           });
           return null;
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
             loading: false,
-            error: error.response?.data?.message || "Invalid or expired verification code.",
+            error: getApiErrorMessage(error, "Invalid or expired verification code."),
             success: null,
           });
           return null;
@@ -265,10 +261,10 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message, success: null });
           return false;
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
             loading: false,
-            error: error.response?.data?.message || "Failed to reset password.",
+            error: getApiErrorMessage(error, "Failed to reset password."),
             success: null,
           });
           return false;
@@ -363,9 +359,9 @@ export const useAuthStore = create<AuthState>()(
 
           set({ error: data.message || "Failed to change password.", success: null });
           return false;
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
-            error: error.response?.data?.message || "Current password is incorrect.",
+            error: getApiErrorMessage(error, "Current password is incorrect."),
             success: null,
           });
           return false;

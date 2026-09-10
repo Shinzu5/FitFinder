@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import api from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export interface FrontDeskClerk {
   id: string;
@@ -57,12 +58,15 @@ export const useOwnerStaffStore = create<OwnerStaffState>((set, get) => ({
         return { ok: true };
       }
       return { ok: false, message: data.message || "Failed to create clerk account." };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to add clerk:", error);
-      const message =
-        error?.response?.data?.message ||
-        "Failed to create clerk account. Please check your connection and try again.";
-      return { ok: false, message };
+      return {
+        ok: false,
+        message: getApiErrorMessage(
+          error,
+          "Failed to create clerk account. Please check your connection and try again.",
+        ),
+      };
     }
   },
 
