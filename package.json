@@ -1,0 +1,12 @@
+{
+  "name": "fitfinder",
+  "private": true,
+  "description": "Monorepo wrapper so Render can build the Backend from the repo root",
+  "scripts": {
+    "build": "npm --prefix Backend install --include=dev && npm --prefix Backend run prisma:generate && npm --prefix Backend run build",
+    "start": "node Backend/dist/index.js"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

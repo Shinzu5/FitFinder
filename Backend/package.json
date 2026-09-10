@@ -44,6 +44,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "allowScripts": {
     "@prisma/client@6.19.3": true,
     "@prisma/engines@6.19.3": true,
