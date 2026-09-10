@@ -11,7 +11,7 @@ const STATS = [
   { value: "1,200+", label: "Active Gyms" },
   { value: "450k+", label: "Gym Members" },
   { value: "8,500+", label: "Coaches" },
-  { value: "$12M+", label: "Transactions Processed" },
+  { value: "₱12M+", label: "Transactions Processed" },
 ];
 
 const FEATURES = [
@@ -131,7 +131,7 @@ const PRICING = [
   },
   {
     name: "Pro",
-    price: "$49",
+    price: "₱49",
     period: "/mo",
     popular: true,
     features: [
@@ -144,7 +144,7 @@ const PRICING = [
   },
   {
     name: "Elite",
-    price: "$149",
+    price: "₱149",
     period: "/mo",
     popular: false,
     features: [

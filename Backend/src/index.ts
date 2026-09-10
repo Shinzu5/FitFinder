@@ -35,7 +35,31 @@ initSocket(server);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Same-origin / curl / health checks have no Origin header.
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    const allowed = new Set(
+      [...env.ALLOWED_ORIGINS, "https://fitfinder.fun", "https://www.fitfinder.fun"].map((s) =>
+        s.replace(/\/+$/, ""),
+      ),
+    );
+    if (allowed.has(origin.replace(/\/+$/, ""))) {
+      callback(null, true);
+      return;
+    }
+    // Local/dev frontends (localhost, 127.0.0.1, LAN) always allowed outside production.
+    if (
+      env.NODE_ENV !== "production" &&
+      /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
+    ) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS blocked for origin ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: "10mb" }));
@@ -90,6 +114,7 @@ async function start() {
       console.log(`\n🚀 FitFinder API running on http://localhost:${env.PORT}`);
       console.log(`📦 Environment: ${env.NODE_ENV}`);
       console.log(`🌐 Frontend URL: ${env.FRONTEND_URL}`);
+      console.log(`🌐 Allowed origins: ${env.ALLOWED_ORIGINS.join(", ")}`);
       console.log(`📁 Uploads: ${path.join(process.cwd(), "uploads")}`);
       console.log(`🔌 Socket.IO ready for real-time messaging + notifications\n`);
     });

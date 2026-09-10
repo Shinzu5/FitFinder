@@ -1,6 +1,9 @@
 import axios from "axios";
+import { logApiBaseMisconfiguration, resolveApiBaseUrl } from "@/lib/api-base";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = resolveApiBaseUrl();
+
+logApiBaseMisconfiguration();
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,

@@ -18,11 +18,21 @@ export function initSocket(server: HTTPServer): IOServer {
   io = new IOServer(server, {
     cors: {
       origin: (origin, callback) => {
-        // Allow local/dev frontends (localhost, 127.0.0.1, LAN IPs) so realtime works.
-        if (!origin || origin === env.FRONTEND_URL) {
+        // Same-origin / non-browser clients have no Origin header.
+        if (!origin) {
           callback(null, true);
           return;
         }
+        const allowed = new Set(
+          [...env.ALLOWED_ORIGINS, "https://fitfinder.fun", "https://www.fitfinder.fun"].map((s) =>
+            s.replace(/\/+$/, ""),
+          ),
+        );
+        if (allowed.has(origin.replace(/\/+$/, ""))) {
+          callback(null, true);
+          return;
+        }
+        // Allow local/dev frontends (localhost, 127.0.0.1, LAN IPs) so realtime works.
         if (
           env.NODE_ENV !== "production" &&
           /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(
@@ -32,7 +42,7 @@ export function initSocket(server: HTTPServer): IOServer {
           callback(null, true);
           return;
         }
-        callback(null, origin === env.FRONTEND_URL);
+        callback(null, false);
       },
       credentials: true,
     },

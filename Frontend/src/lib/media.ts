@@ -1,6 +1,7 @@
 import api from "@/lib/api";
+import { resolveApiBaseUrl } from "@/lib/api-base";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = resolveApiBaseUrl();
 
 /** Neutral placeholder — never return "" for <img src> (triggers Next.js console errors). */
 export const MEDIA_PLACEHOLDER =

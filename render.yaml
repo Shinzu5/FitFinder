@@ -13,7 +13,9 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: FRONTEND_URL
-        sync: false
+        value: https://www.fitfinder.fun
+      - key: FRONTEND_URLS
+        value: https://www.fitfinder.fun,https://fitfinder.fun
       - key: DATABASE_URL
         sync: false
       - key: JWT_ACCESS_SECRET

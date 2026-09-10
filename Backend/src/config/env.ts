@@ -1,10 +1,27 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+const rawFrontendUrls = [process.env.FRONTEND_URLS ?? "", process.env.FRONTEND_URL ?? ""]
+  .join(",")
+  .split(",")
+  .map((s) => s.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+/** All frontend origins allowed by CORS + Socket.IO (apex + www + local dev). */
+export const ALLOWED_FRONTEND_ORIGINS: string[] = Array.from(
+  new Set(
+    rawFrontendUrls.length > 0
+      ? rawFrontendUrls
+      : ["http://localhost:3000"],
+  ),
+);
+
 export const env = {
   PORT: parseInt(process.env.PORT || "5000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
-  FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
+  FRONTEND_URL: ALLOWED_FRONTEND_ORIGINS[0] || "http://localhost:3000",
+  FRONTEND_URLS: ALLOWED_FRONTEND_ORIGINS.join(","),
+  ALLOWED_ORIGINS: ALLOWED_FRONTEND_ORIGINS,
   DATABASE_URL: process.env.DATABASE_URL || "",
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || "access-secret",
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || "refresh-secret",

@@ -1,8 +1,9 @@
 "use client";
 
 import { io, type Socket } from "socket.io-client";
+import { resolveApiBaseUrl } from "@/lib/api-base";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = resolveApiBaseUrl();
 
 let socket: Socket | null = null;
 let socketToken: string | null = null;
