@@ -42,7 +42,7 @@ app.use(cors({
       return;
     }
     const allowed = new Set(
-      [...env.ALLOWED_ORIGINS, "https://fitfinder.fun", "https://www.fitfinder.fun"].map((s) =>
+      env.ALLOWED_ORIGINS.map((s) =>
         s.replace(/\/+$/, ""),
       ),
     );
