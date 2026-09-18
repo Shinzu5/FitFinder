@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Clock, ExternalLink, Globe, MapPin, Users } from "lucide-react";
 import { motion } from "framer-motion";
-import type { Gym } from "@/lib/mock-gyms";
+import type { Gym } from "@/types/gym";
 import { resolveMediaUrl } from "@/lib/media";
 import { getWebsiteHref } from "../_lib/gym-profile";
 

@@ -62,6 +62,9 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Promise lock to prevent parallel duplicate /auth/refresh calls
+let refreshPromise: Promise<string> | null = null;
+
 // Response interceptor — handle 401 and auto-refresh (never on auth endpoints)
 api.interceptors.response.use(
   (response) => response,
@@ -72,9 +75,9 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const alreadyRetried = Boolean(originalRequest._retry);
 
-    // Never try to refresh while logging in / out / refreshing — that caused
-    // "Refresh token required" during account switch / login.
-    if (status !== 401 || alreadyRetried || isAuthEndpoint(originalRequest.url)) {
+    // Never try to refresh while logging in / out / refreshing or if no token was stored (logged out user)
+    const storedToken = readStoredAccessToken();
+    if (status !== 401 || alreadyRetried || isAuthEndpoint(originalRequest.url) || !storedToken) {
       return Promise.reject(error);
     }
 
@@ -109,32 +112,54 @@ api.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      const { data } = await axios.post(
-        `${API_BASE_URL}/api/auth/refresh`,
-        {},
-        { withCredentials: true },
-      );
+      if (!refreshPromise) {
+        refreshPromise = (async () => {
+          const { data } = await axios.post(
+            `${API_BASE_URL}/api/auth/refresh`,
+            {},
+            { withCredentials: true },
+          );
 
-      const newToken = data?.data?.accessToken;
-      const refreshedUser = data?.data?.user;
-      if (!newToken) {
-        return Promise.reject(error);
-      }
+          const newToken = data?.data?.accessToken;
+          const refreshedUser = data?.data?.user;
+          if (!newToken) {
+            throw new Error("No token returned");
+          }
 
-      setMemoryAccessToken(newToken);
+          setMemoryAccessToken(newToken);
 
-      if (typeof window !== "undefined") {
-        const authStorage = localStorage.getItem("fitfinder-auth-v2");
-        if (authStorage) {
-          const parsed = JSON.parse(authStorage);
-          parsed.state = {
-            ...parsed.state,
-            accessToken: newToken,
-            isAuthenticated: true,
-            ...(refreshedUser?.role
-              ? {
+          if (typeof window !== "undefined") {
+            const authStorage = localStorage.getItem("fitfinder-auth-v2");
+            if (authStorage) {
+              const parsed = JSON.parse(authStorage);
+              parsed.state = {
+                ...parsed.state,
+                accessToken: newToken,
+                isAuthenticated: true,
+                ...(refreshedUser?.role
+                  ? {
+                      user: {
+                        ...(parsed.state?.user || {}),
+                        id: refreshedUser.id,
+                        fullName: refreshedUser.fullName,
+                        email: refreshedUser.email,
+                        role: refreshedUser.role,
+                        avatarUrl: refreshedUser.avatarUrl || undefined,
+                      },
+                      role: refreshedUser.role,
+                    }
+                  : {}),
+              };
+              localStorage.setItem("fitfinder-auth-v2", JSON.stringify(parsed));
+            }
+
+            try {
+              const { useAuthStore } = await import("@/stores/auth-store");
+              if (refreshedUser?.role) {
+                useAuthStore.setState({
+                  accessToken: newToken,
+                  isAuthenticated: true,
                   user: {
-                    ...(parsed.state?.user || {}),
                     id: refreshedUser.id,
                     fullName: refreshedUser.fullName,
                     email: refreshedUser.email,
@@ -142,36 +167,21 @@ api.interceptors.response.use(
                     avatarUrl: refreshedUser.avatarUrl || undefined,
                   },
                   role: refreshedUser.role,
-                }
-              : {}),
-          };
-          localStorage.setItem("fitfinder-auth-v2", JSON.stringify(parsed));
-        }
-
-        // Keep Zustand in sync when available — restore DB role, never invent one
-        try {
-          const { useAuthStore } = await import("@/stores/auth-store");
-          if (refreshedUser?.role) {
-            useAuthStore.setState({
-              accessToken: newToken,
-              isAuthenticated: true,
-              user: {
-                id: refreshedUser.id,
-                fullName: refreshedUser.fullName,
-                email: refreshedUser.email,
-                role: refreshedUser.role,
-                avatarUrl: refreshedUser.avatarUrl || undefined,
-              },
-              role: refreshedUser.role,
-            });
-          } else {
-            useAuthStore.setState({ accessToken: newToken, isAuthenticated: true });
+                });
+              } else {
+                useAuthStore.setState({ accessToken: newToken, isAuthenticated: true });
+              }
+            } catch {
+              // ignore
+            }
           }
-        } catch {
-          // ignore circular import timing
-        }
+          return newToken as string;
+        })().finally(() => {
+          refreshPromise = null;
+        });
       }
 
+      const newToken = await refreshPromise;
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return api(originalRequest);
     } catch (refreshError: unknown) {
@@ -186,12 +196,7 @@ api.interceptors.response.use(
         localStorage.removeItem("fitfinder-auth-v2");
         try {
           const { useAuthStore } = await import("@/stores/auth-store");
-          useAuthStore.setState({
-            user: null,
-            role: null,
-            accessToken: null,
-            isAuthenticated: false,
-          });
+          useAuthStore.getState().clearSession();
         } catch {
           // ignore
         }

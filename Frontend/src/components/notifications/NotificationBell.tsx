@@ -67,10 +67,10 @@ export function NotificationBell({
         <div className="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/10 bg-zinc-950 shadow-xl">
           <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
             <p className="text-sm font-semibold text-white">Notifications</p>
-            {unreadCount > 0 ? (
+            {unreadCount > 0 || notifications.some((n) => !n.isRead) ? (
               <button
                 type="button"
-                className="text-xs text-zinc-400 transition hover:text-white"
+                className="text-xs font-medium text-[#FFD700] transition hover:text-[#e6c200] hover:underline"
                 onClick={() => void markAllRead()}
               >
                 Mark all read

@@ -36,7 +36,7 @@ export const useOwnerSettingsStore = create<OwnerPaymentSettingsState>((set) => 
       if (data.success && data.data) {
         set({
           hasApiKey: Boolean(data.data.hasApiKey),
-          maskedApiKey: data.data.maskedApiKey ?? null,
+          maskedApiKey: data.data.maskedApiKey ? String(data.data.maskedApiKey) : null,
           xenditEnabled: Boolean(data.data.xenditEnabled),
           cashlessEnabled: Boolean(data.data.cashlessEnabled),
           draftApiKey: "",
@@ -60,7 +60,7 @@ export const useOwnerSettingsStore = create<OwnerPaymentSettingsState>((set) => 
       if (!data.success) return false;
       set({
         hasApiKey: Boolean(data.data.hasApiKey),
-        maskedApiKey: data.data.maskedApiKey ?? null,
+        maskedApiKey: data.data.maskedApiKey ? String(data.data.maskedApiKey) : null,
         xenditEnabled: Boolean(data.data.xenditEnabled),
         cashlessEnabled: Boolean(data.data.cashlessEnabled),
         draftApiKey: "",
@@ -98,7 +98,7 @@ export const useOwnerSettingsStore = create<OwnerPaymentSettingsState>((set) => 
       if (!data.success) return false;
       set({
         hasApiKey: Boolean(data.data.hasApiKey),
-        maskedApiKey: data.data.maskedApiKey ?? null,
+        maskedApiKey: data.data.maskedApiKey ? String(data.data.maskedApiKey) : null,
         xenditEnabled: Boolean(data.data.xenditEnabled),
         cashlessEnabled: Boolean(data.data.cashlessEnabled),
       });

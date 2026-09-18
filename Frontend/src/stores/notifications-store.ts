@@ -39,7 +39,7 @@ function normalize(n: Partial<AppNotification> & { id: string }): AppNotificatio
     title: n.title || "",
     body: n.body || "",
     data: (n.data && typeof n.data === "object" ? n.data : {}) as Record<string, unknown>,
-    readAt: n.readAt ?? null,
+    readAt: n.readAt ? String(n.readAt) : null,
     createdAt: n.createdAt || new Date().toISOString(),
     updatedAt: n.updatedAt,
     isRead: Boolean(n.isRead ?? n.readAt),
@@ -80,38 +80,39 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   },
 
   markRead: async (id: string) => {
+    set((state) => ({
+      unreadCount: Math.max(0, state.unreadCount - 1),
+      notifications: state.notifications.map((n) =>
+        n.id === id
+          ? { ...n, isRead: true, readAt: n.readAt || new Date().toISOString() }
+          : n,
+      ),
+    }));
     try {
       const { data } = await api.post(`/notifications/${id}/read`);
-      const unreadCount = Number(data?.data?.unreadCount) || 0;
-      const updated = data?.data?.notification
-        ? normalize(data.data.notification)
-        : null;
-      set((state) => ({
-        unreadCount,
-        notifications: state.notifications.map((n) =>
-          n.id === id
-            ? updated || { ...n, isRead: true, readAt: n.readAt || new Date().toISOString() }
-            : n,
-        ),
-      }));
+      const unreadCount = Number(data?.data?.unreadCount);
+      if (!Number.isNaN(unreadCount)) {
+        set({ unreadCount });
+      }
     } catch {
-      // ignore
+      void get().fetchUnreadCount();
     }
   },
 
   markAllRead: async () => {
+    set((state) => ({
+      unreadCount: 0,
+      notifications: state.notifications.map((n) => ({
+        ...n,
+        isRead: true,
+        readAt: n.readAt || new Date().toISOString(),
+      })),
+    }));
     try {
       await api.post("/notifications/read-all");
-      set((state) => ({
-        unreadCount: 0,
-        notifications: state.notifications.map((n) => ({
-          ...n,
-          isRead: true,
-          readAt: n.readAt || new Date().toISOString(),
-        })),
-      }));
     } catch {
-      // ignore
+      void get().fetchUnreadCount();
+      void get().fetchNotifications();
     }
   },
 

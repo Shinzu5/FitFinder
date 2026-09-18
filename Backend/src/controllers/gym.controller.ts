@@ -3,6 +3,7 @@ import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
 import { AuthRequest } from "../middleware/auth";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
+import { setAuthCookies } from "../utils/cookies";
 import {
   linkOwnerSubscriptionToGym,
   syncLatestOwnerSubscriptions,
@@ -202,13 +203,7 @@ export async function createGym(req: AuthRequest, res: Response): Promise<void> 
       data: { refreshToken },
     });
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    setAuthCookies(res, { accessToken, refreshToken });
 
     sendCreated(
       res,

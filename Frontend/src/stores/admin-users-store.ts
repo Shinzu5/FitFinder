@@ -95,8 +95,8 @@ export const useAdminUsersStore = create<AdminUsersState>((set, get) => ({
                 joinedAt: u.createdAt?.split("T")[0] || "",
                 status,
                 tab: roleToTab(u.role),
-                gymName: u.gymName ?? null,
-                gymOwnerName: u.gymOwnerName ?? null,
+                gymName: u.gymName ? String(u.gymName) : null,
+                gymOwnerName: u.gymOwnerName ? String(u.gymOwnerName) : null,
               };
             },
           );
