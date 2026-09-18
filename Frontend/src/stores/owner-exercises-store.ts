@@ -25,23 +25,25 @@ export interface GymExercise {
 
 export type GymExerciseInput = Omit<GymExercise, "id">;
 
-function mapExercise(raw: any): GymExercise {
+function mapExercise(raw: Record<string, unknown>): GymExercise {
+  const mediaUrlStr = raw.mediaUrl ? String(raw.mediaUrl) : "";
+  const cardImgStr = raw.cardImageUrl ? String(raw.cardImageUrl) : "";
   return {
-    id: raw.id,
-    name: raw.name,
-    muscle: raw.muscle,
-    category: raw.category || raw.muscle || "",
-    difficulty: raw.difficulty || "Beginner",
-    sets: raw.sets || "3",
-    reps: raw.reps || "8-12",
-    rest: raw.rest || "60s",
-    targetMuscles: raw.targetMuscles || raw.muscle || "",
-    formTips: raw.formTips || "",
-    mediaUrl: raw.mediaUrl ? resolveMediaUrl(raw.mediaUrl) : null,
+    id: String(raw.id || ""),
+    name: String(raw.name || ""),
+    muscle: String(raw.muscle || ""),
+    category: String(raw.category || raw.muscle || ""),
+    difficulty: (raw.difficulty as GymExercise["difficulty"]) || "Beginner",
+    sets: String(raw.sets || "3"),
+    reps: String(raw.reps || "8-12"),
+    rest: String(raw.rest || "60s"),
+    targetMuscles: String(raw.targetMuscles || raw.muscle || ""),
+    formTips: String(raw.formTips || ""),
+    mediaUrl: mediaUrlStr ? resolveMediaUrl(mediaUrlStr) : null,
     mediaType: (raw.mediaType as ExerciseMediaType) || null,
-    mediaName: raw.mediaName || null,
+    mediaName: raw.mediaName ? String(raw.mediaName) : null,
     cardImageUrl: resolveMediaUrl(
-      raw.cardImageUrl || (raw.mediaType === "image" ? raw.mediaUrl : ""),
+      cardImgStr || (raw.mediaType === "image" ? mediaUrlStr : ""),
       "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
     ),
   };

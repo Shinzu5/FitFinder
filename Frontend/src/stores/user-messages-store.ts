@@ -167,20 +167,27 @@ export const useUserMessagesStore = create<UserMessagesState>()((set, get) => ({
           set({ currentUserId });
         }
         const previous = get().threads;
-        const dbThreads: GymMessageThread[] = data.data.map((row: any) => {
-          const previewMessage: UserChatMessage | null = currentUserId
+        const dbThreads: GymMessageThread[] = data.data.map((row: { user: { id: string; fullName?: string; role?: string; avatarUrl?: string }; lastSenderId?: string; lastMessageText?: string; lastMessage?: string; lastMessageCreatedAt?: number; lastMessageAt?: number; unreadCount?: number }) => {
+          const textSnippet = row.lastMessageText || row.lastMessage || "";
+          const timestamp = row.lastMessageCreatedAt || row.lastMessageAt;
+          const previewMessage: UserChatMessage | null = currentUserId && textSnippet
             ? toChatMessage(
                 {
                   id: `preview-${row.user.id}`,
-                  senderId: row.lastSenderId,
+                  senderId: row.lastSenderId || row.user.id,
                   receiverId: currentUserId,
-                  text: row.lastMessage,
-                  createdAt: row.lastMessageAt,
+                  text: textSnippet,
+                  createdAt: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
                 },
                 currentUserId,
               )
             : null;
-          const thread = threadFromContact(toSearchContact(row.user));
+          const thread = threadFromContact(toSearchContact({
+            id: String(row.user.id || ""),
+            fullName: String(row.user.fullName || "User"),
+            role: String(row.user.role || "USER"),
+            avatarUrl: row.user.avatarUrl,
+          }));
           return { ...thread, messages: previewMessage ? [previewMessage] : [] };
         });
 

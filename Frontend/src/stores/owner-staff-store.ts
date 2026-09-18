@@ -57,10 +57,10 @@ export const useOwnerStaffStore = create<OwnerStaffState>((set, get) => ({
         return { ok: true };
       }
       return { ok: false, message: data.message || "Failed to create clerk account." };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to add clerk:", error);
       const message =
-        error?.response?.data?.message ||
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
         "Failed to create clerk account. Please check your connection and try again.";
       return { ok: false, message };
     }

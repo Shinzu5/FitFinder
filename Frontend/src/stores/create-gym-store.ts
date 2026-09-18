@@ -63,20 +63,22 @@ interface CreateGymState {
   resetFlow: () => void;
 }
 
-function mapApiGymToRegistered(gym: any): RegisteredGym {
+function mapApiGymToRegistered(gym: Record<string, unknown>): RegisteredGym {
+  const countObj = gym._count as { gymMemberships?: number } | undefined;
+  const countVal = typeof gym.memberCount === "number" ? gym.memberCount : countObj?.gymMemberships ?? 0;
   return {
-    id: gym.id,
-    name: gym.name,
-    address: gym.address || "",
-    contactNumber: gym.contactNumber || "",
-    description: gym.description || "",
-    websiteOrSlug: gym.website || gym.websiteOrSlug || "",
+    id: String(gym.id || ""),
+    name: String(gym.name || ""),
+    address: String(gym.address || ""),
+    contactNumber: String(gym.contactNumber || ""),
+    description: String(gym.description || ""),
+    websiteOrSlug: String(gym.website || gym.websiteOrSlug || ""),
     coverPhotoName: null,
-    coverImageUrl: gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE,
-    schedule: gym.schedule || "Mon-Sun: 6AM - 10PM",
-    memberCount: gym.memberCount ?? gym._count?.gymMemberships ?? 0,
-    createdAt: gym.createdAt || new Date().toISOString(),
-    status: gym.status || "PENDING",
+    coverImageUrl: String(gym.coverImageUrl || DEFAULT_GYM_COVER_IMAGE),
+    schedule: typeof gym.schedule === "string" && gym.schedule ? gym.schedule : "Mon-Sun: 6AM - 10PM",
+    memberCount: countVal,
+    createdAt: typeof gym.createdAt === "string" && gym.createdAt ? gym.createdAt : new Date().toISOString(),
+    status: (typeof gym.status === "string" && gym.status ? gym.status : "PENDING") as RegisteredGym["status"],
   };
 }
 
@@ -151,8 +153,8 @@ export const useCreateGymStore = create<CreateGymState>()(
             set({ paymentComplete: true });
           }
           return false;
-        } catch (error: any) {
-          const status = error?.response?.status;
+        } catch (error: unknown) {
+          const status = (error as { response?: { status?: number } })?.response?.status;
           if (status === 401 || status === 403 || status === 404) {
             const hasActivePlan = await hasActiveOwnerPlan();
             set({ hasOwnedGym: false, registeredGym: null, checkingOwnedGym: false });

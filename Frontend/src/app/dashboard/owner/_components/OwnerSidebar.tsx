@@ -60,7 +60,7 @@ export function OwnerSidebar({ mobileOpen = false, onClose }: OwnerSidebarProps)
   }, [fetchApprovals]);
 
   const renderNavItems = () => (
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto transparent-scrollbar">
       {OWNER_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||

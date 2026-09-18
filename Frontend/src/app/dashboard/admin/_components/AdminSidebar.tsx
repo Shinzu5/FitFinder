@@ -33,7 +33,7 @@ export function AdminSidebar({ mobileOpen = false, onClose }: AdminSidebarProps)
   const pathname = usePathname();
 
   const renderNavItems = () => (
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto transparent-scrollbar">
       {ADMIN_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||

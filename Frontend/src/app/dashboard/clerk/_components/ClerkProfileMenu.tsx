@@ -6,10 +6,6 @@ import { ChevronDown, KeyRound, LogOut, UserCircle2 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { ChangePasswordModal } from "@/app/dashboard/owner/_components/ChangePasswordModal";
 
-function getFirstName(fullName: string) {
-  return fullName.trim().split(/\s+/)[0] || fullName;
-}
-
 function ProfileAvatar({ name }: { name: string }) {
   return <UserCircle2 className="h-5 w-5 text-[#FFD700]" aria-label={name} />;
 }

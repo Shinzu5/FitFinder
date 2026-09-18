@@ -83,20 +83,20 @@ export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>(
           ? payload.transactions
           : [];
 
-      const transactions: OwnerPlanTransaction[] = list.map((txn: any) => ({
-        id: txn.id,
-        gymName: txn.gymName || "Pending setup",
-        ownerId: txn.ownerId,
-        ownerName: txn.ownerName || "Owner",
-        ownerEmail: txn.ownerEmail || "",
-        planId: txn.planId || "standard",
-        planName: txn.planName || "Plan",
+      const transactions: OwnerPlanTransaction[] = list.map((txn: Record<string, unknown>) => ({
+        id: String(txn.id || ""),
+        gymName: String(txn.gymName || "Pending setup"),
+        ownerId: String(txn.ownerId || ""),
+        ownerName: String(txn.ownerName || "Owner"),
+        ownerEmail: String(txn.ownerEmail || ""),
+        planId: String(txn.planId || "standard"),
+        planName: String(txn.planName || "Plan"),
         type: "Owner Plan" as const,
         amount: Number(txn.amount) || 0,
-        method: txn.method || "Xendit",
-        referenceNo: txn.referenceNo || "",
-        createdAt: txn.createdAt,
-        validUntil: txn.validUntil,
+        method: String(txn.method || "Xendit"),
+        referenceNo: String(txn.referenceNo || ""),
+        createdAt: String(txn.createdAt || ""),
+        validUntil: String(txn.validUntil || ""),
         daysLeft: typeof txn.daysLeft === "number" ? txn.daysLeft : undefined,
         months: typeof txn.months === "number" ? txn.months : undefined,
       }));
@@ -111,10 +111,12 @@ export const useOwnerPlanTransactionsStore = create<OwnerPlanTransactionsState>(
         : EMPTY_STATS;
 
       set({ transactions, stats, loading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load transactions.",
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load transactions.",
       });
     }
   },

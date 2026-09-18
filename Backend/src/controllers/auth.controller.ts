@@ -1,30 +1,11 @@
 import { Request, Response } from "express";
 import { AuthService } from "../services/auth/auth.service";
 import { AuthRequest } from "../middleware/auth";
-import { env } from "../config/env";
+import { setAuthCookies, clearAuthCookies } from "../utils/cookies";
 
 export class AuthController {
   private readonly authService = new AuthService();
 
-  private setAuthCookies(res: Response, tokens: { accessToken: string; refreshToken: string }) {
-    const isProduction = env.NODE_ENV === "production";
-
-    res.cookie("accessToken", tokens.accessToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      path: "/",
-      maxAge: 15 * 60 * 1000,
-    });
-
-    res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-  }
 
   register = async (req: Request, res: Response): Promise<void> => {
     const result = await this.authService.register(req.body ?? {});
@@ -62,7 +43,7 @@ export class AuthController {
     if (result.statusCode === 200 && result.data && typeof result.data === "object") {
       const data = result.data as { accessToken?: string; refreshToken?: string };
       if (data.accessToken && data.refreshToken) {
-        this.setAuthCookies(res, {
+        setAuthCookies(res, {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
         });
@@ -84,7 +65,7 @@ export class AuthController {
     if (result.statusCode === 200 && result.data && typeof result.data === "object") {
       const data = result.data as { accessToken?: string; refreshToken?: string };
       if (data.accessToken && data.refreshToken) {
-        this.setAuthCookies(res, {
+        setAuthCookies(res, {
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
         });
@@ -174,12 +155,7 @@ export class AuthController {
       refreshToken: req.cookies?.refreshToken,
     });
 
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
+    clearAuthCookies(res);
 
     res.status(result.statusCode).json({
       success: result.statusCode >= 200 && result.statusCode < 300,

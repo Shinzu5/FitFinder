@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api, { setMemoryAccessToken } from "@/lib/api";
-import { type UserRole, roleToDashboardPath } from "@/lib/mock-users";
+import { type UserRole, roleToDashboardPath } from "@/lib/roles";
 
 export interface AuthUser {
   id: string;
@@ -106,8 +106,10 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Login failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Invalid email or password.";
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Invalid email or password.";
           set({ loading: false, error: message, success: null });
           return false;
         }
@@ -139,12 +141,13 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Registration failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Registration failed.";
+        } catch (error: unknown) {
+          const errRes = (error as { response?: { data?: { message?: string; errors?: Array<{ message: string }> } } })?.response?.data;
+          const message = errRes?.message || "Registration failed.";
           // Handle validation errors
-          const errors = error.response?.data?.errors;
+          const errors = errRes?.errors;
           const errorMsg = errors?.length
-            ? errors.map((e: any) => e.message).join(". ")
+            ? errors.map((e: { message: string }) => e.message).join(". ")
             : message;
           set({ loading: false, error: errorMsg, success: null });
           return false;
@@ -163,8 +166,10 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message || "Verification failed.", success: null });
           return false;
-        } catch (error: any) {
-          const message = error.response?.data?.message || "Verification failed.";
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Verification failed.";
           set({ loading: false, error: message, success: null });
           return false;
         }
@@ -180,10 +185,13 @@ export const useAuthStore = create<AuthState>()(
             success: data.message || "A new verification code has been sent.",
           });
           return true;
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Failed to resend code.";
           set({
             loading: false,
-            error: error.response?.data?.message || "Failed to resend code.",
+            error: message,
             success: null,
           });
           return false;
@@ -232,10 +240,13 @@ export const useAuthStore = create<AuthState>()(
             success: null,
           });
           return null;
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Invalid or expired verification code.";
           set({
             loading: false,
-            error: error.response?.data?.message || "Invalid or expired verification code.",
+            error: message,
             success: null,
           });
           return null;
@@ -265,10 +276,13 @@ export const useAuthStore = create<AuthState>()(
 
           set({ loading: false, error: data.message, success: null });
           return false;
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Failed to reset password.";
           set({
             loading: false,
-            error: error.response?.data?.message || "Failed to reset password.",
+            error: message,
             success: null,
           });
           return false;
@@ -363,9 +377,12 @@ export const useAuthStore = create<AuthState>()(
 
           set({ error: data.message || "Failed to change password.", success: null });
           return false;
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message =
+            (error as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message || "Current password is incorrect.";
           set({
-            error: error.response?.data?.message || "Current password is incorrect.",
+            error: message,
             success: null,
           });
           return false;

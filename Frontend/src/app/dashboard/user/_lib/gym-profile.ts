@@ -117,7 +117,7 @@ function mapDbEquipment(equipment: GymEquipment[]): string[] {
 
 export interface ResolveGymProfileInput {
   gymId: string;
-  realGym?: any | null;
+  realGym?: Record<string, unknown> | null;
   ownerName?: string;
   ownerAvatarUrl?: string;
   ownerPlans?: MembershipPlan[];
@@ -133,38 +133,48 @@ export function resolveGymProfile(input: ResolveGymProfileInput): PublicGymProfi
     return null;
   }
 
-  const { openTime, closeTime } = parseScheduleHours(realGym.schedule || "");
-  const website = formatWebsite(realGym.website || "");
-  const memberCount = realGym._count?.gymMemberships || 0;
+  const scheduleStr = typeof realGym.schedule === "string" ? realGym.schedule : "";
+  const websiteStr = typeof realGym.website === "string" ? realGym.website : "";
+  const addressStr = typeof realGym.address === "string" ? realGym.address : typeof realGym.location === "string" ? realGym.location : "";
+  const descStr = typeof realGym.description === "string" ? realGym.description : "";
+  const gymNameStr = typeof realGym.name === "string" ? realGym.name : "";
+  const gymIdStr = String(realGym.id || "");
+
+  const { openTime, closeTime } = parseScheduleHours(scheduleStr);
+  const website = formatWebsite(websiteStr);
+  const countObj = realGym._count as { gymMemberships?: number } | undefined;
+  const memberCount = countObj?.gymMemberships || 0;
+
+  const phoneStr = typeof realGym.contactNumber === "string" ? realGym.contactNumber : "";
+  const coverImgStr = typeof realGym.coverImageUrl === "string" ? realGym.coverImageUrl : typeof realGym.image === "string" ? realGym.image : "";
+  const ownerObj = realGym.owner as { fullName?: string; avatarUrl?: string } | undefined;
+  const ownerFullName = ownerObj?.fullName || ownerName;
+  const ownerAvatarRaw = String(ownerObj?.avatarUrl || ownerAvatarUrl || "").trim();
 
   return {
-    id: realGym.id,
-    name: realGym.name,
-    location: realGym.address || realGym.location || "",
-    description: realGym.description || "",
-    hours: realGym.schedule || realGym.hours || "",
+    id: gymIdStr,
+    name: gymNameStr,
+    location: addressStr,
+    description: descStr,
+    hours: scheduleStr || "Mon-Sun: 6AM - 10PM",
     openTime,
     closeTime,
     website,
-    phone: realGym.contactNumber || "",
+    phone: phoneStr,
     socialHandle: website ? `@${website.split(".")[0]}` : "",
     members: memberCount,
     rating: 0,
     reviewCount: memberCount,
-    image: resolveMediaUrl(realGym.coverImageUrl || realGym.image),
+    image: resolveMediaUrl(coverImgStr),
     owner: {
-      name: realGym.owner?.fullName || ownerName,
-      bio: `Owner of ${realGym.name}.`,
-      // Empty string (not placeholder) so UI can show initials instead of <img src="">
-      avatarUrl: (() => {
-        const raw = String(realGym.owner?.avatarUrl || ownerAvatarUrl || "").trim();
-        return raw ? resolveMediaUrl(raw) : "";
-      })(),
+      name: ownerFullName,
+      bio: `Owner of ${gymNameStr}.`,
+      avatarUrl: ownerAvatarRaw ? resolveMediaUrl(ownerAvatarRaw) : "",
     },
     // Never invent plans — empty array when Owner deleted all active plans
-    plans: mapDbPlans(realGym.membershipPlans || []),
-    coaches: mapDbCoaches(realGym.coaches || []),
-    equipment: mapDbEquipment(realGym.equipment || []),
+    plans: mapDbPlans((realGym.membershipPlans as MembershipPlan[]) || []),
+    coaches: mapDbCoaches((realGym.coaches as GymCoach[]) || []),
+    equipment: mapDbEquipment((realGym.equipment as GymEquipment[]) || []),
     cashlessEnabled: Boolean(realGym.cashlessEnabled),
   };
 }

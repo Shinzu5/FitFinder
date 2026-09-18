@@ -7,23 +7,25 @@ import type { GymExercise, ExerciseMediaType } from "@/stores/owner-exercises-st
 import type { EquipmentStatus, GymEquipment } from "@/stores/owner-equipment-store";
 import type { ShopProduct } from "@/stores/owner-shop-store";
 
-function mapExercise(raw: any): GymExercise {
+function mapExercise(raw: Record<string, unknown>): GymExercise {
+  const mediaUrlStr = raw.mediaUrl ? String(raw.mediaUrl) : "";
+  const cardImgStr = raw.cardImageUrl ? String(raw.cardImageUrl) : "";
   return {
-    id: raw.id,
-    name: raw.name,
-    muscle: raw.muscle,
-    category: raw.category || raw.muscle || "",
-    difficulty: raw.difficulty || "Beginner",
-    sets: raw.sets || "3",
-    reps: raw.reps || "8-12",
-    rest: raw.rest || "60s",
-    targetMuscles: raw.targetMuscles || raw.muscle || "",
-    formTips: raw.formTips || "",
-    mediaUrl: raw.mediaUrl ? resolveMediaUrl(raw.mediaUrl) : null,
+    id: String(raw.id || ""),
+    name: String(raw.name || ""),
+    muscle: String(raw.muscle || ""),
+    category: String(raw.category || raw.muscle || ""),
+    difficulty: (raw.difficulty as GymExercise["difficulty"]) || "Beginner",
+    sets: String(raw.sets || "3"),
+    reps: String(raw.reps || "8-12"),
+    rest: String(raw.rest || "60s"),
+    targetMuscles: String(raw.targetMuscles || raw.muscle || ""),
+    formTips: String(raw.formTips || ""),
+    mediaUrl: mediaUrlStr ? resolveMediaUrl(mediaUrlStr) : null,
     mediaType: (raw.mediaType as ExerciseMediaType) || null,
-    mediaName: raw.mediaName || null,
+    mediaName: raw.mediaName ? String(raw.mediaName) : null,
     cardImageUrl: resolveMediaUrl(
-      raw.cardImageUrl || (raw.mediaType === "image" ? raw.mediaUrl : ""),
+      cardImgStr || (raw.mediaType === "image" ? mediaUrlStr : ""),
       "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80",
     ),
   };
@@ -36,26 +38,26 @@ function normalizeStatus(status: string | undefined): EquipmentStatus {
   return "available";
 }
 
-function mapEquipment(item: any): GymEquipment {
+function mapEquipment(item: Record<string, unknown>): GymEquipment {
   const rawImage = String(item.imageUrl || "").trim();
   return {
-    id: item.id,
-    name: item.name,
-    quantity: item.quantity ?? 1,
-    status: normalizeStatus(item.status),
+    id: String(item.id || ""),
+    name: String(item.name || ""),
+    quantity: Number(item.quantity) || 1,
+    status: normalizeStatus(item.status ? String(item.status) : undefined),
     // Keep empty so equipment table can fall back to icon (not a blank <img>)
     imageUrl: rawImage ? resolveMediaUrl(rawImage) : "",
-    imageName: item.imageName || null,
+    imageName: item.imageName ? String(item.imageName) : null,
   };
 }
 
-function mapShopProduct(raw: any): ShopProduct {
+function mapShopProduct(raw: Record<string, unknown>): ShopProduct {
   return {
-    id: raw.id,
-    name: raw.name,
+    id: String(raw.id || ""),
+    name: String(raw.name || ""),
     price: Number(raw.price) || 0,
-    imageUrl: resolveMediaUrl(raw.imageUrl),
-    imageName: raw.imageName || null,
+    imageUrl: resolveMediaUrl(String(raw.imageUrl || "")),
+    imageName: raw.imageName ? String(raw.imageName) : null,
   };
 }
 
@@ -102,12 +104,13 @@ export const useMemberGymContentStore = create<MemberGymContentState>((set) => (
         loadingExercises: false,
         exercisesError: data.message || "Failed to load exercises.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         exercises: [],
         loadingExercises: false,
         exercisesError:
-          error.response?.data?.message || "Active membership required to view exercises.",
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Active membership required to view exercises.",
       });
     }
   },
@@ -128,12 +131,13 @@ export const useMemberGymContentStore = create<MemberGymContentState>((set) => (
         loadingEquipment: false,
         equipmentError: data.message || "Failed to load equipment.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         equipment: [],
         loadingEquipment: false,
         equipmentError:
-          error.response?.data?.message || "Active membership required to view equipment.",
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Active membership required to view equipment.",
       });
     }
   },
@@ -154,24 +158,33 @@ export const useMemberGymContentStore = create<MemberGymContentState>((set) => (
         loadingShop: false,
         shopError: data.message || "Failed to load shop products.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         products: [],
         loadingShop: false,
         shopError:
-          error.response?.data?.message || "Active membership required to view the shop.",
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Active membership required to view the shop.",
       });
     }
   },
 
   setEquipmentFromRealtime: (items) => {
     if (!Array.isArray(items)) return;
-    set({ equipment: items.map(mapEquipment), equipmentError: null, loadingEquipment: false });
+    set({
+      equipment: items.map((item) => mapEquipment(item as Record<string, unknown>)),
+      equipmentError: null,
+      loadingEquipment: false,
+    });
   },
 
   setShopFromRealtime: (items) => {
     if (!Array.isArray(items)) return;
-    set({ products: items.map(mapShopProduct), shopError: null, loadingShop: false });
+    set({
+      products: items.map((item) => mapShopProduct(item as Record<string, unknown>)),
+      shopError: null,
+      loadingShop: false,
+    });
   },
 
   clear: () =>

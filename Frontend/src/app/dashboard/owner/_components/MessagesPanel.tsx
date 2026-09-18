@@ -223,7 +223,7 @@ export function MessagesPanel() {
                   <ConversationListItem
                     key={conversation.id}
                     contact={contact}
-                    preview={getConversationPreview(conversation, contact.name)}
+                    preview={getConversationPreview(conversation)}
                     active={conversation.id === activeConversationId}
                     onClick={() => setActiveConversation(conversation.id)}
                   />

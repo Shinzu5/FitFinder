@@ -62,51 +62,51 @@ export function formatApprovalTime(timestamp: number) {
   });
 }
 
-function mapApproval(raw: any): WalkInApprovalRequest {
+function mapApproval(raw: Record<string, unknown>): WalkInApprovalRequest {
   const status = String(raw.approvalStatus || raw.status || "pending").toLowerCase() as ApprovalStatus;
   return {
-    id: raw.id,
-    userId: raw.userId,
-    memberName: raw.memberName,
-    memberEmail: raw.memberEmail,
-    gymId: raw.gymId,
-    gymName: raw.gymName || "",
-    planId: raw.planId,
-    planName: raw.planName || raw.plan?.name || "",
-    planPrice: raw.planPrice ?? raw.plan?.price ?? 0,
-    coachId: raw.coachId ?? null,
-    coachName: raw.coachName ?? null,
-    coachSessionPrice: raw.coachSessionPrice ?? 0,
-    paymentRef: raw.paymentRef,
-    totalPaid: raw.totalPaid,
-    durationDays: raw.durationDays,
+    id: String(raw.id || ""),
+    userId: String(raw.userId || ""),
+    memberName: String(raw.memberName || ""),
+    memberEmail: String(raw.memberEmail || ""),
+    gymId: String(raw.gymId || ""),
+    gymName: String(raw.gymName || ""),
+    planId: raw.planId ? String(raw.planId) : null,
+    planName: String(raw.planName || (raw.plan as { name?: string } | undefined)?.name || ""),
+    planPrice: Number(raw.planPrice ?? (raw.plan as { price?: number } | undefined)?.price) || 0,
+    coachId: raw.coachId ? String(raw.coachId) : null,
+    coachName: raw.coachName ? String(raw.coachName) : null,
+    coachSessionPrice: Number(raw.coachSessionPrice) || 0,
+    paymentRef: String(raw.paymentRef || ""),
+    totalPaid: Number(raw.totalPaid) || 0,
+    durationDays: Number(raw.durationDays) || 0,
     isRenewal: Boolean(raw.isRenewal),
-    paymentMethod: raw.paymentMethod || "Walk-in",
+    paymentMethod: String(raw.paymentMethod || "Walk-in"),
     paymentStatus: String(raw.paymentStatus || "paid").toLowerCase(),
     approvalStatus: status,
     status,
-    rejectionReason: raw.rejectionReason || "",
+    rejectionReason: raw.rejectionReason ? String(raw.rejectionReason) : "",
     submittedAt:
       typeof raw.submittedAt === "number"
         ? raw.submittedAt
-        : new Date(raw.submittedAt).getTime(),
+        : new Date(String(raw.submittedAt || "")).getTime(),
     reviewedAt: raw.reviewedAt
       ? typeof raw.reviewedAt === "number"
         ? raw.reviewedAt
-        : new Date(raw.reviewedAt).getTime()
+        : new Date(String(raw.reviewedAt)).getTime()
       : undefined,
     consumedAt: raw.consumedAt
       ? typeof raw.consumedAt === "number"
         ? raw.consumedAt
-        : new Date(raw.consumedAt).getTime()
+        : new Date(String(raw.consumedAt)).getTime()
       : undefined,
     renewalDate: raw.renewalDate
       ? typeof raw.renewalDate === "number"
         ? raw.renewalDate
-        : new Date(raw.renewalDate).getTime()
+        : new Date(String(raw.renewalDate)).getTime()
       : typeof raw.submittedAt === "number"
         ? raw.submittedAt
-        : new Date(raw.submittedAt).getTime(),
+        : new Date(String(raw.submittedAt || "")).getTime(),
   };
 }
 
@@ -209,11 +209,12 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         error: null,
       });
       return approval;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         error:
-          error.response?.data?.message ||
-          error.message ||
+          (error as { response?: { data?: { message?: string } }; message?: string })
+            ?.response?.data?.message ||
+          (error as { message?: string })?.message ||
           "Failed to submit walk-in request.",
       });
       return null;
@@ -234,8 +235,12 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         error: null,
       });
       return get().requests.find((req) => req.id === id) ?? updated;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to approve request." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to approve request.",
+      });
       return null;
     }
   },
@@ -256,8 +261,12 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         error: null,
       });
       return updated;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to decline request." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to decline request.",
+      });
       return null;
     }
   },
@@ -302,9 +311,11 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         error: null,
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
-        error: error.response?.data?.message || "Failed to confirm payment.",
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to confirm payment.",
       });
       return false;
     }
@@ -323,9 +334,11 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
         error: null,
       });
       return true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
-        error: error.response?.data?.message || "Failed to complete onboarding.",
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to complete onboarding.",
       });
       return false;
     }
@@ -360,8 +373,8 @@ export const useWalkInApprovalsStore = create<WalkInApprovalsState>((set, get) =
 
   applyRealtimeApproval: (raw) => {
     if (!raw || typeof raw !== "object") return;
-    const approval = mapApproval(raw);
-    let next = get().requests.filter((req) => {
+    const approval = mapApproval(raw as Record<string, unknown>);
+    const next = get().requests.filter((req) => {
       // New pending/approved submission clears older declines for that gym
       if (
         (approval.status === "pending" || approval.status === "approved") &&

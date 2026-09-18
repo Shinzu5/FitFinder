@@ -1,6 +1,6 @@
 export type GymStatus = "ACTIVE" | "PENDING";
 
-/** Shared gym list card shape — populated from Neon `/gyms`, not mock arrays. */
+/** Shared gym list card shape — populated from Neon `/gyms`. */
 export interface Gym {
   id: string;
   name: string;
@@ -17,6 +17,3 @@ export interface Gym {
   image: string;
   status?: GymStatus;
 }
-
-/** Empty — browse uses Neon only. Kept so legacy imports do not break. */
-export const mockGyms: Gym[] = [];

@@ -180,7 +180,6 @@ export function WalkInRegistrationView({ profile }: WalkInRegistrationViewProps)
     isApproved,
     isRenewalFlow,
     profile,
-    referenceNo,
     submitRequest,
     fetchUserStatus,
     resetJoin,

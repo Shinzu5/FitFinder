@@ -35,24 +35,24 @@ interface OwnerMembersState {
   removeMember: (id: string) => Promise<void>;
 }
 
-function mapMember(raw: any): GymMember {
+function mapMember(raw: Record<string, unknown>): GymMember {
   const totalDays = Number(raw.totalDays) || 0;
   const remainingDays = Number(raw.remainingDays) || 0;
   return {
-    id: raw.id,
-    fullName: raw.fullName || "",
-    email: raw.email || "",
+    id: String(raw.id || ""),
+    fullName: String(raw.fullName || ""),
+    email: String(raw.email || ""),
     memberType: raw.memberType === "Online" ? "Online" : "Walk-in",
     billingCycle: (raw.billingCycle as MemberBillingCycle) || "Monthly",
-    planName: raw.planName || raw.plan || "Plan",
+    planName: String(raw.planName || raw.plan || "Plan"),
     totalDays,
     remainingDays,
     paymentStatus: raw.paymentStatus === "unpaid" ? "unpaid" : "paid",
     status: (raw.status as MemberStatus) || "active",
     totalPaid: Number(raw.totalPaid) || 0,
-    startsAt: raw.startsAt || "",
-    expiresAt: raw.expiresAt || "",
-    registrationDate: raw.registrationDate || raw.joinedAt || "",
+    startsAt: String(raw.startsAt || ""),
+    expiresAt: String(raw.expiresAt || ""),
+    registrationDate: String(raw.registrationDate || raw.joinedAt || ""),
     registeredBy:
       raw.registeredBy === "Owner" || raw.registeredBy === "Clerk"
         ? raw.registeredBy

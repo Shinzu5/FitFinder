@@ -45,7 +45,7 @@ export function ClerkSidebar({ mobileOpen = false, onClose }: ClerkSidebarProps)
   }, [fetchApprovals]);
 
   const renderNavItems = () => (
-    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+    <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto transparent-scrollbar">
       {CLERK_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||

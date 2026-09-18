@@ -73,7 +73,6 @@ export function formatMessageTime(date = new Date()) {
 
 export function getConversationPreview(
   conversation: Conversation,
-  _contactName: string,
 ): string {
   const last = conversation.messages[conversation.messages.length - 1];
   if (!last) return "No messages yet";

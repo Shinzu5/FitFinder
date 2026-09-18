@@ -26,14 +26,14 @@ function normalizeStatus(status: string | undefined): EquipmentStatus {
   return "available";
 }
 
-function mapEquipment(raw: any): GymEquipment {
+function mapEquipment(raw: Record<string, unknown>): GymEquipment {
   return {
-    id: raw.id,
-    name: raw.name,
-    quantity: raw.quantity ?? 1,
-    status: normalizeStatus(raw.status),
-    imageUrl: resolveMediaUrl(raw.imageUrl || ""),
-    imageName: raw.imageName || null,
+    id: String(raw.id || ""),
+    name: String(raw.name || ""),
+    quantity: Number(raw.quantity) || 1,
+    status: normalizeStatus(raw.status ? String(raw.status) : undefined),
+    imageUrl: resolveMediaUrl(String(raw.imageUrl || "")),
+    imageName: raw.imageName ? String(raw.imageName) : null,
   };
 }
 

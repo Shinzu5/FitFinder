@@ -155,7 +155,7 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [paymentLookupId, fetchMembership, fetchUserStatus, gymId, isRenewalFlow]);
+  }, [paymentLookupId, fetchMembership, fetchUserStatus, gymId, isRenewalFlow, userId]);
 
   if (verifying) {
     return (

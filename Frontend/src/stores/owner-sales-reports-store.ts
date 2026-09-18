@@ -87,10 +87,12 @@ export const useOwnerSalesReportsStore = create<OwnerSalesReportsState>((set, ge
         return;
       }
       set({ reports: data.data || [], loading: false, error: null });
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         loading: false,
-        error: error.response?.data?.message || "Failed to load reports.",
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load reports.",
       });
     }
   },
@@ -105,10 +107,12 @@ export const useOwnerSalesReportsStore = create<OwnerSalesReportsState>((set, ge
       }
       set({ receipt: data.data, receiptLoading: false, error: null });
       return data.data as SalesReportReceipt;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         receiptLoading: false,
-        error: error.response?.data?.message || "Failed to load receipt.",
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load receipt.",
       });
       return null;
     }

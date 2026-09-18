@@ -198,8 +198,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         activeNow: data.data.activeNow ?? 0,
         error: null,
       });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load dashboard." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load dashboard.",
+      });
     }
   },
 
@@ -211,8 +215,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         transactions: (data.data || []) as ClerkTransaction[],
         error: null,
       });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load transactions." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load transactions.",
+      });
     }
   },
 
@@ -220,23 +228,23 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
     try {
       const { data } = await api.get("/clerk/members");
       if (!data.success) return;
-      const members = (data.data || []).map((m: any) => {
+      const members = (data.data || []).map((m: Record<string, unknown>) => {
         const joinedAt =
           typeof m.joinedAt === "number"
             ? m.joinedAt
-            : m.joinedAt
+            : typeof m.joinedAt === "string"
               ? new Date(m.joinedAt).getTime()
               : 0;
         const expiresAt =
           typeof m.expiresAt === "number"
             ? m.expiresAt
-            : m.expiresAt
+            : typeof m.expiresAt === "string"
               ? new Date(m.expiresAt).getTime()
               : 0;
         const startsAt =
           typeof m.startsAt === "number"
             ? m.startsAt
-            : m.startsAt
+            : typeof m.startsAt === "string"
               ? new Date(m.startsAt).getTime()
               : joinedAt;
         return {
@@ -262,8 +270,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         } as ClerkMember;
       });
       set({ members, error: null });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load members." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load members.",
+      });
     }
   },
 
@@ -272,8 +284,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       const { data } = await api.get("/clerk/plans");
       if (!data.success) return;
       set({ plans: (data.data || []) as MembershipPlanOption[], error: null });
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load plans." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load plans.",
+      });
     }
   },
 
@@ -317,8 +333,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         error: null,
       });
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to record payment." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to record payment.",
+      });
       return false;
     }
   },
@@ -345,8 +365,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       });
       void get().fetchDashboard();
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to update payment." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to update payment.",
+      });
       return false;
     }
   },
@@ -367,8 +391,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         error: null,
       });
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to remove payment." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to remove payment.",
+      });
       return false;
     }
   },
@@ -403,8 +431,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         expiresAt: Date.now() + (plan?.durationDays || 30) * 24 * 60 * 60 * 1000,
         remainingDays: plan?.durationDays || 30,
       };
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to register member." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to register member.",
+      });
       return null;
     }
   },
@@ -423,8 +455,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
         canClose: Boolean(data.data.canClose),
         message: data.data.message || "",
       };
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to load closing preview." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to load closing preview.",
+      });
       return null;
     }
   },
@@ -446,8 +482,12 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       });
       await Promise.all([get().fetchTransactions(), get().fetchDashboard()]);
       return true;
-    } catch (error: any) {
-      set({ error: error.response?.data?.message || "Failed to close daily sales." });
+    } catch (error: unknown) {
+      set({
+        error:
+          (error as { response?: { data?: { message?: string } } })?.response?.data
+            ?.message || "Failed to close daily sales.",
+      });
       return false;
     }
   },

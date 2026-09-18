@@ -113,14 +113,7 @@ function LoginForm() {
     });
     if (!ok) return;
 
-    const currentRole = useAuthStore.getState().role;
-    if (currentRole === "OWNER") {
-      const hasGym = await useCreateGymStore.getState().fetchOwnedGymStatus();
-      router.replace(hasGym ? "/dashboard/owner" : "/dashboard/user/create-gym");
-      return;
-    }
-
-    router.replace(getDashboardPathForRole(currentRole));
+    setSwitchingAccount(false);
   }
 
   function handleSwitchAccount() {

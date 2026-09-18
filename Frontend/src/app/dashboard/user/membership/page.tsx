@@ -108,7 +108,7 @@ export default function MembershipPage() {
         req.status !== "declined",
     );
     return superseded ? null : declined;
-  }, [requests, userId, membership, joinedGymId]);
+  }, [requests, userId]);
 
   if (!membership || !joinedGymId) {
     const pendingJoin = openJoinRequest?.status === "pending" ? openJoinRequest : null;

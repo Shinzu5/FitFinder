@@ -18,7 +18,7 @@ export function useGymProfile(gymId: string): {
   const user = useAuthStore((state) => state.user);
   const accessToken = useAuthStore((state) => state.accessToken);
 
-  const [realGym, setRealGym] = useState<any>(null);
+  const [realGym, setRealGym] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(Boolean(gymId));
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export function useGymProfile(gymId: string): {
     function onCoachesUpdated(payload: { gymId?: string; coaches?: unknown[] }) {
       if (!payload?.gymId || payload.gymId !== gymId) return;
       if (!Array.isArray(payload.coaches)) return;
-      setRealGym((prev: any) =>
+      setRealGym((prev) =>
         prev && prev.id === gymId ? { ...prev, coaches: payload.coaches } : prev,
       );
     }
@@ -74,7 +74,7 @@ export function useGymProfile(gymId: string): {
     }) {
       if (!payload?.gymId || payload.gymId !== gymId) return;
       if (!Array.isArray(payload.plans)) return;
-      setRealGym((prev: any) =>
+      setRealGym((prev) =>
         prev && prev.id === gymId
           ? {
               ...prev,
@@ -92,7 +92,7 @@ export function useGymProfile(gymId: string): {
     function onEquipmentUpdated(payload: { gymId?: string; equipment?: unknown[] }) {
       if (!payload?.gymId || payload.gymId !== gymId) return;
       if (!Array.isArray(payload.equipment)) return;
-      setRealGym((prev: any) =>
+      setRealGym((prev) =>
         prev && prev.id === gymId ? { ...prev, equipment: payload.equipment } : prev,
       );
     }

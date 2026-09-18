@@ -97,7 +97,7 @@ function VerifyEmailForm() {
           disabled={loading}
           className="mt-2 w-full text-sm text-zinc-400 hover:text-white disabled:opacity-50"
         >
-          Didn't receive a code? Resend
+          Didn&apos;t receive a code? Resend
         </button>
       </form>
     </AuthShell>

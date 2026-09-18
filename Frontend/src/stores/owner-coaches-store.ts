@@ -50,7 +50,7 @@ export const EMPTY_SCHEDULE: CoachSchedule = {
   sunday: "",
 };
 
-function mapCoach(raw: any): GymCoach {
+function mapCoach(raw: Record<string, unknown>): GymCoach {
   return {
     id: String(raw.id),
     name: String(raw.name || ""),
@@ -59,8 +59,8 @@ function mapCoach(raw: any): GymCoach {
     schedule:
       raw.schedule && typeof raw.schedule === "object" ? { ...raw.schedule } : {},
     description: String(raw.description || ""),
-    photoUrl: raw.photoUrl ?? null,
-    photoName: raw.photoName ?? null,
+    photoUrl: raw.photoUrl ? String(raw.photoUrl) : null,
+    photoName: raw.photoName ? String(raw.photoName) : null,
     isActive: raw.isActive !== false,
   };
 }
@@ -100,7 +100,7 @@ export const useOwnerCoachesStore = create<OwnerCoachesState>((set, get) => ({
 
   applyRealtimeCoaches: (coaches) => {
     if (!Array.isArray(coaches)) return;
-    set({ coaches: coaches.map(mapCoach) });
+    set({ coaches: coaches.map((c) => mapCoach(c as Record<string, unknown>)) });
   },
 
   addCoach: async (coach) => {

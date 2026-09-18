@@ -220,7 +220,7 @@ export function ClerkMessagesPanel() {
                   <ConversationListItem
                     key={conversation.id}
                     contact={contact}
-                    preview={getConversationPreview(conversation, contact.name)}
+                    preview={getConversationPreview(conversation)}
                     active={conversation.id === activeConversationId}
                     onClick={() => void openConversationWithContact(contact)}
                   />
