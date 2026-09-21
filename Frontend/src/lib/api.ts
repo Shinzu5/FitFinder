@@ -187,10 +187,12 @@ api.interceptors.response.use(
     } catch (refreshError: unknown) {
       setMemoryAccessToken(null);
 
-      const refreshData = (
-        refreshError as { response?: { data?: { code?: string } } }
+      const refreshResponse = (
+        refreshError as { response?: { data?: { code?: string; errors?: { code?: string } } } }
       )?.response?.data;
-      const deleted = refreshData?.code === "ACCOUNT_DELETED";
+      // The refresh endpoint returns code at top-level for some errors and under errors.code for others
+      const deletedCode = refreshResponse?.code ?? refreshResponse?.errors?.code;
+      const deleted = deletedCode === "ACCOUNT_DELETED";
 
       if (typeof window !== "undefined") {
         localStorage.removeItem("fitfinder-auth-v2");

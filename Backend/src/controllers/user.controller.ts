@@ -261,7 +261,7 @@ export async function getMembership(req: AuthRequest, res: Response): Promise<vo
       durationDays,
       activeGymId,
       enrolledGymIds: live.map((m) => m.gymId),
-      renewalHistory: renewals.map((r: any) => ({
+      renewalHistory: renewals.map((r: { id: string; planName: string | null; planPrice: number; durationDays: number; totalPaid: number; paymentMethod: string | null; reviewedAt: Date | null; submittedAt: Date }) => ({
         id: r.id,
         planName: r.planName,
         planPrice: r.planPrice,
@@ -461,7 +461,7 @@ export async function getWalkInStatus(req: AuthRequest, res: Response): Promise<
 
     sendSuccess(
       res,
-      approvals.map((a: any) => shapeWalkInApproval(a)),
+      approvals.map((a) => shapeWalkInApproval(a)),
     );
   } catch (error) {
     console.error("Get walk-in status error:", error);

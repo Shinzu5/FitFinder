@@ -1,6 +1,28 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+function requireEnv(key: string, fallback?: string): string {
+  const value = process.env[key];
+  if (value) return value;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`Missing required environment variable: ${key}`);
+}
+
+const isProduction = (process.env.NODE_ENV || "development") === "production";
+
+function requireSecret(key: string, devFallback: string): string {
+  const value = process.env[key];
+  if (value && value !== devFallback) return value;
+  if (isProduction) {
+    throw new Error(
+      `Missing or insecure environment variable in production: ${key}. Set a strong random value.`,
+    );
+  }
+  // Development only — warn and use fallback
+  console.warn(`⚠️  ${key} is not set. Using insecure development default.`);
+  return devFallback;
+}
+
 const rawFrontendUrls = [process.env.FRONTEND_URLS ?? "", process.env.FRONTEND_URL ?? ""]
   .join(",")
   .split(",")
@@ -22,9 +44,9 @@ export const env = {
   FRONTEND_URL: ALLOWED_FRONTEND_ORIGINS[0] || "http://localhost:3000",
   FRONTEND_URLS: ALLOWED_FRONTEND_ORIGINS.join(","),
   ALLOWED_ORIGINS: ALLOWED_FRONTEND_ORIGINS,
-  DATABASE_URL: process.env.DATABASE_URL || "",
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || "access-secret",
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || "refresh-secret",
+  DATABASE_URL: requireEnv("DATABASE_URL", ""),
+  JWT_ACCESS_SECRET: requireSecret("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
+  JWT_REFRESH_SECRET: requireSecret("JWT_REFRESH_SECRET", "dev-refresh-secret-change-me"),
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   RESEND_API_KEY: process.env.RESEND_API_KEY || "",
@@ -35,11 +57,11 @@ export const env = {
   PASSWORD_RESET_MAX_ATTEMPTS: parseInt(process.env.PASSWORD_RESET_MAX_ATTEMPTS || "5", 10),
   XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || "",
   XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN || "",
-  
+
   // AI Assistant (Gemini)
   AI_PROVIDER: process.env.AI_PROVIDER || "gemini",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
-  GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-flash-latest",
+  GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-2.0-flash",
   AI_TEMPERATURE: parseFloat(process.env.AI_TEMPERATURE || "0.7"),
   AI_MAX_TOKENS: parseInt(process.env.AI_MAX_TOKENS || "1024", 10),
 };
