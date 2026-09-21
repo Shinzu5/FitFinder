@@ -52,16 +52,18 @@ function LoginForm() {
   );
 
   useEffect(() => {
-    if (!accountRemoved) return;
     const stored =
       typeof window !== "undefined"
         ? sessionStorage.getItem("fitfinder-account-removed")
         : null;
-    setRemovedNotice(
-      stored || "Your account has been removed by the Gym Owner.",
-    );
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("fitfinder-account-removed");
+    
+    if (stored || accountRemoved) {
+      setRemovedNotice(
+        stored || "Your account has been removed. Please sign in again.",
+      );
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("fitfinder-account-removed");
+      }
     }
   }, [accountRemoved]);
   const {
@@ -252,10 +254,6 @@ function LoginForm() {
           <Link href="/forgot-password" className="text-[#FFD700] hover:text-[#ffe44d]">
             Forgot Password?
           </Link>
-        </p>
-
-        <p className="text-center text-xs text-zinc-500">
-          Test accounts password: <span className="text-zinc-300">12345</span>
         </p>
       </form>
     </AuthShell>

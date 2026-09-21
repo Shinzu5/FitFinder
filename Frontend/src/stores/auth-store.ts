@@ -11,7 +11,6 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   avatarUrl?: string;
-  password?: string;
 }
 
 interface AuthState {
