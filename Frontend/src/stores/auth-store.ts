@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import api, { setMemoryAccessToken } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { type UserRole, roleToDashboardPath } from "@/lib/mock-users";
+import { type UserRole, roleToDashboardPath } from "@/lib/roles";
 
 export interface AuthUser {
   id: string;
