@@ -1,12 +1,12 @@
 import { Response } from "express";
 import { sendSuccess, sendError } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import {
   getUnreadNotificationCount,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
-} from "../services/notification.service";
+} from "../services/notification/notification.service";
 
 // GET /api/notifications
 export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {

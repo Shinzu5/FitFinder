@@ -1,13 +1,13 @@
-import prisma from "../config/database";
-import { daysRemainingUntil } from "../utils/ownerPlan";
+import prisma from "../../config/database";
+import { daysRemainingUntil } from "../../utils/ownerPlan";
 import {
   createNotification,
   daysRemainingUntilDate,
   getUnreadNotificationCount,
   upsertLiveNotification,
 } from "./notification.service";
-import { expireOverdueMemberships } from "./membershipAccess.service";
-import { emitToUser } from "../socket";
+import { expireOverdueMemberships } from "../membership/membershipAccess.service";
+import { emitToUser } from "../../socket";
 
 const MEMBERSHIP_REMINDER_DAYS = [7, 3, 1] as const;
 

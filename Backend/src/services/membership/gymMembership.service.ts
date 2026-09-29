@@ -1,6 +1,6 @@
 import type { MembershipStatus, Prisma } from "@prisma/client";
-import prisma from "../config/database";
-import { emitMembershipUpdated, emitMembersUpdated } from "./realtime.service";
+import prisma from "../../config/database";
+import { emitMembershipUpdated, emitMembersUpdated } from "../realtime/realtime.service";
 
 export type MemberType = "WALK_IN" | "ONLINE";
 export type RegisteredBy = "OWNER" | "CLERK" | "SELF";
@@ -222,7 +222,7 @@ export async function listGymMembers(gymId: string) {
 
 /** Notify gymer + Owner/Clerk members lists after create/update/expire. */
 export async function notifyMembershipChange(userId: string, gymId: string): Promise<void> {
-  const { ensureActiveGymIfEmpty } = await import("./activeGym.service");
+  const { ensureActiveGymIfEmpty } = await import("../gym/activeGym.service");
   await ensureActiveGymIfEmpty(userId, gymId);
   emitMembershipUpdated(userId);
   await emitMembersUpdated(gymId);

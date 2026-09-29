@@ -1,19 +1,19 @@
 import { Request, Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
 import { setAuthCookies } from "../utils/cookies";
 import {
   linkOwnerSubscriptionToGym,
   syncLatestOwnerSubscriptions,
-} from "../services/ownerSubscription.service";
+} from "../services/subscription/ownerSubscription.service";
 import {
   emitAdminGymsUpdated,
   emitAdminUsersUpdated,
   emitMembershipUpdated,
-} from "../services/realtime.service";
-import { kickUserSession, purgeUserRecords } from "../services/accountRemoval.service";
+} from "../services/realtime/realtime.service";
+import { kickUserSession, purgeUserRecords } from "../services/admin/accountRemoval.service";
 import { emitToUser } from "../socket";
 
 function isValidXenditKey(key: string): boolean {

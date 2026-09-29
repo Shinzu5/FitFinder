@@ -7,7 +7,7 @@ import {
   markThreadRead,
   hideConversation,
 } from "../controllers/messaging.controller";
-import { authenticate } from "../middleware/auth";
+import { authenticate } from "../middlewares/auth";
 
 const router = Router();
 

@@ -1,27 +1,27 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import {
   emitAdminGymsUpdated,
   emitSalesUpdated,
   emitWalkInApprovalsUpdated,
   emitWalkInStatus,
-} from "../services/realtime.service";
+} from "../services/realtime/realtime.service";
 import {
   listGymMembers,
   notifyMembershipChange,
   upsertGymMembership,
   type RegisteredBy,
-} from "../services/gymMembership.service";
+} from "../services/membership/gymMembership.service";
 import {
   activateFromApproval,
   markApprovedOnly,
-} from "../services/membershipApproval.service";
+} from "../services/membership/membershipApproval.service";
 import {
   notifyMembershipRejected,
-} from "../services/membershipNotification.service";
-import { countActiveNow } from "../services/attendance.service";
+} from "../services/membership/membershipNotification.service";
+import { countActiveNow } from "../services/attendance/attendance.service";
 
 // Helper: gym for Clerk (assigned) or Owner (owned) — same walk-in approval flow
 async function getClerkGym(userId: string) {

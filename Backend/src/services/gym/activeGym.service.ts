@@ -1,7 +1,7 @@
-import prisma from "../config/database";
-import { expireOverdueMemberships } from "./membershipAccess.service";
-import { emitToUser } from "../socket";
-import { daysRemainingUntil } from "../utils/ownerPlan";
+import prisma from "../../config/database";
+import { expireOverdueMemberships } from "../membership/membershipAccess.service";
+import { emitToUser } from "../../socket";
+import { daysRemainingUntil } from "../../utils/ownerPlan";
 
 /** Live memberships for a user (ACTIVE/EXPIRING and not past expiresAt). */
 export async function listLiveMemberships(userId: string) {

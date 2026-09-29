@@ -1,7 +1,7 @@
 import { UserRole, type Prisma } from "@prisma/client";
-import prisma from "../config/database";
-import { getIO, userRoom } from "../socket";
-import { emitAccountDeleted, emitAdminUsersUpdated } from "./realtime.service";
+import prisma from "../../config/database";
+import { getIO, userRoom } from "../../socket";
+import { emitAccountDeleted, emitAdminUsersUpdated } from "../realtime/realtime.service";
 
 export type RemovalResult =
   | { ok: true }

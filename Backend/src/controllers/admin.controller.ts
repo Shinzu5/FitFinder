@@ -1,19 +1,19 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import { daysRemainingUntil, storedDurationToDays } from "../utils/ownerPlan";
 import {
   healOwnerSubscriptionDurations,
   syncLatestOwnerSubscriptions,
-} from "../services/ownerSubscription.service";
+} from "../services/subscription/ownerSubscription.service";
 import { getOwnerPlanById } from "../config/ownerPlans";
 import {
   buildAdminTransactionRows,
   getOwnerRevenueChartSeries,
   getOwnerRevenueStats,
-} from "../services/adminRevenue.service";
-import { permanentlyDeleteUser } from "../services/accountRemoval.service";
+} from "../services/admin/adminRevenue.service";
+import { permanentlyDeleteUser } from "../services/admin/accountRemoval.service";
 
 // GET /api/admin/dashboard
 export async function getDashboard(req: AuthRequest, res: Response): Promise<void> {

@@ -1,5 +1,5 @@
-import prisma from "../config/database";
-import { emitAttendanceUpdated, emitSalesUpdated } from "./realtime.service";
+import prisma from "../../config/database";
+import { emitAttendanceUpdated, emitSalesUpdated } from "../realtime/realtime.service";
 
 export function shapeAttendance(row: {
   id: string;

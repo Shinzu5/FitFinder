@@ -2,10 +2,10 @@ import { Response } from "express";
 import { UserRole } from "@prisma/client";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import { canMessage } from "../utils/messagingRules";
 import { getIO, userRoom } from "../socket";
-import { createNotification } from "../services/notification.service";
+import { createNotification } from "../services/notification/notification.service";
 
 const userSummarySelect = {
   id: true,

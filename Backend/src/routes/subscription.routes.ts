@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { purchaseSubscription, getMyPlan } from "../controllers/subscription.controller";
-import { authenticate } from "../middleware/auth";
+import { authenticate } from "../middlewares/auth";
 
 const router = Router();
 

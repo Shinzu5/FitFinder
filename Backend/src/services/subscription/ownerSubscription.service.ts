@@ -1,17 +1,17 @@
 import { Prisma } from "@prisma/client";
-import prisma from "../config/database";
-import { resolveOwnerPlanFromMetadata } from "../config/ownerPlans";
+import prisma from "../../config/database";
+import { resolveOwnerPlanFromMetadata } from "../../config/ownerPlans";
 import {
   addOwnerPlanDays,
   computeOwnerPlanValidUntil,
   daysRemainingUntil,
   storedDurationToDays,
-} from "../utils/ownerPlan";
+} from "../../utils/ownerPlan";
 import {
   emitAdminGymsUpdated,
   emitAdminUsersUpdated,
   emitToUserSafe,
-} from "./realtime.service";
+} from "../realtime/realtime.service";
 
 type PaymentLike = {
   id: string;

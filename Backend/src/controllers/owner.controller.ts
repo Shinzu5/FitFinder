@@ -1,7 +1,7 @@
 import { Response } from "express";
 import prisma, { withDbRetry } from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import { hashPassword } from "../utils/hash";
 import {
   emitAdminUsersUpdated,
@@ -12,8 +12,8 @@ import {
   emitShopUpdated,
   emitWalkInApprovalsUpdated,
   emitWalkInStatus,
-} from "../services/realtime.service";
-import { permanentlyDeleteUser } from "../services/accountRemoval.service";
+} from "../services/realtime/realtime.service";
+import { permanentlyDeleteUser } from "../services/admin/accountRemoval.service";
 
 // Helper: get the owner's gym
 async function getOwnerGym(ownerId: string) {
@@ -86,7 +86,7 @@ export async function getMembers(req: AuthRequest, res: Response): Promise<void>
     const gym = await getOwnerGym(req.userId!);
     if (!gym) { sendError(res, "No gym found", 404); return; }
 
-    const { listGymMembers } = await import("../services/gymMembership.service");
+    const { listGymMembers } = await import("../services/membership/gymMembership.service");
     const members = await listGymMembers(gym.id);
     sendSuccess(res, members);
   } catch (error) {
@@ -109,7 +109,7 @@ export async function removeMember(req: AuthRequest, res: Response): Promise<voi
 
     await prisma.gymMembership.delete({ where: { id: membership.id } });
 
-    const { notifyMembershipChange } = await import("../services/gymMembership.service");
+    const { notifyMembershipChange } = await import("../services/membership/gymMembership.service");
     await notifyMembershipChange(membership.userId, membership.gymId);
 
     sendSuccess(res, null, "Member removed");

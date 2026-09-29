@@ -4,7 +4,7 @@ import {
   checkPaymentStatus,
   xenditWebhook,
 } from "../controllers/payment.controller";
-import { authenticate } from "../middleware/auth";
+import { authenticate } from "../middlewares/auth";
 
 const router = Router();
 
