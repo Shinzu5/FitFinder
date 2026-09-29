@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { asRecord } from "@/lib/api-error";
 import { Plus } from "lucide-react";
-import type { Gym } from "@/lib/mock-gyms";
+import type { Gym } from "@/types/gym";
 import { resolveMediaUrl } from "@/lib/media";
 import { useAuthStore } from "@/stores/auth-store";
 import { useMembershipStore } from "@/stores/membership-store";
