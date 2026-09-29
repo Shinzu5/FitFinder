@@ -1,11 +1,11 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import {
   emitMembershipUpdated,
-} from "../services/realtime.service";
-import { generateAiResponse } from "../services/ai.service";
+} from "../services/realtime/realtime.service";
+import { generateAiResponse } from "../services/ai/ai.service";
 import {
   ensureActiveGymIfEmpty,
   listLiveMemberships,
@@ -13,11 +13,11 @@ import {
   resolveActiveGymId,
   setActiveGymId,
   shapeEnrolledMembership,
-} from "../services/activeGym.service";
+} from "../services/gym/activeGym.service";
 import {
   createPendingApproval,
   shapeApprovalPayload,
-} from "../services/membershipApproval.service";
+} from "../services/membership/membershipApproval.service";
 
 // POST /api/user/join-gym
 export async function joinGym(req: AuthRequest, res: Response): Promise<void> {
@@ -523,7 +523,7 @@ export async function completeWalkInOnboarding(
       }
     }
 
-    const { activateFromApproval } = await import("../services/membershipApproval.service");
+    const { activateFromApproval } = await import("../services/membership/membershipApproval.service");
     const result = await activateFromApproval({
       approvalId: approval.id,
       actorId: req.userId!,

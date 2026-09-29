@@ -1,14 +1,14 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import { getOwnerPlanById } from "../config/ownerPlans";
 import {
   computeOwnerPlanValidUntil,
   daysRemainingUntil,
   storedDurationToDays,
 } from "../utils/ownerPlan";
-import { emitAdminGymsUpdated } from "../services/realtime.service";
+import { emitAdminGymsUpdated } from "../services/realtime/realtime.service";
 import { emitToUser } from "../socket";
 import { Prisma } from "@prisma/client";
 

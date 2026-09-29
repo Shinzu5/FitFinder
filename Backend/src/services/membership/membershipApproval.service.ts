@@ -1,4 +1,4 @@
-import prisma from "../config/database";
+import prisma from "../../config/database";
 import {
   computeExtendedExpiresAt,
   notifyMembershipChange,
@@ -10,12 +10,12 @@ import {
   emitSalesUpdated,
   emitWalkInApprovalsUpdated,
   emitWalkInStatus,
-} from "./realtime.service";
+} from "../realtime/realtime.service";
 import {
   notifyMembershipApproved,
   notifyMembershipRequestSubmitted,
 } from "./membershipNotification.service";
-import { ensureActiveGymIfEmpty } from "./activeGym.service";
+import { ensureActiveGymIfEmpty } from "../gym/activeGym.service";
 
 /**
  * ONE membership approval lifecycle for the whole system:

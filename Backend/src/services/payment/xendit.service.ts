@@ -1,4 +1,4 @@
-import { env } from "../config/env";
+import { env } from "../../config/env";
 
 const XENDIT_API_URL = "https://api.xendit.co";
 

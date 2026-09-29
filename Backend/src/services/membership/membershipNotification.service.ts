@@ -1,7 +1,7 @@
 import {
   createNotification,
   notifyGymStaff,
-} from "./notification.service";
+} from "../notification/notification.service";
 
 /** Gymer submitted a join/renewal request (walk-in or GCash). */
 export async function notifyMembershipRequestSubmitted(opts: {

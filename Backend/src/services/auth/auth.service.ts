@@ -14,8 +14,8 @@ import {
   verifyRefreshToken,
   verifyAccessToken,
 } from "../../utils/jwt";
-import { sendVerificationEmail, sendPasswordResetEmail } from "../email.service";
-import { emitAdminUsersUpdated } from "../realtime.service";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../email/email.service";
+import { emitAdminUsersUpdated } from "../realtime/realtime.service";
 
 export interface AuthServiceResult {
   statusCode: number;

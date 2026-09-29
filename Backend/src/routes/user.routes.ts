@@ -6,8 +6,8 @@ import {
   completeWalkInOnboarding,
   getMemberExercises, getMemberEquipment, getMemberShop,
 } from "../controllers/user.controller";
-import { authenticate } from "../middleware/auth";
-import { requireRole } from "../middleware/requireRole";
+import { authenticate } from "../middlewares/auth";
+import { requireRole } from "../middlewares/requireRole";
 
 const router = Router();
 

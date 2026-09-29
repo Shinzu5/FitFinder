@@ -1,5 +1,5 @@
-import { resend } from "../config/email";
-import { env } from "../config/env";
+import { resend } from "../../config/email";
+import { env } from "../../config/env";
 
 let emailEnabled = false;
 

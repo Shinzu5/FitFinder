@@ -2,19 +2,19 @@ import { Request, Response } from "express";
 import prisma from "../config/database";
 import { env } from "../config/env";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import {
   createGcashPayment,
   getPaymentStatus,
   verifyWebhookToken,
-} from "../services/xendit.service";
+} from "../services/payment/xendit.service";
 import {
   emitAdminGymsUpdated,
-} from "../services/realtime.service";
-import { notifyMembershipChange } from "../services/gymMembership.service";
-import { createPendingApproval } from "../services/membershipApproval.service";
-import { ensureOwnerSubscriptionFromPayment } from "../services/ownerSubscription.service";
-import { createNotification } from "../services/notification.service";
+} from "../services/realtime/realtime.service";
+import { notifyMembershipChange } from "../services/membership/gymMembership.service";
+import { createPendingApproval } from "../services/membership/membershipApproval.service";
+import { ensureOwnerSubscriptionFromPayment } from "../services/subscription/ownerSubscription.service";
+import { createNotification } from "../services/notification/notification.service";
 import { getOwnerPlanById } from "../config/ownerPlans";
 import { daysRemainingUntil, storedDurationToDays } from "../utils/ownerPlan";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";

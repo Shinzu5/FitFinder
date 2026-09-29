@@ -1,5 +1,5 @@
-import prisma from "../config/database";
-import { emitMembershipUpdated, emitMembersUpdated } from "./realtime.service";
+import prisma from "../../config/database";
+import { emitMembershipUpdated, emitMembersUpdated } from "../realtime/realtime.service";
 import { notifyMembershipExpired } from "./membershipNotification.service";
 
 /** Mark overdue ACTIVE/EXPIRING memberships as EXPIRED and notify affected users. */

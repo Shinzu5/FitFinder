@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "../middlewares/auth";
 import prisma from "../config/database";
 import {
   checkInMember,
@@ -9,7 +9,7 @@ import {
   countActiveNow,
   listOpenAttendances,
   listTodayAttendances,
-} from "../services/attendance.service";
+} from "../services/attendance/attendance.service";
 
 async function getStaffGym(userId: string) {
   const user = await prisma.user.findUnique({

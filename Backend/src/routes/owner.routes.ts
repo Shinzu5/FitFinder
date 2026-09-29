@@ -12,8 +12,8 @@ import {
   getSalesReports, getSalesReportReceipt,
   getPaymentSettings, updatePaymentSettings,
 } from "../controllers/owner.controller";
-import { authenticate } from "../middleware/auth";
-import { requireRole } from "../middleware/requireRole";
+import { authenticate } from "../middlewares/auth";
+import { requireRole } from "../middlewares/requireRole";
 
 const router = Router();
 

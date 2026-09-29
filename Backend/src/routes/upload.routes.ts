@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { uploadImage } from "../controllers/upload.controller";
-import { authenticate } from "../middleware/auth";
-import { upload } from "../middleware/upload";
+import { authenticate } from "../middlewares/auth";
+import { upload } from "../middlewares/upload";
 
 const router = Router();
 
