@@ -390,6 +390,12 @@ export const useAuthStore = create<AuthState>()(
 
       clearSession: () => {
         setMemoryAccessToken(null);
+        try {
+          // Dynamic import to avoid circular deps — best-effort socket cleanup
+          import("@/lib/socket").then((m) => m.disconnectSocket()).catch(() => undefined);
+        } catch {
+          // ignore
+        }
         localStorage.removeItem("fitfinder-create-gym");
         localStorage.removeItem("fitfinder-membership");
         localStorage.removeItem("fitfinder-owner-coaches");

@@ -44,9 +44,9 @@
 | **Shop** | owner CRUD + user shop | `owner` + `user` shop | CODE_MAP § Shop |
 | **Exercises** | owner CRUD + user exercises | `owner` + `user` exercises | CODE_MAP § Exercises |
 | **AI Assistant** | `.../user/ai/page.tsx` | `POST /api/user/ai-chat` | AI_ASSISTANT_FLOW |
-| **Socket.IO** | `Frontend/src/lib/socket.ts` | `Backend/src/socket/index.ts` | SOCKET_REFERENCE |
+| **Socket.IO** | `Frontend/src/lib/socket.ts` | `Backend/src/lib/socket.ts` | SOCKET_REFERENCE |
 | **Database** | — | `Backend/prisma/schema.prisma` | DATABASE_REFERENCE |
-| **Middleware** | — | `Backend/src/middleware/*` | PROJECT_STRUCTURE |
+| **Middleware** | — | `Backend/src/middlewares/*` | PROJECT_STRUCTURE |
 | **Utilities** | `Frontend/src/lib/*` | `Backend/src/utils/*` | PROJECT_STRUCTURE |
 | **Hooks** | `Frontend/src/hooks/*` | — | PROJECT_STRUCTURE |
 | **Services** | — | `Backend/src/services/*` | PROJECT_STRUCTURE |

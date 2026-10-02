@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../config/database";
-import { emitToUser } from "../../socket";
+import { emitToUser } from "../../lib/socket";
 
 export type NotificationType =
   | "MEMBERSHIP_EXPIRING"

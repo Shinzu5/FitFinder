@@ -5,11 +5,21 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED !== "true") {
+    console.error("❌ Refusing to seed in production without ALLOW_SEED=true.");
+    process.exit(1);
+  }
+
   console.log("🌱 Seeding database...\n");
 
   // ─── Users ────────────────────────────────────────────────────────────────
   // Same hashing method as Backend/src/utils/hash.ts (bcrypt, 12 rounds)
-  const passwordHash = await bcrypt.hash("12345", 12);
+  // Development default only — override with SEED_PASSWORD in real environments.
+  const seedPassword = process.env.SEED_PASSWORD || "12345";
+  if (!process.env.SEED_PASSWORD) {
+    console.warn("⚠️  SEED_PASSWORD not set — using development default. Never seed production this way.");
+  }
+  const passwordHash = await bcrypt.hash(seedPassword, 12);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@test.com" },
@@ -422,7 +432,7 @@ async function main() {
   console.log("✅ Admin activities seeded");
 
   console.log("\n🎉 Database seeded successfully!\n");
-  console.log("📧 Test accounts (password: 12345):");
+  console.log("📧 Test accounts (development only — see SEED_PASSWORD):");
   console.log("   Admin:     admin@test.com");
   console.log("   Gym Owner: owner@test.com");
   console.log("   Clerk:     clerk@test.com");

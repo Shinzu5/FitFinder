@@ -82,7 +82,7 @@ Auth: `Authorization: Bearer <accessToken>` unless noted. Refresh cookie used by
 | PUT/DELETE | `/owner/shop/:id` | `updateShopProduct` / `removeShopProduct` |
 | GET/POST | `/owner/staff` | `getStaff` / `addStaff` |
 | DELETE | `/owner/staff/:id` | `removeStaff` |
-| GET/POST | `/owner/messages` | `getMessages` / `sendMessage` (legacy gym chat) |
+| — | `/owner/messages` | Removed — use `/messages/*` (DirectMessage) |
 | GET | `/owner/sales-reports` | `getSalesReports` |
 | GET | `/owner/sales-reports/:id` | `getSalesReportReceipt` |
 
@@ -113,7 +113,7 @@ Auth: `Authorization: Bearer <accessToken>` unless noted. Refresh cookie used by
 | POST | `/user/join-gym` | `joinGym` |
 | GET | `/user/membership` | `getMembership` |
 | DELETE | `/user/membership` | `leaveMembership` |
-| GET/POST | `/user/messages` | `getMessages` / `sendUserMessage` (legacy) |
+| — | `/user/messages` | Removed — use `/messages/*` (DirectMessage) |
 | POST | `/user/ai-chat` | `aiChat` |
 | GET | `/user/walk-in-status` | `getWalkInStatus` |
 | POST | `/user/walk-in-done/:id` | `completeWalkInOnboarding` |
@@ -127,7 +127,7 @@ Auth: `Authorization: Bearer <accessToken>` unless noted. Refresh cookie used by
 
 | Method | Path | Handler |
 |--------|------|---------|
-| POST | `/subscriptions/purchase` | `purchaseSubscription` |
+| — | `/subscriptions/purchase` | Removed (role-escalation risk) — owner plans activate via Xendit `/payments/*` |
 | GET | `/subscriptions/my-plan` | `getMyPlan` |
 
 ------------------------------------

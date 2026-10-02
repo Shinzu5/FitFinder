@@ -1,8 +1,8 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthController } from "../controllers/auth.controller";
-import { authenticate } from "../middlewares/auth";
-import { validate } from "../middlewares/validate";
+import { authenticate } from "../middlewares/auth-middleware";
+import { validate } from "../middlewares/validate-schema";
 import {
   changePasswordSchema,
   forgotPasswordSchema,

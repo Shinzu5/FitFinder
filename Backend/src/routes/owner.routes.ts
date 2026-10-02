@@ -8,12 +8,11 @@ import {
   getExercises, createExercise, updateExercise, removeExercise,
   getShopProducts, createShopProduct, updateShopProduct, removeShopProduct,
   getStaff, addStaff, removeStaff,
-  getMessages, sendMessage,
   getSalesReports, getSalesReportReceipt,
   getPaymentSettings, updatePaymentSettings,
 } from "../controllers/owner.controller";
-import { authenticate } from "../middlewares/auth";
-import { requireRole } from "../middlewares/requireRole";
+import { authenticate } from "../middlewares/auth-middleware";
+import { requireRole } from "../middlewares/rbac-middleware";
 
 const router = Router();
 
@@ -57,9 +56,6 @@ router.delete("/shop/:id", removeShopProduct);
 router.get("/staff", getStaff);
 router.post("/staff", addStaff);
 router.delete("/staff/:id", removeStaff);
-
-router.get("/messages", getMessages);
-router.post("/messages", sendMessage);
 
 router.get("/sales-reports", getSalesReports);
 router.get("/sales-reports/:id", getSalesReportReceipt);

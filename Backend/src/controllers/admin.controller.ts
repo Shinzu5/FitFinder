@@ -1,7 +1,7 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import { daysRemainingUntil, storedDurationToDays } from "../utils/ownerPlan";
 import {
   healOwnerSubscriptionDurations,

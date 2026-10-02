@@ -1,7 +1,7 @@
 import { Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import {
   emitMembershipUpdated,
 } from "../services/realtime/realtime.service";
@@ -359,69 +359,6 @@ export async function leaveMembership(req: AuthRequest, res: Response): Promise<
   } catch (error) {
     console.error("Leave membership error:", error);
     sendError(res, "Failed to leave gym", 500);
-  }
-}
-
-// GET /api/user/messages
-export async function getMessages(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const gymId = await resolveActiveGymId(req.userId!);
-
-    if (!gymId) {
-      sendSuccess(res, []);
-      return;
-    }
-
-    const conversations = await prisma.conversation.findMany({
-      where: { gymId },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-          include: { sender: { select: { id: true, fullName: true, role: true } } },
-        },
-      },
-    });
-
-    sendSuccess(res, conversations);
-  } catch (error) {
-    console.error("Get user messages error:", error);
-    sendError(res, "Failed to fetch messages", 500);
-  }
-}
-
-// POST /api/user/messages
-export async function sendUserMessage(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const { conversationId, text, gymId } = req.body;
-
-    let convId = conversationId;
-
-    // Create conversation if needed
-    if (!convId && gymId) {
-      const conv = await prisma.conversation.create({
-        data: { gymId, type: "MEMBER" },
-      });
-      convId = conv.id;
-    }
-
-    if (!convId) {
-      sendError(res, "Conversation ID or gym ID required");
-      return;
-    }
-
-    const message = await prisma.message.create({
-      data: {
-        conversationId: convId,
-        senderId: req.userId!,
-        senderRole: "user",
-        text,
-      },
-    });
-
-    sendCreated(res, { message, conversationId: convId }, "Message sent");
-  } catch (error) {
-    console.error("Send user message error:", error);
-    sendError(res, "Failed to send message", 500);
   }
 }
 

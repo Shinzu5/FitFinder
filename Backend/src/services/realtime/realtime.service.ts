@@ -1,5 +1,5 @@
 import prisma from "../../config/database";
-import { emitToGym, emitToRoom, emitToUser } from "../../socket";
+import { emitToGym, emitToRoom, emitToUser } from "../../lib/socket";
 
 export function emitToUserSafe(userId: string, event: string, payload: unknown): void {
   emitToUser(userId, event, payload);

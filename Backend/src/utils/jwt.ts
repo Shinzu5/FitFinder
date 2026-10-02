@@ -12,9 +12,9 @@ export function generateAccessToken(payload: TokenPayload): string {
   } as SignOptions);
 }
 
-export function generateRefreshToken(payload: TokenPayload): string {
+export function generateRefreshToken(payload: TokenPayload, expiresIn?: string): string {
   return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN,
+    expiresIn: (expiresIn || env.JWT_REFRESH_EXPIRES_IN),
   } as SignOptions);
 }
 

@@ -77,6 +77,14 @@ export const useOwnerMembersStore = create<OwnerMembersState>((set, get) => ({
         return;
       }
     } catch (error) {
+      const status = (error as { response?: { status?: number; data?: { message?: string } } })?.response?.status;
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      // Expected empty state only: owner has no gym yet — silent empty, no overlay.
+      // 401/403/500/unexpected 404/DB errors still log below.
+      if (status === 404 && message === "No gym found") {
+        set({ loading: false });
+        return;
+      }
       console.error("Failed to fetch members:", error);
     }
     set({ loading: false });

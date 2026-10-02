@@ -1,10 +1,9 @@
 import { Router } from "express";
-import { purchaseSubscription, getMyPlan } from "../controllers/subscription.controller";
-import { authenticate } from "../middlewares/auth";
+import { getMyPlan } from "../controllers/subscription.controller";
+import { authenticate } from "../middlewares/auth-middleware";
 
 const router = Router();
 
-router.post("/purchase", authenticate, purchaseSubscription);
 router.get("/my-plan", authenticate, getMyPlan);
 
 export default router;

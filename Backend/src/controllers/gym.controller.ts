@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt";
 import { setAuthCookies } from "../utils/cookies";
 import {
@@ -14,7 +14,7 @@ import {
   emitMembershipUpdated,
 } from "../services/realtime/realtime.service";
 import { kickUserSession, purgeUserRecords } from "../services/admin/accountRemoval.service";
-import { emitToUser } from "../socket";
+import { emitToUser } from "../lib/socket";
 
 function isValidXenditKey(key: string): boolean {
   return key.startsWith("xnd_production_") || key.startsWith("xnd_development_");
@@ -136,13 +136,18 @@ export async function getGym(req: Request, res: Response): Promise<void> {
   }
 }
 
-// POST /api/gyms — create gym (owner)
+// POST /api/gyms — create gym (owner). Requires a valid, unexpired, owned subscription.
 export async function createGym(req: AuthRequest, res: Response): Promise<void> {
   try {
     const {
       name, address, contactNumber, description, websiteOrSlug,
       coverImageUrl, schedule, pricePerMonth, subscriptionId,
     } = req.body;
+
+    if (!name || !address) {
+      sendError(res, "Gym name and address are required");
+      return;
+    }
 
     // Never attach a "new" gym to leftover data — owner must delete first
     const existingGym = await prisma.gym.findFirst({
@@ -155,6 +160,38 @@ export async function createGym(req: AuthRequest, res: Response): Promise<void> 
         "You already have a gym. Delete it before creating a new one.",
         409,
       );
+      return;
+    }
+
+    // Heal any missing subscription rows, then verify the caller owns a usable plan.
+    // Never trust client-supplied plan/gym/subscription data alone.
+    await syncLatestOwnerSubscriptions();
+
+    const now = new Date();
+    let usableSubscription = null;
+
+    if (subscriptionId) {
+      usableSubscription = await prisma.ownerSubscription.findFirst({
+        where: { id: String(subscriptionId), ownerId: req.userId! },
+      });
+      if (!usableSubscription) {
+        sendError(res, "Subscription not found for this account", 403);
+        return;
+      }
+    } else {
+      usableSubscription = await prisma.ownerSubscription.findFirst({
+        where: { ownerId: req.userId!, validUntil: { gt: now } },
+        orderBy: { paidAt: "desc" },
+      });
+    }
+
+    if (!usableSubscription) {
+      sendError(res, "A valid owner subscription is required to create a gym", 403);
+      return;
+    }
+
+    if (usableSubscription.validUntil <= now) {
+      sendError(res, "Your owner subscription has expired. Please renew to create a gym.", 403);
       return;
     }
 
@@ -174,16 +211,26 @@ export async function createGym(req: AuthRequest, res: Response): Promise<void> 
       },
     });
 
-    // Ensure paid plans exist in DB, then link the owner's plan to this gym
-    await syncLatestOwnerSubscriptions();
-    await linkOwnerSubscriptionToGym(req.userId!, gym.id, subscriptionId || null);
+    // Link the verified plan to this gym
+    await linkOwnerSubscriptionToGym(req.userId!, gym.id, usableSubscription.id);
     void emitAdminGymsUpdated();
 
-    // Ensure the account is OWNER in PostgreSQL (covers USER → first gym, and OWNER signup)
-    const owner = await prisma.user.update({
+    // Promote USER → OWNER only. Never demote ADMIN/CLERK via this flow.
+    const currentUser = await prisma.user.findUnique({
       where: { id: req.userId! },
-      data: { role: "OWNER" },
+      select: { id: true, fullName: true, email: true, role: true, avatarUrl: true },
     });
+    if (!currentUser) {
+      sendError(res, "Account not found", 404);
+      return;
+    }
+    const owner =
+      currentUser.role === "USER"
+        ? await prisma.user.update({
+            where: { id: req.userId! },
+            data: { role: "OWNER" },
+          })
+        : currentUser;
 
     // Create admin activity
     await prisma.adminActivity.create({

@@ -44,6 +44,13 @@ export const useOwnerStaffStore = create<OwnerStaffState>((set, get) => ({
       // No gym / empty — never keep stale clerks
       set({ clerks: [], loading: false });
     } catch (error) {
+      const status = (error as { response?: { status?: number; data?: { message?: string } } })?.response?.status;
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      // Expected empty state only: owner has no gym yet — silent empty, no overlay.
+      if (status === 404 && message === "No gym found") {
+        set({ clerks: [], loading: false });
+        return;
+      }
       console.error("Failed to fetch staff:", error);
       set({ clerks: [], loading: false });
     }

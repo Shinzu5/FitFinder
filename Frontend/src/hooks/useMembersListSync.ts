@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCreateGymStore } from "@/stores/create-gym-store";
 import { useOwnerMembersStore } from "@/stores/owner-members-store";
 import { useOwnerStaffStore } from "@/stores/owner-staff-store";
 import { useClerkStore } from "@/stores/clerk-store";
@@ -20,12 +21,15 @@ export function useMembersListSync() {
   const fetchStaff = useOwnerStaffStore((state) => state.fetchStaff);
   const fetchClerkMembers = useClerkStore((state) => state.fetchMembers);
   const fetchClerkDashboard = useClerkStore((state) => state.fetchDashboard);
+  // Gate: don't poll owner endpoints until a gym exists (paid-but-not-registered yet).
+  const hasOwnedGym = useCreateGymStore((state) => state.hasOwnedGym);
 
   useEffect(() => {
     if (!isAuthenticated || !accessToken) return;
     if (role !== "OWNER" && role !== "CLERK") return;
 
     if (role === "OWNER") {
+      if (hasOwnedGym !== true) return;
       void fetchOwnerMembers({ silent: true });
       void fetchStaff();
     }
@@ -35,6 +39,8 @@ export function useMembersListSync() {
 
     function onMembersUpdated() {
       if (role === "OWNER") {
+        // Re-check at event time (closure may be stale) — never poll pre-gym.
+        if (useCreateGymStore.getState().hasOwnedGym !== true) return;
         void fetchOwnerMembers({ silent: true });
         void fetchStaff();
       }
@@ -51,6 +57,7 @@ export function useMembersListSync() {
     accessToken,
     isAuthenticated,
     role,
+    hasOwnedGym,
     fetchOwnerMembers,
     fetchStaff,
     fetchClerkMembers,

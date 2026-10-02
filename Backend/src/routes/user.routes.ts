@@ -1,13 +1,13 @@
 import { Router } from "express";
 import {
   joinGym, getMembership, getMemberships, switchActiveGym, leaveMembership,
-  getMessages, sendUserMessage, aiChat,
+  aiChat,
   getWalkInStatus,
   completeWalkInOnboarding,
   getMemberExercises, getMemberEquipment, getMemberShop,
 } from "../controllers/user.controller";
-import { authenticate } from "../middlewares/auth";
-import { requireRole } from "../middlewares/requireRole";
+import { authenticate } from "../middlewares/auth-middleware";
+import { requireRole } from "../middlewares/rbac-middleware";
 
 const router = Router();
 
@@ -19,8 +19,6 @@ router.get("/membership", getMembership);
 router.get("/memberships", getMemberships);
 router.patch("/active-gym", switchActiveGym);
 router.delete("/membership", leaveMembership);
-router.get("/messages", getMessages);
-router.post("/messages", sendUserMessage);
 router.post("/ai-chat", aiChat);
 router.get("/walk-in-status", getWalkInStatus);
 router.post("/walk-in-done/:id", completeWalkInOnboarding);

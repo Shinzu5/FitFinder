@@ -6,8 +6,8 @@ import cookieParser from "cookie-parser";
 import path from "path";
 
 import { env } from "./config/env";
-import { errorHandler } from "./middlewares/errorHandler";
-import { initSocket } from "./socket";
+import { errorHandler } from "./middlewares/error-middleware";
+import { initSocket } from "./lib/socket";
 
 // Routes
 import authRoutes from "./routes/auth.routes";

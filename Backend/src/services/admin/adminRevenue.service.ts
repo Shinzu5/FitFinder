@@ -1,6 +1,6 @@
 import prisma from "../../config/database";
 import { getOwnerPlanById, resolveOwnerPlanFromMetadata } from "../../config/ownerPlans";
-import { buildRevenueChartSeries } from "../../utils/adminRevenue";
+import { buildRevenueChartSeries } from "./adminRevenueChart";
 import { daysRemainingUntil, storedDurationToDays } from "../../utils/ownerPlan";
 
 /** Platform revenue = SUCCEEDED owner-plan Xendit payments (never wiped on gym delete). */

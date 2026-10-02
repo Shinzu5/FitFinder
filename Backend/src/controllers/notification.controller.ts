@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { sendSuccess, sendError } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import {
   getUnreadNotificationCount,
   listNotifications,

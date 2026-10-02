@@ -16,13 +16,13 @@ Paths relative to `FitFinder/`.
 - `Frontend/src/components/features/auth/AuthShell.tsx`
 - `Frontend/src/stores/auth-store.ts`
 - `Frontend/src/lib/api.ts`
-- `Frontend/src/lib/mock-users.ts` — `roleToDashboardPath`
+- `Frontend/src/lib/roles.ts` — `roleToDashboardPath`
 
 **Backend**
 - `Backend/src/routes/auth.routes.ts`
 - `Backend/src/controllers/auth.controller.ts`
-- `Backend/src/middleware/auth.ts`
-- `Backend/src/middleware/requireRole.ts`
+- `Backend/src/middlewares/auth-middleware.ts`
+- `Backend/src/middlewares/rbac-middleware.ts`
 - `Backend/src/utils/jwt.ts`
 - `Backend/src/utils/hash.ts`
 - `Backend/src/services/email.service.ts`
@@ -49,7 +49,7 @@ Paths relative to `FitFinder/`.
 - `Backend/src/routes/admin.routes.ts`
 - `Backend/src/controllers/admin.controller.ts`
 - `Backend/src/services/adminRevenue.service.ts`
-- `Backend/src/utils/adminRevenue.ts`
+- `Backend/src/services/admin/adminRevenueChart.ts`
 - `Backend/src/services/accountRemoval.service.ts`
 
 **Database**
@@ -409,7 +409,7 @@ Paths relative to `FitFinder/`.
 - `Frontend/src/hooks/use*.ts` (listeners)
 
 **Backend**
-- `Backend/src/socket/index.ts`
+- `Backend/src/lib/socket.ts`
 - `Backend/src/services/realtime.service.ts`
 
 **Database**
@@ -429,7 +429,7 @@ Paths relative to `FitFinder/`.
 
 | Layer | Location |
 |-------|----------|
-| Middleware | `Backend/src/middleware/*` |
+| Middleware | `Backend/src/middlewares/*` |
 | Utilities (BE) | `Backend/src/utils/*` |
 | Utilities (FE) | `Frontend/src/lib/*` |
 | Components | `Frontend/src/components/**` + role `_components/` |

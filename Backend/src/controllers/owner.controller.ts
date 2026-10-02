@@ -1,7 +1,7 @@
 import { Response } from "express";
 import prisma, { withDbRetry } from "../config/database";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import { hashPassword } from "../utils/hash";
 import {
   emitAdminUsersUpdated,
@@ -84,7 +84,9 @@ export async function getMyGym(req: AuthRequest, res: Response): Promise<void> {
 export async function getMembers(req: AuthRequest, res: Response): Promise<void> {
   try {
     const gym = await getOwnerGym(req.userId!);
-    if (!gym) { sendError(res, "No gym found", 404); return; }
+    // Expected empty state: paid owner has no gym yet — return [] (not an error).
+    // Real errors (401/403/500, unexpected 404, DB failures) still propagate below.
+    if (!gym) { sendSuccess(res, []); return; }
 
     const { listGymMembers } = await import("../services/membership/gymMembership.service");
     const members = await listGymMembers(gym.id);
@@ -747,7 +749,8 @@ export async function removeShopProduct(req: AuthRequest, res: Response): Promis
 export async function getStaff(req: AuthRequest, res: Response): Promise<void> {
   try {
     const gym = await getOwnerGym(req.userId!);
-    if (!gym) { sendError(res, "No gym found", 404); return; }
+    // Expected empty state: paid owner has no gym yet — return [] (not an error).
+    if (!gym) { sendSuccess(res, []); return; }
 
     const clerks = await prisma.user.findMany({
       where: { clerkGymId: gym.id, role: "CLERK" },
@@ -857,50 +860,6 @@ export async function removeStaff(req: AuthRequest, res: Response): Promise<void
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
-
-// GET /api/owner/messages
-export async function getMessages(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const gym = await getOwnerGym(req.userId!);
-    if (!gym) { sendError(res, "No gym found", 404); return; }
-
-    const conversations = await prisma.conversation.findMany({
-      where: { gymId: gym.id },
-      include: {
-        messages: {
-          orderBy: { createdAt: "asc" },
-          include: { sender: { select: { id: true, fullName: true, role: true } } },
-        },
-      },
-    });
-
-    sendSuccess(res, conversations);
-  } catch (error) {
-    console.error("Get messages error:", error);
-    sendError(res, "Failed to fetch messages", 500);
-  }
-}
-
-// POST /api/owner/messages
-export async function sendMessage(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const { conversationId, text } = req.body;
-
-    const message = await prisma.message.create({
-      data: {
-        conversationId,
-        senderId: req.userId!,
-        senderRole: "owner",
-        text,
-      },
-    });
-
-    sendCreated(res, message, "Message sent");
-  } catch (error) {
-    console.error("Send message error:", error);
-    sendError(res, "Failed to send message", 500);
-  }
-}
 
 function toFrontendTxnType(type: string): string {
   return type.toLowerCase().replace(/_/g, "-");

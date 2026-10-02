@@ -43,7 +43,9 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
   const pendingNewJoin = pendingApproval && !pendingApproval.isRenewal ? pendingApproval : null;
 
   const urlPaymentId = searchParams.get("payment_id");
-  const paymentLookupId = xenditPaymentId || urlPaymentId;
+  // URL param is source of truth from Xendit redirect — store may hold a stale
+  // xenditPaymentId from a previous attempt. Prefer URL, fall back to store.
+  const paymentLookupId = urlPaymentId || xenditPaymentId;
 
   const [verifying, setVerifying] = useState(!!paymentLookupId);
   const [failed, setFailed] = useState(false);
@@ -143,7 +145,17 @@ export function GcashSuccessView({ gymId }: GcashSuccessViewProps) {
           }
         }
       } catch (err) {
-        console.error("Payment status poll error:", err);
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        // 404 = stale ID or not-owned — keep polling silently (no dev-overlay spam).
+        // Other errors (auth/network) also retry quietly until poll limit.
+        if (pollCountRef.current >= 30) {
+          setVerifying(false);
+          setFailed(true);
+          return;
+        }
+        if (status !== 404) {
+          console.debug("Payment status poll retry:", status ?? "network");
+        }
       }
 
       pollRef.current = setTimeout(poll, 2000);

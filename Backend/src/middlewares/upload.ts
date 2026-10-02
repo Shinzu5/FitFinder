@@ -1,8 +1,10 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { resolveStorageDir } from "../services/upload/storage.service";
 
-const uploadDir = path.join(process.cwd(), "uploads");
+// Local disk (ephemeral on Render free tier — see storage.service.ts)
+const uploadDir = resolveStorageDir();
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadDir)) {

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { AuthService } from "../services/auth/auth.service";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import { setAuthCookies, clearAuthCookies } from "../utils/cookies";
 
 export class AuthController {

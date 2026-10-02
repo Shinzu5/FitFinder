@@ -13,7 +13,7 @@ POST /api/auth/login  (auth.controller.login)
 auth-store.ts stores: user, role, accessToken
     │
     ▼
-getDashboardPathForRole(role)  ← lib/mock-users.ts roleToDashboardPath
+getDashboardPathForRole(role)  ← lib/roles.ts roleToDashboardPath
     │
     ├─ ADMIN  → /dashboard/admin
     ├─ OWNER  → /dashboard/owner  (or /dashboard/user/create-gym if no gym / unpaid)
@@ -46,8 +46,15 @@ Role dashboard shell renders
 - API client: `Frontend/src/lib/api.ts`
 - Backend: `Backend/src/routes/auth.routes.ts`, `controllers/auth.controller.ts`
 - Gate: `Frontend/src/app/dashboard/layout.tsx`
-- Middleware: `Backend/src/middleware/auth.ts` (`authenticate`)
+- Middleware: `Backend/src/middlewares/auth-middleware.ts` (`authenticate`)
 
 ## Database
 
 - `users` — credentials, `role`, verification/reset fields, `refreshToken`
+
+## Session notes
+
+- `rememberMe=false` → 1-day refresh token; `true`/default → env `JWT_REFRESH_EXPIRES_IN` (7d). Cookie maxAge follows env defaults; expired refresh tokens are rejected server-side.
+- `change-password` revokes refresh sessions (`refreshToken: null`), matching `reset-password` behavior. Re-login required.
+- Logout clears both `accessToken`/`refreshToken` cookies (`clearAuthCookies`) and disconnects Socket.IO client (`disconnectSocket` in `clearSession`).
+- Seed scripts refuse production without `ALLOW_SEED=true`; dev password via `SEED_PASSWORD`.

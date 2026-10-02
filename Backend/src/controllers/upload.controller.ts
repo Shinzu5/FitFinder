@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { sendSuccess, sendError } from "../utils/apiResponse";
+import { publicUrlFor } from "../services/upload/storage.service";
 
-// POST /api/upload/image
+// POST /api/upload/image — local disk (ephemeral on Render, see storage.service.ts)
 export async function uploadImage(req: Request, res: Response): Promise<void> {
   try {
     if (!req.file) {
@@ -9,7 +10,7 @@ export async function uploadImage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const fileUrl = publicUrlFor(req.file.filename);
 
     sendSuccess(res, {
       url: fileUrl,

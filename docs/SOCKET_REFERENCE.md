@@ -1,6 +1,6 @@
 # FitFinder — Socket.IO Reference
 
-**Server:** `Backend/src/socket/index.ts`  
+**Server:** `Backend/src/lib/socket.ts`  
 **Client:** `Frontend/src/lib/socket.ts`  
 **Auth:** JWT in `handshake.auth.token`  
 **Auto rooms on connect:** `user:{userId}`, `gym_catalog`  
@@ -12,8 +12,8 @@
 
 | Event | Emitter (Frontend) | Listener (Backend) | Purpose |
 |-------|--------------------|--------------------|---------|
-| `join_gym` | `useMemberGymContentSync.ts`, `use-gym-profile.ts` | `socket/index.ts` | Subscribe to gym-scoped content updates |
-| `leave_gym` | same | `socket/index.ts` | Leave gym room |
+| `join_gym` | `useMemberGymContentSync.ts`, `use-gym-profile.ts` | `lib/socket.ts` | Subscribe to gym-scoped content updates |
+| `leave_gym` | same | `lib/socket.ts` | Leave gym room |
 
 ------------------------------------
 
@@ -51,6 +51,6 @@
 
 | Helper | File | Notes |
 |--------|------|-------|
-| `emitToUser` / `emitToGym` / `emitToRoom` | `socket/index.ts` | Low-level fan-out |
+| `emitToUser` / `emitToGym` / `emitToRoom` | `lib/socket.ts` | Low-level fan-out |
 | `emitWalkInStatus`, `emitMembersUpdated`, … | `realtime.service.ts` | Domain-specific broadcasts |
 | `createNotification` | `notification.service.ts` | DB write + `notification` emit |

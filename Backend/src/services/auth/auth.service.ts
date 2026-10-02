@@ -169,7 +169,7 @@ export class AuthService {
     }
   }
 
-  async login(input: { email: string; password: string }): Promise<AuthServiceResult> {
+  async login(input: { email: string; password: string; rememberMe?: boolean }): Promise<AuthServiceResult> {
     try {
       const email = typeof input.email === "string" ? input.email.trim() : "";
       const password = typeof input.password === "string" ? input.password : "";
@@ -201,7 +201,11 @@ export class AuthService {
 
       const tokenPayload = { userId: user.id, role: user.role };
       const accessToken = generateAccessToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      // rememberMe=false → shorter session (1d). rememberMe=true → env default (7d).
+      const refreshToken = generateRefreshToken(
+        tokenPayload,
+        input.rememberMe === false ? "1d" : undefined,
+      );
 
       await this.userRepository.setRefreshToken(user.id, refreshToken);
 
@@ -451,7 +455,7 @@ export class AuthService {
       }
 
       const passwordHash = await hashPassword(input.newPassword);
-      await this.userRepository.updateById(user.id, { passwordHash });
+      await this.userRepository.updateById(user.id, { passwordHash, refreshToken: null });
 
       return { statusCode: 200, message: "Password updated successfully", data: null };
     } catch (error) {

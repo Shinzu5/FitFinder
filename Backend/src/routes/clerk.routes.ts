@@ -12,8 +12,8 @@ import {
   postWalkInCheckIn,
   postCheckOut,
 } from "../controllers/attendance.controller";
-import { authenticate } from "../middlewares/auth";
-import { requireRole } from "../middlewares/requireRole";
+import { authenticate } from "../middlewares/auth-middleware";
+import { requireRole } from "../middlewares/rbac-middleware";
 
 const router = Router();
 

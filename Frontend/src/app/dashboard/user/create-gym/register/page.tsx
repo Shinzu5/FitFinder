@@ -19,6 +19,8 @@ export default function RegisterGymPage() {
     (state) => state.attachGymToLatestPurchase,
   );
   const { paymentComplete, referenceNo, registerGym } = useCreateGymStore();
+  const fetchOwnedGymStatus = useCreateGymStore((state) => state.fetchOwnedGymStatus);
+  const hasOwnedGym = useCreateGymStore((state) => state.hasOwnedGym);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -34,8 +36,20 @@ export default function RegisterGymPage() {
   useEffect(() => {
     if (!paymentComplete) {
       router.replace("/dashboard/user/create-gym");
+      return;
     }
-  }, [paymentComplete, router]);
+    // One gym per owner — bounce to dashboard instead of letting a second create 409.
+    void fetchOwnedGymStatus().then((hasGym) => {
+      if (hasGym) router.replace("/dashboard/owner/payment-settings");
+    });
+  }, [paymentComplete, router, fetchOwnedGymStatus]);
+
+  // Cached ownership check resolved after mount (or 409 sync) — redirect out.
+  useEffect(() => {
+    if (paymentComplete && hasOwnedGym) {
+      router.replace("/dashboard/owner/payment-settings");
+    }
+  }, [paymentComplete, hasOwnedGym, router]);
 
   async function handleCoverSelect(file: File | undefined) {
     if (!file) return;
@@ -56,6 +70,7 @@ export default function RegisterGymPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting || uploading) return;
 
     const missing: string[] = [];
     if (!name.trim()) missing.push("Gym Name");
@@ -90,6 +105,12 @@ export default function RegisterGymPage() {
 
     if (!ok) {
       setSubmitting(false);
+      // 409 sync sets hasOwnedGym — explain instead of a generic failure.
+      if (useCreateGymStore.getState().hasOwnedGym) {
+        setError("You already have a gym. Redirecting to your dashboard...");
+        setTimeout(() => router.replace("/dashboard/owner/payment-settings"), 1200);
+        return;
+      }
       setError("Could not save your gym. Please try again.");
       return;
     }

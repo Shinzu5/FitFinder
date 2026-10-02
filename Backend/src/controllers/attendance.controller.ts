@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import prisma from "../config/database";
 import {
   checkInMember,

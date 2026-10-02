@@ -220,17 +220,21 @@ export const useCreateGymStore = create<CreateGymState>()(
        * Check payment status by polling the backend (which checks Xendit).
        */
       checkPaymentStatus: async (paymentIdOverride) => {
-        const paymentId = paymentIdOverride || get().xenditPaymentId;
-        if (!paymentId) return "PENDING";
+        const primary = paymentIdOverride || get().xenditPaymentId;
+        // Try primary first, then stale-store alternatives (same user, different attempt).
+        const candidates = [primary, get().xenditPaymentId, get().referenceNo].filter(
+          (v, i, arr): v is string => Boolean(v) && arr.indexOf(v) === i,
+        );
+        if (candidates.length === 0) return "PENDING";
 
-        try {
-          const { data } = await api.get(`/payments/${paymentId}/status`);
+        for (const paymentId of candidates) {
+          try {
+            const { data } = await api.get(`/payments/${paymentId}/status`);
 
           if (data.success) {
             const status = data.data.status;
 
-            if (status === "SUCCEEDED") {
-              const plan = getOwnerPlan(get().selectedPlanId);
+            if (status === "SUCCEEDED") {              const plan = getOwnerPlan(get().selectedPlanId);
               const sub = data.data.subscription;
               const validUntilIso = sub?.validUntil as string | undefined;
 
@@ -276,11 +280,16 @@ export const useCreateGymStore = create<CreateGymState>()(
             }
           }
 
+          // PENDING for this candidate — row found, just not paid yet. Stop trying others.
           return "PENDING";
         } catch (error) {
-          console.error("Payment status check failed:", error);
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          // 404 = stale ID or not-owned — try next candidate silently (no dev-overlay spam).
+          if (status === 404) continue;
           return "PENDING";
         }
+        }
+        return "PENDING";
       },
 
       registerGym: async (gym) => {
@@ -340,7 +349,13 @@ export const useCreateGymStore = create<CreateGymState>()(
             return true;
           }
         } catch (error) {
-          console.error("Failed to register gym:", error);
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          // 409 = already owns a gym (expected guardrail) — sync state quietly, no overlay.
+          if (status === 409) {
+            set({ hasOwnedGym: true });
+            return false;
+          }
+          console.debug("Failed to register gym:", status ?? "network");
         }
 
         // Do not unlock dashboard with a local-only fake gym — DB association is required.

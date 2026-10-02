@@ -34,7 +34,9 @@ export default function CreateGymDonePage() {
   const plan = getOwnerPlan(selectedPlanId);
 
   const paymentIdFromUrl = searchParams.get("payment_id");
-  const paymentLookupId = xenditPaymentId || paymentIdFromUrl;
+  // URL param is source of truth from Xendit redirect — store may hold a stale
+  // xenditPaymentId from a previous attempt. Prefer URL, fall back to store.
+  const paymentLookupId = paymentIdFromUrl || xenditPaymentId;
 
   const [verifying, setVerifying] = useState(Boolean(paymentLookupId));
   const [failed, setFailed] = useState(false);

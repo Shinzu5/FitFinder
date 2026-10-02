@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import prisma from "../config/database";
 import { env } from "../config/env";
 import { sendSuccess, sendError, sendCreated } from "../utils/apiResponse";
-import { AuthRequest } from "../middlewares/auth";
+import { AuthRequest } from "../middlewares/auth-middleware";
 import {
   createGcashPayment,
   getPaymentStatus,
@@ -223,9 +223,11 @@ export async function checkPaymentStatus(
 ): Promise<void> {
   try {
     const id = req.params.id as string;
+    const isAdmin = req.userRole === "ADMIN";
 
     const payment = await prisma.xenditPayment.findFirst({
       where: {
+        ...(isAdmin ? {} : { userId: req.userId! }),
         OR: [
           { id: id },
           { xenditPaymentId: id },
@@ -235,6 +237,16 @@ export async function checkPaymentStatus(
     });
 
     if (!payment) {
+      console.warn(
+        `Payment status 404: id prefix ${String(id).slice(0, 12)}... not found for user ${req.userId}`,
+      );
+      sendError(res, "Payment not found", 404);
+      return;
+    }
+
+    // Non-admin callers must own the payment — query is already scoped,
+    // this is defense-in-depth against future refactors.
+    if (!isAdmin && payment.userId !== req.userId) {
       sendError(res, "Payment not found", 404);
       return;
     }
@@ -331,32 +343,35 @@ export async function checkPaymentStatus(
           };
         }
 
-        // Issue fresh tokens so the client becomes OWNER without a page reload
-        const user = await prisma.user.findUnique({ where: { id: payment.userId } });
-        if (user) {
-          const accessToken = generateAccessToken({
-            userId: user.id,
-            role: user.role,
-          });
-          const refreshToken = generateRefreshToken({
-            userId: user.id,
-            role: user.role,
-          });
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { refreshToken },
-          });
-          authPayload = {
-            accessToken,
-            refreshToken,
-            user: {
-              id: user.id,
-              fullName: user.fullName,
-              email: user.email,
+        // Issue fresh tokens so the client becomes OWNER without a page reload.
+        // Only when the caller owns this payment — never leak another user's tokens to ADMIN viewers.
+        if (payment.userId === req.userId) {
+          const user = await prisma.user.findUnique({ where: { id: payment.userId } });
+          if (user) {
+            const accessToken = generateAccessToken({
+              userId: user.id,
               role: user.role,
-              avatarUrl: user.avatarUrl,
-            },
-          };
+            });
+            const refreshToken = generateRefreshToken({
+              userId: user.id,
+              role: user.role,
+            });
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { refreshToken },
+            });
+            authPayload = {
+              accessToken,
+              refreshToken,
+              user: {
+                id: user.id,
+                fullName: user.fullName,
+                email: user.email,
+                role: user.role,
+                avatarUrl: user.avatarUrl,
+              },
+            };
+          }
         }
       }
     }

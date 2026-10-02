@@ -7,7 +7,7 @@ import {
   upsertLiveNotification,
 } from "./notification.service";
 import { expireOverdueMemberships } from "../membership/membershipAccess.service";
-import { emitToUser } from "../../socket";
+import { emitToUser } from "../../lib/socket";
 
 const MEMBERSHIP_REMINDER_DAYS = [7, 3, 1] as const;
 

@@ -42,7 +42,7 @@ Receiver UI updates instantly (no refresh)
 | API | `Backend/src/routes/messaging.routes.ts` |
 | Controller | `Backend/src/controllers/messaging.controller.ts` |
 | Rules | `Backend/src/utils/messagingRules.ts` |
-| Transport | `Backend/src/socket/index.ts` |
+| Transport | `Backend/src/lib/socket.ts` |
 
 ## Database
 
