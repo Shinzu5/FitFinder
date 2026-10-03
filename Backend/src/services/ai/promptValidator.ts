@@ -3,6 +3,8 @@
  * In-scope → allow Gemini. Out-of-scope → block (no API call).
  */
 
+import type { ChatTurn } from "@/types/ai";
+
 const FITNESS_TERMS = [
   // English
   "fitness",
@@ -138,8 +140,6 @@ const FOLLOW_UP_RE =
 /** Clear off-topic signals — never send these to Gemini. */
 const OFF_TOPIC_RE =
   /\b(politic|election|president|crypto|bitcoin|stock|homework|essay|code|programming|javascript|python|java\b|hack|malware|weapon|gun|drug|porn|sex|dating|boyfriend|girlfriend|movie|netflix|celebrity|gossip|weather|joke|riddle|math problem|solve for|capital of|who won|nba score|football score)\b/i;
-
-export type ChatTurn = { role: "user" | "assistant"; text: string };
 
 function normalize(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();

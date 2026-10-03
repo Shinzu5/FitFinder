@@ -27,6 +27,7 @@ export function NotificationBell({
     notifications,
     unreadCount,
     loading,
+    markingAll,
     fetchNotifications,
     markRead,
     markAllRead,
@@ -70,10 +71,11 @@ export function NotificationBell({
             {unreadCount > 0 || notifications.some((n) => !n.isRead) ? (
               <button
                 type="button"
-                className="text-xs font-medium text-[#FFD700] transition hover:text-[#e6c200] hover:underline"
+                disabled={markingAll}
+                className="text-xs font-medium text-[#FFD700] transition hover:text-[#e6c200] hover:underline disabled:cursor-wait disabled:opacity-60 disabled:hover:no-underline"
                 onClick={() => void markAllRead()}
               >
-                Mark all read
+                {markingAll ? "Marking…" : "Mark all read"}
               </button>
             ) : null}
           </div>

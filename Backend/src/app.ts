@@ -5,22 +5,12 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import path from "path";
 
-import { env } from "./config/env";
-import { errorHandler } from "./middlewares/errorHandler";
-import { initSocket } from "./socket";
+import { env } from "@/config/env";
+import { errorHandler } from "@/middlewares/errorHandler";
+import { initSocket } from "@/socket";
 
-// Routes
-import authRoutes from "./routes/auth.routes";
-import gymRoutes from "./routes/gym.routes";
-import adminRoutes from "./routes/admin.routes";
-import ownerRoutes from "./routes/owner.routes";
-import clerkRoutes from "./routes/clerk.routes";
-import userRoutes from "./routes/user.routes";
-import subscriptionRoutes from "./routes/subscription.routes";
-import uploadRoutes from "./routes/upload.routes";
-import messagingRoutes from "./routes/messaging.routes";
-import paymentRoutes from "./routes/payment.routes";
-import notificationRoutes from "./routes/notification.routes";
+// Routes (aggregated — see routes/index.ts for stable /api/* prefixes)
+import routes from "@/routes";
 
 const app = express();
 const server = http.createServer(app);
@@ -69,21 +59,16 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // Auth brute-force limiter is applied only on login/register/password routes
 // (see auth.routes.ts) — not on /refresh or /me, which run on every session.
 
-app.use("/api/auth", authRoutes);
-app.use("/api/gyms", gymRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/owner", ownerRoutes);
-app.use("/api/clerk", clerkRoutes);
-app.use("/api/user", userRoutes);
-app.use("/api/subscriptions", subscriptionRoutes);
-app.use("/api/payments", paymentRoutes);
-app.use("/api/upload", uploadRoutes);
-app.use("/api/messages", messagingRoutes);
-app.use("/api/notifications", notificationRoutes);
+app.use("/api", routes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// 404 for unknown API routes (JSON, not Express HTML default)
+app.use("/api", (_req, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
 });
 
 // Error handler

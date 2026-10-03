@@ -1,11 +1,11 @@
 import path from "path";
 
-import { env } from "./config/env";
-import { verifyEmailConfig } from "./config/email";
-import { setEmailEnabled } from "./services/email/email.service";
-import { backfillMissingPlanSnapshots } from "./services/membership/membershipAccess.service";
-import { runNotificationJobs } from "./services/notification/notificationJobs.service";
-import { server } from "./app";
+import { env } from "@/config/env";
+import { verifyEmailConfig } from "@/config/email";
+import { setEmailEnabled } from "@/services/email/email.service";
+import { backfillMissingPlanSnapshots } from "@/services/membership/membershipAccess.service";
+import { runNotificationJobs } from "@/services/notification/notificationJobs.service";
+import { server } from "@/app";
 
 /** Boots email, Neon maintenance jobs, and the HTTP + Socket.IO server. */
 async function start() {

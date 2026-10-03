@@ -1,16 +1,6 @@
 /** Bucket OwnerSubscription payments into chart series (DB-derived only). */
 
-export interface RevenuePoint {
-  label: string;
-  value: number;
-}
-
-export interface RevenueChartSeries {
-  today: RevenuePoint[];
-  week: RevenuePoint[];
-  month: RevenuePoint[];
-  year: RevenuePoint[];
-}
+import type { RevenueChartSeries, RevenuePoint } from "@/types/admin";
 
 type PaymentRow = { paidAt: Date; price: number };
 

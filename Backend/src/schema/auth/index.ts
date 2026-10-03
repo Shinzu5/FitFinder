@@ -6,4 +6,4 @@ export {
   verifyResetCodeSchema,
   resetPasswordSchema,
   changePasswordSchema,
-} from "./auth.schema";
+} from "@/schema/auth/auth.schema";

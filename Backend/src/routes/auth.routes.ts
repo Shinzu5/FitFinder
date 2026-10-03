@@ -1,8 +1,8 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { AuthController } from "../controllers/auth.controller";
-import { authenticate } from "../middlewares/auth";
-import { validate } from "../middlewares/validate";
+import authController from "@/controllers/auth.controller";
+import { authenticate } from "@/middlewares/auth";
+import { validate } from "@/middlewares/validate";
 import {
   changePasswordSchema,
   forgotPasswordSchema,
@@ -11,10 +11,9 @@ import {
   resetPasswordSchema,
   verifyEmailSchema,
   verifyResetCodeSchema,
-} from "../schema/auth";
+} from "@/schema/auth";
 
 const router = Router();
-const authController = new AuthController();
 
 /** Brute-force protection for credential / OTP routes only — not /refresh or /me. */
 const authAttemptLimiter = rateLimit({

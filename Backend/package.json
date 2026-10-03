@@ -2,21 +2,23 @@
   "name": "fitfinder-backend",
   "version": "1.0.0",
   "description": "FitFinder Backend API",
-  "main": "dist/server.js",
+  "type": "module",
+  "main": "dist/server.mjs",
   "scripts": {
-    "dev": "nodemon",
-    "build": "tsc",
-    "start": "node dist/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsdown src/server.ts --format esm --clean --minify",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:studio": "prisma studio",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@prisma/adapter-pg": "^6.9.0",
     "@prisma/client": "^6.9.0",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
@@ -27,11 +29,14 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.2",
-    "resend": "^6.25.0",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.20.0",
+    "resend": "^6.32.0",
     "socket.io": "^4.8.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.19",
@@ -39,17 +44,18 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.12",
     "@types/node": "^22.15.0",
-    "nodemon": "^3.1.10",
+    "@types/nodemailer": "^8.0.0",
+    "@types/pg": "^8.20.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^10.4.0",
     "prisma": "^6.9.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "tsdown": "^0.21.10",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.59.4"
   },
   "engines": {
     "node": "20.x"
-  },
-  "allowScripts": {
-    "@prisma/client@6.19.3": true,
-    "@prisma/engines@6.19.3": true,
-    "prisma@6.19.3": true
   }
 }

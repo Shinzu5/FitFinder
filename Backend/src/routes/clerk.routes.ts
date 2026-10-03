@@ -1,19 +1,8 @@
 import { Router } from "express";
-import {
-  getDashboard, getTransactions, recordPayment, updatePayment, deletePayment,
-  getMembers, registerMember, getPlans,
-  getApprovals, approveWalkIn, declineWalkIn,
-  getWalkInPayments, completeWalkInPayment,
-  getClosingPreview, closeDailySales,
-} from "../controllers/clerk.controller";
-import {
-  getAttendance,
-  postMemberCheckIn,
-  postWalkInCheckIn,
-  postCheckOut,
-} from "../controllers/attendance.controller";
-import { authenticate } from "../middlewares/auth";
-import { requireRole } from "../middlewares/requireRole";
+import ClerkController from "@/controllers/clerk.controller";
+import AttendanceController from "@/controllers/attendance.controller";
+import { authenticate } from "@/middlewares/auth";
+import { requireRole } from "@/middlewares/requireRole";
 
 const router = Router();
 
@@ -23,28 +12,28 @@ router.use(authenticate);
 const walkInStaff = requireRole("CLERK", "OWNER");
 
 /** Owner + Clerk share Walk-in Payment (record / today's log / close) */
-router.get("/dashboard", walkInStaff, getDashboard);
-router.get("/transactions", walkInStaff, getTransactions);
-router.post("/transactions", walkInStaff, recordPayment);
-router.put("/transactions/:id", walkInStaff, updatePayment);
-router.delete("/transactions/:id", walkInStaff, deletePayment);
-router.get("/members", walkInStaff, getMembers);
-router.post("/members", walkInStaff, registerMember);
-router.get("/plans", walkInStaff, getPlans);
+router.get("/dashboard", walkInStaff, ClerkController.getDashboard);
+router.get("/transactions", walkInStaff, ClerkController.getTransactions);
+router.post("/transactions", walkInStaff, ClerkController.recordPayment);
+router.put("/transactions/:id", walkInStaff, ClerkController.updatePayment);
+router.delete("/transactions/:id", walkInStaff, ClerkController.deletePayment);
+router.get("/members", walkInStaff, ClerkController.getMembers);
+router.post("/members", walkInStaff, ClerkController.registerMember);
+router.get("/plans", walkInStaff, ClerkController.getPlans);
 
-router.get("/approvals", walkInStaff, getApprovals);
-router.put("/approvals/:id/approve", walkInStaff, approveWalkIn);
-router.put("/approvals/:id/decline", walkInStaff, declineWalkIn);
-router.get("/walk-in-payments", walkInStaff, getWalkInPayments);
-router.post("/walk-in-payments/:id/complete", walkInStaff, completeWalkInPayment);
+router.get("/approvals", walkInStaff, ClerkController.getApprovals);
+router.put("/approvals/:id/approve", walkInStaff, ClerkController.approveWalkIn);
+router.put("/approvals/:id/decline", walkInStaff, ClerkController.declineWalkIn);
+router.get("/walk-in-payments", walkInStaff, ClerkController.getWalkInPayments);
+router.post("/walk-in-payments/:id/complete", walkInStaff, ClerkController.completeWalkInPayment);
 
-router.get("/sales/closing-preview", walkInStaff, getClosingPreview);
-router.post("/sales/close", walkInStaff, closeDailySales);
+router.get("/sales/closing-preview", walkInStaff, ClerkController.getClosingPreview);
+router.post("/sales/close", walkInStaff, ClerkController.closeDailySales);
 
 /** Attendance tracker (members + walk-in visitors) */
-router.get("/attendance", walkInStaff, getAttendance);
-router.post("/attendance/check-in", walkInStaff, postMemberCheckIn);
-router.post("/attendance/walk-in", walkInStaff, postWalkInCheckIn);
-router.post("/attendance/:id/check-out", walkInStaff, postCheckOut);
+router.get("/attendance", walkInStaff, AttendanceController.getAttendance);
+router.post("/attendance/check-in", walkInStaff, AttendanceController.postMemberCheckIn);
+router.post("/attendance/walk-in", walkInStaff, AttendanceController.postWalkInCheckIn);
+router.post("/attendance/:id/check-out", walkInStaff, AttendanceController.postCheckOut);
 
 export default router;

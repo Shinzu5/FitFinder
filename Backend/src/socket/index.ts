@@ -1,7 +1,7 @@
 import type { Server as HTTPServer } from "http";
 import { Server as IOServer, type Socket } from "socket.io";
-import { verifyAccessToken } from "../utils/jwt";
-import { env } from "../config/env";
+import { verifyAccessToken } from "@/utils/jwt";
+import { env } from "@/config/env";
 
 let io: IOServer | null = null;
 

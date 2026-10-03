@@ -45,6 +45,12 @@ export const useOwnerStaffStore = create<OwnerStaffState>((set, get) => ({
       // No gym / empty — never keep stale clerks
       set({ clerks: [], loading: false });
     } catch (error) {
+      // Pre-gym onboarding or role transition (USER demote) returns 404/403 — empty, not an error.
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 404 || status === 403) {
+        set({ clerks: [], loading: false });
+        return;
+      }
       console.error("Failed to fetch staff:", error);
       set({ clerks: [], loading: false });
     }

@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 
+/** Status-aware global error hook (reference-style). Keeps `{ success }` envelope. */
 export function errorHandler(
-  err: Error,
+  err: Error & { status?: number; statusCode?: number },
   req: Request,
   res: Response,
   next: NextFunction
@@ -12,10 +13,15 @@ export function errorHandler(
     console.error(err.stack);
   }
 
-  res.status(500).json({
+  const statusCode =
+    (typeof err.status === "number" && err.status) ||
+    (typeof err.statusCode === "number" && err.statusCode) ||
+    500;
+
+  res.status(statusCode).json({
     success: false,
     message:
-      process.env.NODE_ENV === "development"
+      process.env.NODE_ENV === "development" || statusCode !== 500
         ? err.message
         : "Internal server error",
   });

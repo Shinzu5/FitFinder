@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { env } from "../config/env";
+import { env } from "@/config/env";
 
 /** Parse jsonwebtoken-style expiresIn ("15m", "8h", "7d", "30s") to milliseconds for cookie maxAge. */
 function parseExpiresInToMs(value: string, fallbackMs: number): number {
