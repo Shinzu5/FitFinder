@@ -61,6 +61,12 @@ enum ActivityTone {
   WARNING
 }
 
+enum TokenType {
+  REFRESH
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -103,6 +109,7 @@ model User {
   hiddenDirectConversations DirectConversationHide[] @relation("HiddenDirectConversations")
   notifications          Notification[]
   attendances            Attendance[]
+  tokens                 Token[]
 
   @@map("users")
 }
@@ -487,6 +494,22 @@ model AdminActivity {
   createdAt DateTime     @default(now())
 
   @@map("admin_activities")
+}
+
+model Token {
+  id         String    @id @default(uuid())
+  type       TokenType
+  token      String    @unique
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  consumedAt DateTime?
+  revokedAt  DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("tokens")
 }
 
 model XenditPayment {

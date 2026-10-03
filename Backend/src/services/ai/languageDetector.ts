@@ -1,4 +1,4 @@
-export type SupportedLangHint = "en" | "fil" | "ceb" | "other";
+import type { SupportedLangHint } from "@/types/ai";
 
 const FIL_MARKERS =
   /\b(ang|mga|ako|ikaw|ninyo|kayo|opo|po|ba|nga|para|sa|ng|at|o|hindi|oo|paano|ano|magkano|pwede|puwede|gusto|kailangan|salamat|kumusta|eh|yung|yun|ito|iyan|iyan|lang|talaga|sana|naman|daw|raw|mag|nag|pag|may|meron|walang|wala)\b/i;

@@ -1,31 +1,25 @@
 import { Router } from "express";
-import {
-  joinGym, getMembership, getMemberships, switchActiveGym, leaveMembership,
-  getMessages, sendUserMessage, aiChat,
-  getWalkInStatus,
-  completeWalkInOnboarding,
-  getMemberExercises, getMemberEquipment, getMemberShop,
-} from "../controllers/user.controller";
-import { authenticate } from "../middlewares/auth";
-import { requireRole } from "../middlewares/requireRole";
+import UserController from "@/controllers/user.controller";
+import { authenticate } from "@/middlewares/auth";
+import { requireRole } from "@/middlewares/requireRole";
 
 const router = Router();
 
 // All user routes require USER or OWNER role
 router.use(authenticate, requireRole("USER", "OWNER"));
 
-router.post("/join-gym", joinGym);
-router.get("/membership", getMembership);
-router.get("/memberships", getMemberships);
-router.patch("/active-gym", switchActiveGym);
-router.delete("/membership", leaveMembership);
-router.get("/messages", getMessages);
-router.post("/messages", sendUserMessage);
-router.post("/ai-chat", aiChat);
-router.get("/walk-in-status", getWalkInStatus);
-router.post("/walk-in-done/:id", completeWalkInOnboarding);
-router.get("/exercises", getMemberExercises);
-router.get("/equipment", getMemberEquipment);
-router.get("/shop", getMemberShop);
+router.post("/join-gym", UserController.joinGym);
+router.get("/membership", UserController.getMembership);
+router.get("/memberships", UserController.getMemberships);
+router.patch("/active-gym", UserController.switchActiveGym);
+router.delete("/membership", UserController.leaveMembership);
+router.get("/messages", UserController.getMessages);
+router.post("/messages", UserController.sendUserMessage);
+router.post("/ai-chat", UserController.aiChat);
+router.get("/walk-in-status", UserController.getWalkInStatus);
+router.post("/walk-in-done/:id", UserController.completeWalkInOnboarding);
+router.get("/exercises", UserController.getMemberExercises);
+router.get("/equipment", UserController.getMemberEquipment);
+router.get("/shop", UserController.getMemberShop);
 
 export default router;

@@ -1,191 +1,177 @@
 import { Request, Response } from "express";
-import { AuthService } from "../services/auth/auth.service";
-import { AuthRequest } from "../middlewares/auth";
-import { env } from "../config/env";
+import { ENV } from "@/config/env";
+import { ms } from "@/lib/jwt";
+import { AuthenticatedRequest } from "@/types/common";
+import {
+  ChangePasswordService,
+  ForgetPasswordService,
+  GetMeService,
+  LoginCredentialsService,
+  LogoutService,
+  RefreshTokenService,
+  ResendEmailVerificationService,
+  ResetPasswordService,
+  SignupUserService,
+  UpdateMeService,
+  VerifyEmailService,
+  VerifyResetCodeService,
+} from "@/services/auth";
+
+/** Every auth service resolves to this envelope. */
+type AuthResult = {
+  statusCode: number;
+  message: string;
+  data?: unknown;
+  errors?: unknown;
+};
+
+type CookieOptions = {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: "none" | "lax";
+  path: string;
+};
 
 export class AuthController {
-  private readonly authService = new AuthService();
-
-  private setAuthCookies(res: Response, tokens: { accessToken: string; refreshToken: string }) {
-    const isProduction = env.NODE_ENV === "production";
-
-    res.cookie("accessToken", tokens.accessToken, {
+  private getCookieOptions = (): CookieOptions => {
+    const isProduction = ENV.NODE_ENV === "production";
+    return {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
       path: "/",
-      maxAge: 15 * 60 * 1000,
+    };
+  };
+
+  private setAuthCookies = (res: Response, tokens: { accessToken: string; refreshToken: string }) => {
+    const options = this.getCookieOptions();
+
+    res.cookie("accessToken", tokens.accessToken, {
+      ...options,
+      maxAge: ms(15, "minutes"),
     });
 
     res.cookie("refreshToken", tokens.refreshToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-  }
-
-  register = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.register(req.body ?? {});
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
+      ...options,
+      maxAge: ms(7, "days"),
     });
   };
 
-  verifyEmail = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.verifyEmail(req.body ?? {});
-    res.status(result.statusCode).json({
+  private respond = (res: Response, result: AuthResult) => {
+    const body: { success: boolean; message: string; data?: unknown; errors?: unknown } = {
       success: result.statusCode >= 200 && result.statusCode < 300,
       message: result.message,
       data: result.data,
-      errors: result.errors,
-    });
+    };
+
+    if (result.errors !== undefined) {
+      body.errors = result.errors;
+    }
+
+    return res.status(result.statusCode).json(body);
   };
 
-  resendVerification = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.resendVerification(req.body ?? {});
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
-  };
-
-  login = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.login(req.body ?? {});
-
+  /** Sets cookies when a 200 result carries a token pair. */
+  private respondWithTokens = (res: Response, result: AuthResult) => {
     if (result.statusCode === 200 && result.data && typeof result.data === "object") {
       const data = result.data as { accessToken?: string; refreshToken?: string };
       if (data.accessToken && data.refreshToken) {
-        this.setAuthCookies(res, {
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-        });
+        this.setAuthCookies(res, { accessToken: data.accessToken, refreshToken: data.refreshToken });
       }
     }
 
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+    return this.respond(res, result);
   };
 
-  refreshToken = async (req: Request, res: Response): Promise<void> => {
+  // ─── Public routes ─────────────────────────────────────────────────────────
+
+  public register = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await SignupUserService(body.fullName, body.email, body.password, body.role);
+    return this.respond(res, result);
+  };
+
+  public verifyEmail = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await VerifyEmailService(body.email, body.code);
+    return this.respond(res, result);
+  };
+
+  public resendVerification = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await ResendEmailVerificationService(body.email);
+    return this.respond(res, result);
+  };
+
+  public login = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await LoginCredentialsService(body.email, body.password);
+    return this.respondWithTokens(res, result);
+  };
+
+  public refreshToken = async (req: Request, res: Response) => {
     const token = req.cookies?.refreshToken ?? req.body?.refreshToken;
-    const result = await this.authService.refreshToken({ refreshToken: token });
-
-    if (result.statusCode === 200 && result.data && typeof result.data === "object") {
-      const data = result.data as { accessToken?: string; refreshToken?: string };
-      if (data.accessToken && data.refreshToken) {
-        this.setAuthCookies(res, {
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-        });
-      }
-    }
-
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+    const result = await RefreshTokenService(token);
+    return this.respondWithTokens(res, result);
   };
 
-  forgotPassword = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.forgotPassword(req.body ?? {});
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  public forgotPassword = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await ForgetPasswordService(body.email);
+    return this.respond(res, result);
   };
 
-  verifyResetCode = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.verifyResetCode(req.body ?? {});
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  public verifyResetCode = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await VerifyResetCodeService(body.email, body.code);
+    return this.respond(res, result);
   };
 
-  resetPassword = async (req: Request, res: Response): Promise<void> => {
-    const result = await this.authService.resetPassword(req.body ?? {});
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  public resetPassword = async (req: Request, res: Response) => {
+    const body = req.body ?? {};
+    const result = await ResetPasswordService(body.email, body.resetToken, body.newPassword);
+    return this.respond(res, result);
   };
 
-  changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
-    const result = await this.authService.changePassword({
-      userId: req.userId ?? "",
-      currentPassword: req.body?.currentPassword,
-      newPassword: req.body?.newPassword,
-    });
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  // ─── Authenticated routes ──────────────────────────────────────────────────
+
+  public changePassword = async (req: Request, res: Response) => {
+    const authReq: AuthenticatedRequest = req;
+    const userId = authReq.user?.sub ?? "";
+    const body = req.body ?? {};
+    const result = await ChangePasswordService(userId, body.currentPassword, body.newPassword);
+    return this.respond(res, result);
   };
 
-  getMe = async (req: AuthRequest, res: Response): Promise<void> => {
-    const result = await this.authService.getMe(req.userId ?? "");
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  public getMe = async (req: Request, res: Response) => {
+    const authReq: AuthenticatedRequest = req;
+    const userId = authReq.user?.sub ?? "";
+    const result = await GetMeService(userId);
+    return this.respond(res, result);
   };
 
-  updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
-    const result = await this.authService.updateMe({
-      userId: req.userId ?? "",
-      fullName: req.body?.fullName,
-      avatarUrl: req.body?.avatarUrl,
-    });
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+  public updateMe = async (req: Request, res: Response) => {
+    const authReq: AuthenticatedRequest = req;
+    const userId = authReq.user?.sub ?? "";
+    const body = req.body ?? {};
+    const result = await UpdateMeService(userId, body.fullName, body.avatarUrl);
+    return this.respond(res, result);
   };
 
-  logout = async (req: AuthRequest, res: Response): Promise<void> => {
-    const result = await this.authService.logout({
-      userId: req.userId,
+  public logout = async (req: Request, res: Response) => {
+    const options = this.getCookieOptions();
+    res.clearCookie("accessToken", options);
+    res.clearCookie("refreshToken", options);
+
+    const authReq: AuthenticatedRequest = req;
+    const result = await LogoutService({
+      userId: authReq.user?.sub,
       authorizationHeader: req.headers.authorization,
       refreshToken: req.cookies?.refreshToken,
     });
 
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-    });
-
-    res.status(result.statusCode).json({
-      success: result.statusCode >= 200 && result.statusCode < 300,
-      message: result.message,
-      data: result.data,
-      errors: result.errors,
-    });
+    return this.respond(res, result);
   };
 }
+
+export default new AuthController();

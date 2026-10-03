@@ -1,7 +1,5 @@
-import { Prisma } from "@prisma/client";
-import prisma from "../config/database";
-
-export type Tx = typeof prisma | Prisma.TransactionClient;
+import { Prisma, UserRole } from "@prisma/client";
+import prisma from "@/config/database";
 
 const userSummarySelect = {
   id: true,
@@ -21,28 +19,25 @@ export class MessagingRepository {
 
   async findConversations(
     args: Prisma.ConversationFindManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.conversation.findMany(args);
+    return prisma.conversation.findMany(args);
   }
 
   async createConversation(
     args: Prisma.ConversationCreateArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.conversation.create(args);
+    return prisma.conversation.create(args);
   }
 
   async deleteConversations(
     args: Prisma.ConversationDeleteManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.conversation.deleteMany(args);
+    return prisma.conversation.deleteMany(args);
   }
 
   /** Gym conversations with ordered messages + sender summaries. */
-  async listByGymWithMessages(gymId: string, tx: Tx = prisma) {
-    return tx.conversation.findMany({
+  async listByGymWithMessages(gymId: string) {
+    return prisma.conversation.findMany({
       where: { gymId },
       include: {
         messages: {
@@ -56,43 +51,41 @@ export class MessagingRepository {
   async createGymConversation(
     gymId: string,
     type: string,
-    tx: Tx = prisma,
   ) {
-    return tx.conversation.create({ data: { gymId, type } });
+    return prisma.conversation.create({ data: { gymId, type } });
   }
 
-  async deleteConversationsByGymIds(gymIds: string[], tx: Tx = prisma) {
-    return tx.conversation.deleteMany({ where: { gymId: { in: gymIds } } });
+  async deleteConversationsByGymIds(gymIds: string[]) {
+    return prisma.conversation.deleteMany({ where: { gymId: { in: gymIds } } });
   }
 
   // ─── Message ────────────────────────────────────────────────────────────────
 
-  async findMessages(args: Prisma.MessageFindManyArgs, tx: Tx = prisma) {
-    return tx.message.findMany(args);
+  async findMessages(args: Prisma.MessageFindManyArgs) {
+    return prisma.message.findMany(args);
   }
 
-  async createMessage(args: Prisma.MessageCreateArgs, tx: Tx = prisma) {
-    return tx.message.create(args);
+  async createMessage(args: Prisma.MessageCreateArgs) {
+    return prisma.message.create(args);
   }
 
-  async deleteMessages(args: Prisma.MessageDeleteManyArgs, tx: Tx = prisma) {
-    return tx.message.deleteMany(args);
+  async deleteMessages(args: Prisma.MessageDeleteManyArgs) {
+    return prisma.message.deleteMany(args);
   }
 
   async createGymMessage(
     data: Prisma.MessageCreateArgs["data"],
-    tx: Tx = prisma,
   ) {
-    return tx.message.create({ data });
+    return prisma.message.create({ data });
   }
 
-  async deleteBySender(senderId: string, tx: Tx = prisma) {
-    return tx.message.deleteMany({ where: { senderId } });
+  async deleteBySender(senderId: string) {
+    return prisma.message.deleteMany({ where: { senderId } });
   }
 
   /** Remove messages belonging to conversations of these gyms. */
-  async deleteMessagesByGymIds(gymIds: string[], tx: Tx = prisma) {
-    return tx.message.deleteMany({
+  async deleteMessagesByGymIds(gymIds: string[]) {
+    return prisma.message.deleteMany({
       where: { conversation: { gymId: { in: gymIds } } },
     });
   }
@@ -101,35 +94,31 @@ export class MessagingRepository {
 
   async findDirectMessages(
     args: Prisma.DirectMessageFindManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.directMessage.findMany(args);
+    return prisma.directMessage.findMany(args);
   }
 
   async createDirectMessage(
     args: Prisma.DirectMessageCreateArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.directMessage.create(args);
+    return prisma.directMessage.create(args);
   }
 
   async updateDirectMessages(
     args: Prisma.DirectMessageUpdateManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.directMessage.updateMany(args);
+    return prisma.directMessage.updateMany(args);
   }
 
   async deleteDirectMessages(
     args: Prisma.DirectMessageDeleteManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.directMessage.deleteMany(args);
+    return prisma.directMessage.deleteMany(args);
   }
 
   /** Every message sent or received by this user (conversation list). */
-  async listForUser(userId: string, tx: Tx = prisma) {
-    return tx.directMessage.findMany({
+  async listForUser(userId: string) {
+    return prisma.directMessage.findMany({
       where: { OR: [{ senderId: userId }, { receiverId: userId }] },
       orderBy: { createdAt: "desc" },
       include: {
@@ -140,8 +129,8 @@ export class MessagingRepository {
   }
 
   /** One 1:1 thread, oldest first. */
-  async listThread(userId: string, peerId: string, tx: Tx = prisma) {
-    return tx.directMessage.findMany({
+  async listThread(userId: string, peerId: string) {
+    return prisma.directMessage.findMany({
       where: {
         OR: [
           { senderId: userId, receiverId: peerId },
@@ -156,9 +145,8 @@ export class MessagingRepository {
   async countUnreadGroupedBySender(
     receiverId: string,
     senderIds: string[],
-    tx: Tx = prisma,
   ) {
-    return tx.directMessage.groupBy({
+    return prisma.directMessage.groupBy({
       by: ["senderId"],
       where: {
         receiverId,
@@ -170,20 +158,20 @@ export class MessagingRepository {
   }
 
   /** Mark inbound messages from a peer as read. */
-  async markReadFrom(senderId: string, receiverId: string, tx: Tx = prisma) {
-    return tx.directMessage.updateMany({
+  async markReadFrom(senderId: string, receiverId: string) {
+    return prisma.directMessage.updateMany({
       where: { senderId, receiverId, readAt: null },
       data: { readAt: new Date() },
     });
   }
 
-  async createDirect(data: Prisma.DirectMessageCreateArgs["data"], tx: Tx = prisma) {
-    return tx.directMessage.create({ data });
+  async createDirect(data: Prisma.DirectMessageCreateArgs["data"]) {
+    return prisma.directMessage.create({ data });
   }
 
   /** Delete every message between two users (thread deletion). */
-  async deleteBetween(userId: string, peerId: string, tx: Tx = prisma) {
-    return tx.directMessage.deleteMany({
+  async deleteBetween(userId: string, peerId: string) {
+    return prisma.directMessage.deleteMany({
       where: {
         OR: [
           { senderId: userId, receiverId: peerId },
@@ -193,36 +181,35 @@ export class MessagingRepository {
     });
   }
 
-  async deleteByUser(userId: string, tx: Tx = prisma) {
-    return tx.directMessage.deleteMany({
+  async deleteByUser(userId: string) {
+    return prisma.directMessage.deleteMany({
       where: { OR: [{ senderId: userId }, { receiverId: userId }] },
     });
   }
 
   // ─── DirectConversationHide ─────────────────────────────────────────────────
 
-  async findHides(args: Prisma.DirectConversationHideFindManyArgs, tx: Tx = prisma) {
-    return tx.directConversationHide.findMany(args);
+  async findHides(args: Prisma.DirectConversationHideFindManyArgs) {
+    return prisma.directConversationHide.findMany(args);
   }
 
   async deleteHides(
     args: Prisma.DirectConversationHideDeleteManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.directConversationHide.deleteMany(args);
+    return prisma.directConversationHide.deleteMany(args);
   }
 
   /** Hidden peer ids for this user (soft-hidden DM threads). */
-  async listHiddenPeerIds(userId: string, tx: Tx = prisma) {
-    return tx.directConversationHide.findMany({
+  async listHiddenPeerIds(userId: string) {
+    return prisma.directConversationHide.findMany({
       where: { userId },
       select: { peerId: true },
     });
   }
 
   /** Remove the hide rows on both sides of a pair. */
-  async unhideBetween(userId: string, peerId: string, tx: Tx = prisma) {
-    return tx.directConversationHide.deleteMany({
+  async unhideBetween(userId: string, peerId: string) {
+    return prisma.directConversationHide.deleteMany({
       where: {
         OR: [
           { userId, peerId },
@@ -232,7 +219,78 @@ export class MessagingRepository {
     });
   }
 
-  async deleteHidesByUser(userId: string, tx: Tx = prisma) {
-    return tx.directConversationHide.deleteMany({ where: { userId } });
+  async deleteHidesByUser(userId: string) {
+    return prisma.directConversationHide.deleteMany({ where: { userId } });
+  }
+
+  // ─── Multi-write atomic units (former controller $transaction blocks) ──────
+
+  /**
+   * Unhide the thread for BOTH sides, insert the message and re-read the
+   * sender summary in ONE atomic unit (was prisma.$transaction in
+   * messaging.controller sendDirectMessage).
+   * New activity brings the conversation back for both participants.
+   */
+  async sendDirectMessageWithUnhide(args: {
+    senderId: string;
+    receiverId: string;
+    senderRole: UserRole;
+    receiverRole: UserRole;
+    text: string;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      // New activity brings the thread back for both participants
+      await tx.directConversationHide.deleteMany({
+        where: {
+          OR: [
+            { userId: args.senderId, peerId: args.receiverId },
+            { userId: args.receiverId, peerId: args.senderId },
+          ],
+        },
+      });
+
+      const message = await tx.directMessage.create({
+        data: {
+          senderId: args.senderId,
+          receiverId: args.receiverId,
+          senderRole: args.senderRole,
+          receiverRole: args.receiverRole,
+          text: args.text,
+        },
+      });
+
+      const sender = await tx.user.findUnique({
+        where: { id: args.senderId },
+        select: userSummarySelect,
+      });
+
+      return { message, sender };
+    });
+  }
+
+  /**
+   * Permanently delete a thread for BOTH sides: drop every message between the
+   * pair and both hide rows in ONE atomic unit (was prisma.$transaction([...])
+   * in messaging.controller hideConversation).
+   */
+  async deleteThreadBetween(userId: string, peerId: string) {
+    return prisma.$transaction([
+      prisma.directMessage.deleteMany({
+        where: {
+          OR: [
+            { senderId: userId, receiverId: peerId },
+            { senderId: peerId, receiverId: userId },
+          ],
+        },
+      }),
+      prisma.directConversationHide.deleteMany({
+        where: {
+          OR: [
+            { userId, peerId },
+            { userId: peerId, peerId: userId },
+          ],
+        },
+      }),
+    ]);
   }
 }

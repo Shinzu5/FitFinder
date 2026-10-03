@@ -1,14 +1,6 @@
 /** Server source of truth for owner platform subscription plans. */
 
-export type OwnerPlanId = "starter" | "standard" | "popular";
-
-export interface OwnerPlanDefinition {
-  id: OwnerPlanId;
-  name: string;
-  price: number;
-  /** Access duration in whole days */
-  days: number;
-}
+import type { OwnerPlanDefinition } from "@/types/subscription";
 
 export const OWNER_PLANS: OwnerPlanDefinition[] = [
   { id: "starter", name: "Starter", price: 200, days: 15 },

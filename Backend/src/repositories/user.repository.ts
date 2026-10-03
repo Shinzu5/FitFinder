@@ -1,8 +1,5 @@
 import { Prisma } from "@prisma/client";
-import prisma from "../config/database";
-
-/** Client usable for this repository: shared client or an interactive-transaction client. */
-export type Tx = typeof prisma | Prisma.TransactionClient;
+import prisma from "@/config/database";
 
 export class UserRepository {
   async findById(id: string) {
@@ -89,86 +86,86 @@ export class UserRepository {
 
   // ─── Added methods (additive — existing signatures above untouched) ─────────
 
-  async findMany(args: Prisma.UserFindManyArgs, tx: Tx = prisma) {
-    return tx.user.findMany(args);
+  async findMany(args: Prisma.UserFindManyArgs) {
+    return prisma.user.findMany(args);
   }
 
-  async findFirst(args: Prisma.UserFindFirstArgs, tx: Tx = prisma) {
-    return tx.user.findFirst(args);
+  async findFirst(args: Prisma.UserFindFirstArgs) {
+    return prisma.user.findFirst(args);
   }
 
-  async findUnique(args: Prisma.UserFindUniqueArgs, tx: Tx = prisma) {
-    return tx.user.findUnique(args);
+  async findUnique(args: Prisma.UserFindUniqueArgs) {
+    return prisma.user.findUnique(args);
   }
 
-  async count(args: Prisma.UserCountArgs = {}, tx: Tx = prisma) {
-    return tx.user.count(args);
+  async count(args: Prisma.UserCountArgs = {}) {
+    return prisma.user.count(args);
   }
 
-  async updateMany(args: Prisma.UserUpdateManyArgs, tx: Tx = prisma) {
-    return tx.user.updateMany(args);
+  async updateMany(args: Prisma.UserUpdateManyArgs) {
+    return prisma.user.updateMany(args);
   }
 
   /** Create with full Prisma input (e.g. owner-created CLERK with clerkGymId). */
-  async createUser(data: Prisma.UserCreateArgs["data"], tx: Tx = prisma) {
-    return tx.user.create({ data });
+  async createUser(data: Prisma.UserCreateArgs["data"]) {
+    return prisma.user.create({ data });
   }
 
   /** Permanent account deletion (admin / gym-owner purge). */
-  async deleteUser(args: Prisma.UserDeleteArgs, tx: Tx = prisma) {
-    return tx.user.delete(args);
+  async deleteUser(args: Prisma.UserDeleteArgs) {
+    return prisma.user.delete(args);
   }
 
   // ─── Clerk / gym lookups ────────────────────────────────────────────────────
 
   /** Role + assigned gym for a staff member (clerk/attendance gym resolution). */
-  async findRoleAndClerkGymById(id: string, tx: Tx = prisma) {
-    return tx.user.findUnique({
+  async findRoleAndClerkGymById(id: string) {
+    return prisma.user.findUnique({
       where: { id },
       select: { role: true, clerkGymId: true },
     });
   }
 
   /** Clerk ids assigned to a gym (realtime staff fan-out, staff lists). */
-  async findClerkIdsByGym(gymId: string, tx: Tx = prisma) {
-    return tx.user.findMany({
+  async findClerkIdsByGym(gymId: string) {
+    return prisma.user.findMany({
       where: { clerkGymId: gymId, role: "CLERK" },
       select: { id: true },
     });
   }
 
   /** Any user ids assigned to a gym (walk-in approvals fan-out). */
-  async findStaffIdsByGym(gymId: string, tx: Tx = prisma) {
-    return tx.user.findMany({
+  async findStaffIdsByGym(gymId: string) {
+    return prisma.user.findMany({
       where: { clerkGymId: gymId },
       select: { id: true },
     });
   }
 
   /** Clerk ids assigned to any of these gyms (delete-gym kick list). */
-  async findClerkIdsByGymIds(gymIds: string[], tx: Tx = prisma) {
-    return tx.user.findMany({
+  async findClerkIdsByGymIds(gymIds: string[]) {
+    return prisma.user.findMany({
       where: { clerkGymId: { in: gymIds }, role: "CLERK" },
       select: { id: true },
     });
   }
 
   /** Clerk accounts with contact info for a gym (owner staff list). */
-  async findStaffByGym(gymId: string, tx: Tx = prisma) {
-    return tx.user.findMany({
+  async findStaffByGym(gymId: string) {
+    return prisma.user.findMany({
       where: { clerkGymId: gymId, role: "CLERK" },
       select: { id: true, fullName: true, email: true },
     });
   }
 
   /** Every platform admin id (admin realtime fan-out). */
-  async findAdminIds(tx: Tx = prisma) {
-    return tx.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+  async findAdminIds() {
+    return prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
   }
 
   /** Detach clerks from deleted gyms (and revoke their refresh tokens). */
-  async detachClerksByGymIds(gymIds: string[], tx: Tx = prisma) {
-    return tx.user.updateMany({
+  async detachClerksByGymIds(gymIds: string[]) {
+    return prisma.user.updateMany({
       where: { clerkGymId: { in: gymIds }, role: "CLERK" },
       data: { clerkGymId: null, refreshToken: null },
     });
@@ -176,19 +173,30 @@ export class UserRepository {
 
   // ─── Active gym (session context) ──────────────────────────────────────────
 
-  async setActiveGym(userId: string, gymId: string | null, tx: Tx = prisma) {
-    return tx.user.update({
+  async setActiveGym(userId: string, gymId: string | null) {
+    return prisma.user.update({
       where: { id: userId },
       data: { activeGymId: gymId },
     });
   }
 
-  async clearActiveGym(userId: string, tx: Tx = prisma) {
-    return this.setActiveGym(userId, null, tx);
+  async clearActiveGym(userId: string) {
+    return this.setActiveGym(userId, null);
   }
 
-  async findActiveGymId(userId: string, tx: Tx = prisma) {
-    return tx.user.findUnique({
+  /**
+   * Clear active gym session when that gym's membership expired
+   * (multi-gym safe — only clears when the session points at this gym).
+   */
+  async clearActiveGymForGym(userId: string, gymId: string) {
+    return prisma.user.updateMany({
+      where: { id: userId, activeGymId: gymId },
+      data: { activeGymId: null },
+    });
+  }
+
+  async findActiveGymId(userId: string) {
+    return prisma.user.findUnique({
       where: { id: userId },
       select: { activeGymId: true },
     });
@@ -197,8 +205,8 @@ export class UserRepository {
   // ─── Shared projections ─────────────────────────────────────────────────────
 
   /** Inbox user summary (search + conversation participants). */
-  async findSummaryById(id: string, tx: Tx = prisma) {
-    return tx.user.findUnique({
+  async findSummaryById(id: string) {
+    return prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -210,16 +218,59 @@ export class UserRepository {
     });
   }
 
+  /** Inbox user search (messaging): name/email match, alphabetized, capped at 20. */
+  async searchByQuery(excludeUserId: string, query: string) {
+    return prisma.user.findMany({
+      where: {
+        id: { not: excludeUserId },
+        OR: [
+          { fullName: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+      },
+      take: 20,
+      orderBy: { fullName: "asc" },
+    });
+  }
+
   /** Minimal id + role probe (DM recipient / messaging permission checks). */
-  async findIdAndRoleById(id: string, tx: Tx = prisma) {
-    return tx.user.findUnique({ where: { id }, select: { id: true, role: true } });
+  async findIdAndRoleById(id: string) {
+    return prisma.user.findUnique({ where: { id }, select: { id: true, role: true } });
   }
 
   /** Name + email for approval / membership payloads. */
-  async findContactById(id: string, tx: Tx = prisma) {
-    return tx.user.findUnique({
+  async findContactById(id: string) {
+    return prisma.user.findUnique({
       where: { id },
       select: { fullName: true, email: true },
     });
+  }
+
+  /** id + name + email (join-gym payload). */
+  async findContactSummaryById(id: string) {
+    return prisma.user.findUnique({
+      where: { id },
+      select: { id: true, fullName: true, email: true },
+    });
+  }
+
+  /** Actor probe: role + display name (registration / daily closing labels). */
+  async findRoleAndFullNameById(id: string) {
+    return prisma.user.findUnique({
+      where: { id },
+      select: { role: true, fullName: true },
+    });
+  }
+
+  /** Role probe only (clerk register / complete walk-in). */
+  async findRoleById(id: string) {
+    return prisma.user.findUnique({ where: { id }, select: { role: true } });
   }
 }

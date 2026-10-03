@@ -1,5 +1,15 @@
-import jwt, { SignOptions } from "jsonwebtoken";
-import { env } from "../config/env";
+/**
+ * Legacy JWT entry — delegates to the canonical single-secret `lib/jwt`
+ * so untouched call sites (socket, gym/payment controllers) keep working.
+ * New code must import from `@/lib/jwt` directly.
+ */
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyAccessToken as verifyAccess,
+  verifyRefreshToken as verifyRefresh,
+} from "@/lib/jwt";
+import { TokenExpiry } from "@/types/auth";
 
 interface TokenPayload {
   userId: string;
@@ -7,21 +17,21 @@ interface TokenPayload {
 }
 
 export function generateAccessToken(payload: TokenPayload): string {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-    expiresIn: env.JWT_ACCESS_EXPIRES_IN,
-  } as SignOptions);
+  return signAccessToken(payload.userId, payload.role, TokenExpiry.ACCESS_TOKEN_EXPIRES);
 }
 
 export function generateRefreshToken(payload: TokenPayload): string {
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN,
-  } as SignOptions);
+  return signRefreshToken(payload.userId, payload.role, TokenExpiry.REFRESH_TOKEN_EXPIRES);
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET) as TokenPayload;
+  const payload = verifyAccess(token);
+  if (!payload) throw new Error("Invalid or expired token");
+  return { userId: payload.sub, role: payload.role };
 }
 
 export function verifyRefreshToken(token: string): TokenPayload {
-  return jwt.verify(token, env.JWT_REFRESH_SECRET) as TokenPayload;
+  const payload = verifyRefresh(token);
+  if (!payload) throw new Error("Invalid or expired token");
+  return { userId: payload.sub, role: payload.role };
 }

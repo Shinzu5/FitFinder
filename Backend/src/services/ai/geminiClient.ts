@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI, type Content } from "@google/generative-ai";
-import { env } from "../../config/env";
-
-export type GeminiTurn = { role: "user" | "model"; text: string };
+import { env } from "@/config/env";
+import type { GeminiTurn } from "@/types/ai";
 
 const SHORT_SYSTEM = `FitFinder fitness coach. Topics only: fitness, gym, workouts, exercise, bodybuilding, weight loss/gain, muscle, nutrition, meals, general supplements, healthy lifestyle, equipment, injury prevention, recovery, cardio, strength, flexibility. Refuse other topics briefly. No medical diagnosis/meds. Match the user's language. Be concise.`;
 

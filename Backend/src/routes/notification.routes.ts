@@ -1,19 +1,14 @@
 import { Router } from "express";
-import { authenticate } from "../middlewares/auth";
-import {
-  getNotifications,
-  getUnreadCount,
-  readAllNotifications,
-  readNotification,
-} from "../controllers/notification.controller";
+import { authenticate } from "@/middlewares/auth";
+import NotificationController from "@/controllers/notification.controller";
 
 const router = Router();
 
 router.use(authenticate);
 
-router.get("/", getNotifications);
-router.get("/unread-count", getUnreadCount);
-router.post("/read-all", readAllNotifications);
-router.post("/:id/read", readNotification);
+router.get("/", NotificationController.getNotifications);
+router.get("/unread-count", NotificationController.getUnreadCount);
+router.post("/read-all", NotificationController.readAllNotifications);
+router.post("/:id/read", NotificationController.readNotification);
 
 export default router;

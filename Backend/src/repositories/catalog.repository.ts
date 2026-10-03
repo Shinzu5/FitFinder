@@ -1,7 +1,5 @@
 import { Prisma } from "@prisma/client";
-import prisma from "../config/database";
-
-export type Tx = typeof prisma | Prisma.TransactionClient;
+import prisma from "@/config/database";
 
 /**
  * Catalog CRUD for Coach, Equipment, Exercise and ShopProduct.
@@ -10,190 +8,189 @@ export type Tx = typeof prisma | Prisma.TransactionClient;
 export class CatalogRepository {
   // ─── Coach ──────────────────────────────────────────────────────────────────
 
-  async findCoaches(args: Prisma.CoachFindManyArgs, tx: Tx = prisma) {
-    return tx.coach.findMany(args);
+  async findCoaches(args: Prisma.CoachFindManyArgs) {
+    return prisma.coach.findMany(args);
   }
 
-  async findCoach(args: Prisma.CoachFindFirstArgs, tx: Tx = prisma) {
-    return tx.coach.findFirst(args);
+  async findCoach(args: Prisma.CoachFindFirstArgs) {
+    return prisma.coach.findFirst(args);
   }
 
-  async createCoach(args: Prisma.CoachCreateArgs, tx: Tx = prisma) {
-    return tx.coach.create(args);
+  async createCoach(args: Prisma.CoachCreateArgs) {
+    return prisma.coach.create(args);
   }
 
-  async updateCoach(args: Prisma.CoachUpdateArgs, tx: Tx = prisma) {
-    return tx.coach.update(args);
+  async updateCoach(args: Prisma.CoachUpdateArgs) {
+    return prisma.coach.update(args);
   }
 
-  async deleteCoach(args: Prisma.CoachDeleteArgs, tx: Tx = prisma) {
-    return tx.coach.delete(args);
+  async deleteCoach(args: Prisma.CoachDeleteArgs) {
+    return prisma.coach.delete(args);
   }
 
-  async deleteCoaches(args: Prisma.CoachDeleteManyArgs, tx: Tx = prisma) {
-    return tx.coach.deleteMany(args);
+  async deleteCoaches(args: Prisma.CoachDeleteManyArgs) {
+    return prisma.coach.deleteMany(args);
   }
 
   /** Coaches for a gym (owner list + realtime broadcast). */
-  async listByGym(gymId: string, tx: Tx = prisma) {
-    return tx.coach.findMany({
+  async listByGym(gymId: string) {
+    return prisma.coach.findMany({
       where: { gymId },
       orderBy: { createdAt: "asc" },
     });
   }
 
   /** Coach scoped to a gym (owner update / remove). */
-  async findByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.coach.findFirst({ where: { id, gymId } });
+  async findByIdAndGym(id: string, gymId: string) {
+    return prisma.coach.findFirst({ where: { id, gymId } });
   }
 
   /** Bookable coach lookup (join-gym, GCash payment, activation). */
-  async findActiveByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.coach.findFirst({
+  async findActiveByIdAndGym(id: string, gymId: string) {
+    return prisma.coach.findFirst({
       where: { id, gymId, isActive: true },
       select: { id: true },
     });
   }
 
   /** Bookable coach lookup returning the full row (session price/name). */
-  async findActiveCoachByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.coach.findFirst({ where: { id, gymId, isActive: true } });
+  async findActiveCoachByIdAndGym(id: string, gymId: string) {
+    return prisma.coach.findFirst({ where: { id, gymId, isActive: true } });
   }
 
-  async deleteCoachById(id: string, tx: Tx = prisma) {
-    return tx.coach.delete({ where: { id } });
+  async deleteCoachById(id: string) {
+    return prisma.coach.delete({ where: { id } });
   }
 
   // ─── Equipment ──────────────────────────────────────────────────────────────
 
-  async findEquipment(args: Prisma.EquipmentFindManyArgs, tx: Tx = prisma) {
-    return tx.equipment.findMany(args);
+  async findEquipment(args: Prisma.EquipmentFindManyArgs) {
+    return prisma.equipment.findMany(args);
   }
 
-  async findEquipmentItem(args: Prisma.EquipmentFindFirstArgs, tx: Tx = prisma) {
-    return tx.equipment.findFirst(args);
+  async findEquipmentItem(args: Prisma.EquipmentFindFirstArgs) {
+    return prisma.equipment.findFirst(args);
   }
 
-  async createEquipment(args: Prisma.EquipmentCreateArgs, tx: Tx = prisma) {
-    return tx.equipment.create(args);
+  async createEquipment(args: Prisma.EquipmentCreateArgs) {
+    return prisma.equipment.create(args);
   }
 
-  async updateEquipment(args: Prisma.EquipmentUpdateArgs, tx: Tx = prisma) {
-    return tx.equipment.update(args);
+  async updateEquipment(args: Prisma.EquipmentUpdateArgs) {
+    return prisma.equipment.update(args);
   }
 
-  async deleteEquipment(args: Prisma.EquipmentDeleteArgs, tx: Tx = prisma) {
-    return tx.equipment.delete(args);
+  async deleteEquipment(args: Prisma.EquipmentDeleteArgs) {
+    return prisma.equipment.delete(args);
   }
 
-  async deleteEquipmentMany(args: Prisma.EquipmentDeleteManyArgs, tx: Tx = prisma) {
-    return tx.equipment.deleteMany(args);
+  async deleteEquipmentMany(args: Prisma.EquipmentDeleteManyArgs) {
+    return prisma.equipment.deleteMany(args);
   }
 
   /** Equipment for a gym (owner list). */
-  async listEquipmentByGym(gymId: string, tx: Tx = prisma) {
-    return tx.equipment.findMany({ where: { gymId } });
+  async listEquipmentByGym(gymId: string) {
+    return prisma.equipment.findMany({ where: { gymId } });
   }
 
   /** Equipment for a gym sorted by name (gymer page + realtime). */
-  async listEquipmentByGymOrdered(gymId: string, tx: Tx = prisma) {
-    return tx.equipment.findMany({ where: { gymId }, orderBy: { name: "asc" } });
+  async listEquipmentByGymOrdered(gymId: string) {
+    return prisma.equipment.findMany({ where: { gymId }, orderBy: { name: "asc" } });
   }
 
-  async findEquipmentByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.equipment.findFirst({ where: { id, gymId } });
+  async findEquipmentByIdAndGym(id: string, gymId: string) {
+    return prisma.equipment.findFirst({ where: { id, gymId } });
   }
 
-  async deleteEquipmentById(id: string, tx: Tx = prisma) {
-    return tx.equipment.delete({ where: { id } });
+  async deleteEquipmentById(id: string) {
+    return prisma.equipment.delete({ where: { id } });
   }
 
   // ─── Exercise ───────────────────────────────────────────────────────────────
 
-  async findExercises(args: Prisma.ExerciseFindManyArgs, tx: Tx = prisma) {
-    return tx.exercise.findMany(args);
+  async findExercises(args: Prisma.ExerciseFindManyArgs) {
+    return prisma.exercise.findMany(args);
   }
 
-  async findExercise(args: Prisma.ExerciseFindFirstArgs, tx: Tx = prisma) {
-    return tx.exercise.findFirst(args);
+  async findExercise(args: Prisma.ExerciseFindFirstArgs) {
+    return prisma.exercise.findFirst(args);
   }
 
-  async createExercise(args: Prisma.ExerciseCreateArgs, tx: Tx = prisma) {
-    return tx.exercise.create(args);
+  async createExercise(args: Prisma.ExerciseCreateArgs) {
+    return prisma.exercise.create(args);
   }
 
-  async updateExercise(args: Prisma.ExerciseUpdateArgs, tx: Tx = prisma) {
-    return tx.exercise.update(args);
+  async updateExercise(args: Prisma.ExerciseUpdateArgs) {
+    return prisma.exercise.update(args);
   }
 
-  async deleteExercise(args: Prisma.ExerciseDeleteArgs, tx: Tx = prisma) {
-    return tx.exercise.delete(args);
+  async deleteExercise(args: Prisma.ExerciseDeleteArgs) {
+    return prisma.exercise.delete(args);
   }
 
-  async deleteExercises(args: Prisma.ExerciseDeleteManyArgs, tx: Tx = prisma) {
-    return tx.exercise.deleteMany(args);
+  async deleteExercises(args: Prisma.ExerciseDeleteManyArgs) {
+    return prisma.exercise.deleteMany(args);
   }
 
   /** Exercises for a gym (owner list). */
-  async listByGymUnordered(gymId: string, tx: Tx = prisma) {
-    return tx.exercise.findMany({ where: { gymId } });
+  async listByGymUnordered(gymId: string) {
+    return prisma.exercise.findMany({ where: { gymId } });
   }
 
   /** Member-only exercises for a gym (newest first). */
-  async listByGymRecent(gymId: string, tx: Tx = prisma) {
-    return tx.exercise.findMany({ where: { gymId }, orderBy: { createdAt: "desc" } });
+  async listByGymRecent(gymId: string) {
+    return prisma.exercise.findMany({ where: { gymId }, orderBy: { createdAt: "desc" } });
   }
 
-  async findExerciseByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.exercise.findFirst({ where: { id, gymId } });
+  async findExerciseByIdAndGym(id: string, gymId: string) {
+    return prisma.exercise.findFirst({ where: { id, gymId } });
   }
 
-  async deleteExerciseById(id: string, tx: Tx = prisma) {
-    return tx.exercise.delete({ where: { id } });
+  async deleteExerciseById(id: string) {
+    return prisma.exercise.delete({ where: { id } });
   }
 
   // ─── ShopProduct ────────────────────────────────────────────────────────────
 
-  async findShopProducts(args: Prisma.ShopProductFindManyArgs, tx: Tx = prisma) {
-    return tx.shopProduct.findMany(args);
+  async findShopProducts(args: Prisma.ShopProductFindManyArgs) {
+    return prisma.shopProduct.findMany(args);
   }
 
-  async findShopProduct(args: Prisma.ShopProductFindFirstArgs, tx: Tx = prisma) {
-    return tx.shopProduct.findFirst(args);
+  async findShopProduct(args: Prisma.ShopProductFindFirstArgs) {
+    return prisma.shopProduct.findFirst(args);
   }
 
-  async createShopProduct(args: Prisma.ShopProductCreateArgs, tx: Tx = prisma) {
-    return tx.shopProduct.create(args);
+  async createShopProduct(args: Prisma.ShopProductCreateArgs) {
+    return prisma.shopProduct.create(args);
   }
 
-  async updateShopProduct(args: Prisma.ShopProductUpdateArgs, tx: Tx = prisma) {
-    return tx.shopProduct.update(args);
+  async updateShopProduct(args: Prisma.ShopProductUpdateArgs) {
+    return prisma.shopProduct.update(args);
   }
 
-  async deleteShopProduct(args: Prisma.ShopProductDeleteArgs, tx: Tx = prisma) {
-    return tx.shopProduct.delete(args);
+  async deleteShopProduct(args: Prisma.ShopProductDeleteArgs) {
+    return prisma.shopProduct.delete(args);
   }
 
   async deleteShopProducts(
     args: Prisma.ShopProductDeleteManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.shopProduct.deleteMany(args);
+    return prisma.shopProduct.deleteMany(args);
   }
 
   /** Products for a gym, newest first (owner + gymer + realtime). */
-  async listShopByGym(gymId: string, tx: Tx = prisma) {
-    return tx.shopProduct.findMany({
+  async listShopByGym(gymId: string) {
+    return prisma.shopProduct.findMany({
       where: { gymId },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  async findShopByIdAndGym(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.shopProduct.findFirst({ where: { id, gymId } });
+  async findShopByIdAndGym(id: string, gymId: string) {
+    return prisma.shopProduct.findFirst({ where: { id, gymId } });
   }
 
-  async deleteShopById(id: string, tx: Tx = prisma) {
-    return tx.shopProduct.delete({ where: { id } });
+  async deleteShopById(id: string) {
+    return prisma.shopProduct.delete({ where: { id } });
   }
 }

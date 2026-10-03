@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
-import prisma from "../config/database";
-
-export type Tx = typeof prisma | Prisma.TransactionClient;
+import prisma from "@/config/database";
+import { addOwnerPlanDays, computeOwnerPlanValidUntil } from "@/utils/ownerPlan";
 
 /**
  * OwnerSubscription + XenditPayment queries backing the owner-plan lifecycle:
@@ -15,70 +14,62 @@ export class SubscriptionRepository {
 
   async findSubscriptions(
     args: Prisma.OwnerSubscriptionFindManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.findMany(args);
+    return prisma.ownerSubscription.findMany(args);
   }
 
   async findSubscription(
     args: Prisma.OwnerSubscriptionFindFirstArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.findFirst(args);
+    return prisma.ownerSubscription.findFirst(args);
   }
 
   async findSubscriptionById(
     args: Prisma.OwnerSubscriptionFindUniqueArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.findUnique(args);
+    return prisma.ownerSubscription.findUnique(args);
   }
 
   async countSubscriptions(
     args: Prisma.OwnerSubscriptionCountArgs = {},
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.count(args);
+    return prisma.ownerSubscription.count(args);
   }
 
   async createSubscription(
     args: Prisma.OwnerSubscriptionCreateArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.create(args);
+    return prisma.ownerSubscription.create(args);
   }
 
   async updateSubscription(
     args: Prisma.OwnerSubscriptionUpdateArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.update(args);
+    return prisma.ownerSubscription.update(args);
   }
 
   async updateSubscriptions(
     args: Prisma.OwnerSubscriptionUpdateManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.updateMany(args);
+    return prisma.ownerSubscription.updateMany(args);
   }
 
   async deleteSubscription(
     args: Prisma.OwnerSubscriptionDeleteArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.delete(args);
+    return prisma.ownerSubscription.delete(args);
   }
 
   // ─── ensure / dedupe / backfill / sync / heal / link ───────────────────────
 
   /** Idempotent lookup: exactly one row per referenceNo. */
-  async findByReferenceNo(referenceNo: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findUnique({ where: { referenceNo } });
+  async findByReferenceNo(referenceNo: string) {
+    return prisma.ownerSubscription.findUnique({ where: { referenceNo } });
   }
 
   /** Latest subscription for a referenceNo (status poll / payment activation). */
-  async findLatestByReferenceNo(referenceNo: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findFirst({
+  async findLatestByReferenceNo(referenceNo: string) {
+    return prisma.ownerSubscription.findFirst({
       where: { referenceNo },
       orderBy: { paidAt: "desc" },
     });
@@ -86,30 +77,100 @@ export class SubscriptionRepository {
 
   async createOwnerSubscription(
     data: Prisma.OwnerSubscriptionCreateArgs["data"],
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.create({ data });
+    return prisma.ownerSubscription.create({ data });
+  }
+
+  /**
+   * Idempotent ensure unit for a successful payment (was prisma.$transaction
+   * in ensure-owner-subscription-from-payment): re-check the referenceNo to
+   * close the race window, resolve the owner's newest gym, create the row and
+   * promote the payer to OWNER — one atomic round of queries.
+   */
+  async createSubscriptionIfAbsent(args: {
+    ownerId: string;
+    referenceNo: string;
+    planId: string;
+    planName: string;
+    price: number;
+    durationDays: number;
+    paidAt: Date;
+    stack: boolean;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      // Re-check inside transaction to close the race window
+      const raced = await tx.ownerSubscription.findUnique({
+        where: { referenceNo: args.referenceNo },
+      });
+      if (raced) return { row: raced, created: false as const };
+
+      let validUntil: Date;
+      if (args.stack) {
+        const latestActive = await tx.ownerSubscription.findFirst({
+          where: {
+            ownerId: args.ownerId,
+            validUntil: { gt: new Date() },
+          },
+          orderBy: { validUntil: "desc" },
+        });
+        validUntil = computeOwnerPlanValidUntil(
+          args.durationDays,
+          latestActive?.validUntil,
+        );
+      } else {
+        validUntil = addOwnerPlanDays(args.paidAt, args.durationDays);
+      }
+
+      const gym = await tx.gym.findFirst({
+        where: { ownerId: args.ownerId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+
+      const row = await tx.ownerSubscription.create({
+        data: {
+          ownerId: args.ownerId,
+          gymId: gym?.id ?? null,
+          planId: args.planId,
+          planName: args.planName,
+          price: args.price,
+          // Store duration in days (column name `months` kept for schema compatibility)
+          months: args.durationDays,
+          referenceNo: args.referenceNo,
+          method: "Xendit",
+          paidAt: args.paidAt,
+          validUntil,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: args.ownerId },
+        data: { role: "OWNER" },
+      });
+
+      return { row, created: true as const };
+    });
   }
 
   /** Newest still-valid subscription for an owner (stacked validUntil calc). */
-  async findLiveByOwner(ownerId: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findFirst({
+  async findLiveByOwner(ownerId: string) {
+    return prisma.ownerSubscription.findFirst({
       where: { ownerId, validUntil: { gt: new Date() } },
       orderBy: { validUntil: "desc" },
     });
   }
 
   /** All rows sharing a referenceNo, earliest first (dedupe keeps the first). */
-  async listByReferenceNo(referenceNo: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listByReferenceNo(referenceNo: string) {
+    return prisma.ownerSubscription.findMany({
       where: { referenceNo },
       orderBy: { paidAt: "asc" },
     });
   }
 
   /** Reference numbers appearing more than once (legacy race leftovers). */
-  async findDuplicateReferenceNos(tx: Tx = prisma) {
-    return tx.$queryRaw<Array<{ referenceNo: string; cnt: bigint }>>`
+  async findDuplicateReferenceNos() {
+    return prisma.$queryRaw<Array<{ referenceNo: string; cnt: bigint }>>`
       SELECT "referenceNo", COUNT(*)::bigint AS cnt
       FROM owner_subscriptions
       GROUP BY "referenceNo"
@@ -117,27 +178,27 @@ export class SubscriptionRepository {
     `;
   }
 
-  async deleteSubscriptionById(id: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.delete({ where: { id } });
+  async deleteSubscriptionById(id: string) {
+    return prisma.ownerSubscription.delete({ where: { id } });
   }
 
   /** Rows scanned by the duration heal job (paidAt + months + validUntil). */
-  async listForDurationHeal(tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listForDurationHeal() {
+    return prisma.ownerSubscription.findMany({
       select: { id: true, paidAt: true, months: true, validUntil: true },
     });
   }
 
-  async updateValidUntil(id: string, validUntil: Date, tx: Tx = prisma) {
-    return tx.ownerSubscription.update({
+  async updateValidUntil(id: string, validUntil: Date) {
+    return prisma.ownerSubscription.update({
       where: { id },
       data: { validUntil },
     });
   }
 
   /** Subscriptions not yet linked to a gym. */
-  async listUnlinked(tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listUnlinked() {
+    return prisma.ownerSubscription.findMany({
       where: { gymId: null },
       select: { id: true, ownerId: true },
     });
@@ -147,53 +208,66 @@ export class SubscriptionRepository {
     subscriptionId: string,
     ownerId: string,
     gymId: string,
-    tx: Tx = prisma,
   ) {
-    return tx.ownerSubscription.updateMany({
+    return prisma.ownerSubscription.updateMany({
       where: { id: subscriptionId, ownerId },
       data: { gymId },
     });
   }
 
-  async updateGymById(id: string, gymId: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.update({ where: { id }, data: { gymId } });
+  async updateGymById(id: string, gymId: string) {
+    return prisma.ownerSubscription.update({ where: { id }, data: { gymId } });
   }
 
   /** Owner's most recent purchase (link on gym create). */
-  async findLatestByOwner(ownerId: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findFirst({
+  async findLatestByOwner(ownerId: string) {
+    return prisma.ownerSubscription.findFirst({
       where: { ownerId },
       orderBy: { paidAt: "desc" },
     });
   }
 
   /** Latest purchase per owner for a set of owners (admin lists). */
-  async listByOwnerIds(ownerIds: string[], tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listByOwnerIds(ownerIds: string[]) {
+    return prisma.ownerSubscription.findMany({
       where: { ownerId: { in: ownerIds } },
       orderBy: { paidAt: "desc" },
     });
   }
 
   /** Subscriptions ordered by paidAt desc (dashboard status maps). */
-  async listAllByPaidAtDesc(tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listAllByPaidAtDesc() {
+    return prisma.ownerSubscription.findMany({
       orderBy: { paidAt: "desc" },
       select: { ownerId: true, validUntil: true },
     });
   }
 
+  /** Every subscription ordered by validUntil desc (owner plan countdown jobs). */
+  async listAllByValidUntilDesc() {
+    return prisma.ownerSubscription.findMany({
+      orderBy: { validUntil: "desc" },
+      select: {
+        id: true,
+        ownerId: true,
+        gymId: true,
+        planName: true,
+        validUntil: true,
+      },
+    });
+  }
+
   /** Subscriptions for these payment references, with gym name (revenue rows). */
-  async listByReferenceNos(referenceNos: string[], tx: Tx = prisma) {
-    return tx.ownerSubscription.findMany({
+  async listByReferenceNos(referenceNos: string[]) {
+    return prisma.ownerSubscription.findMany({
       where: { referenceNo: { in: referenceNos } },
       include: { gym: { select: { name: true } } },
     });
   }
 
   /** Owner's subscription with gym (my-plan). */
-  async findLatestByOwnerWithGym(ownerId: string, tx: Tx = prisma) {
-    return tx.ownerSubscription.findFirst({
+  async findLatestByOwnerWithGym(ownerId: string) {
+    return prisma.ownerSubscription.findFirst({
       where: { ownerId },
       orderBy: { paidAt: "desc" },
       include: { gym: { select: { id: true, name: true } } },
@@ -201,8 +275,8 @@ export class SubscriptionRepository {
   }
 
   /** Expire every subscription of an owner when their gym is deleted. */
-  async expireAllByOwner(ownerId: string, validUntil: Date, tx: Tx = prisma) {
-    return tx.ownerSubscription.updateMany({
+  async expireAllByOwner(ownerId: string, validUntil: Date) {
+    return prisma.ownerSubscription.updateMany({
       where: { ownerId },
       data: { gymId: null, validUntil },
     });
@@ -210,48 +284,45 @@ export class SubscriptionRepository {
 
   // ─── XenditPayment: generic passthroughs ────────────────────────────────────
 
-  async findPayments(args: Prisma.XenditPaymentFindManyArgs, tx: Tx = prisma) {
-    return tx.xenditPayment.findMany(args);
+  async findPayments(args: Prisma.XenditPaymentFindManyArgs) {
+    return prisma.xenditPayment.findMany(args);
   }
 
-  async findPayment(args: Prisma.XenditPaymentFindFirstArgs, tx: Tx = prisma) {
-    return tx.xenditPayment.findFirst(args);
+  async findPayment(args: Prisma.XenditPaymentFindFirstArgs) {
+    return prisma.xenditPayment.findFirst(args);
   }
 
   async aggregatePayments(
     args: Prisma.XenditPaymentAggregateArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.xenditPayment.aggregate(args);
+    return prisma.xenditPayment.aggregate(args);
   }
 
-  async createPayment(args: Prisma.XenditPaymentCreateArgs, tx: Tx = prisma) {
-    return tx.xenditPayment.create(args);
+  async createPayment(args: Prisma.XenditPaymentCreateArgs) {
+    return prisma.xenditPayment.create(args);
   }
 
-  async updatePayment(args: Prisma.XenditPaymentUpdateArgs, tx: Tx = prisma) {
-    return tx.xenditPayment.update(args);
+  async updatePayment(args: Prisma.XenditPaymentUpdateArgs) {
+    return prisma.xenditPayment.update(args);
   }
 
   async deletePayments(
     args: Prisma.XenditPaymentDeleteManyArgs,
-    tx: Tx = prisma,
   ) {
-    return tx.xenditPayment.deleteMany(args);
+    return prisma.xenditPayment.deleteMany(args);
   }
 
   // ─── XenditPayment: named queries ───────────────────────────────────────────
 
   async createXenditPayment(
     data: Prisma.XenditPaymentCreateArgs["data"],
-    tx: Tx = prisma,
   ) {
-    return tx.xenditPayment.create({ data });
+    return prisma.xenditPayment.create({ data });
   }
 
   /** Status poll lookup: id, Xendit id or referenceId. */
-  async findByIdOrXenditIdOrReference(id: string, tx: Tx = prisma) {
-    return tx.xenditPayment.findFirst({
+  async findByIdOrXenditIdOrReference(id: string) {
+    return prisma.xenditPayment.findFirst({
       where: { OR: [{ id }, { xenditPaymentId: id }, { referenceId: id }] },
     });
   }
@@ -260,9 +331,8 @@ export class SubscriptionRepository {
   async findByXenditIdOrReference(
     xenditPaymentId: string,
     referenceId: string,
-    tx: Tx = prisma,
   ) {
-    return tx.xenditPayment.findFirst({
+    return prisma.xenditPayment.findFirst({
       where: { OR: [{ xenditPaymentId }, { referenceId }] },
     });
   }
@@ -270,30 +340,29 @@ export class SubscriptionRepository {
   async updateStatusById(
     id: string,
     data: Record<string, unknown>,
-    tx: Tx = prisma,
   ) {
-    return tx.xenditPayment.update({ where: { id }, data });
+    return prisma.xenditPayment.update({ where: { id }, data });
   }
 
   /** SUCCEEDED owner-plan payments, oldest first (backfill). */
-  async listSucceededSubscriptionsAsc(tx: Tx = prisma) {
-    return tx.xenditPayment.findMany({
+  async listSucceededSubscriptionsAsc() {
+    return prisma.xenditPayment.findMany({
       where: { type: "SUBSCRIPTION", status: "SUCCEEDED" },
       orderBy: { paidAt: "asc" },
     });
   }
 
   /** SUCCEEDED owner-plan payments, newest first (sync latest per owner). */
-  async listSucceededSubscriptionsDesc(tx: Tx = prisma) {
-    return tx.xenditPayment.findMany({
+  async listSucceededSubscriptionsDesc() {
+    return prisma.xenditPayment.findMany({
       where: { type: "SUBSCRIPTION", status: "SUCCEEDED" },
       orderBy: { paidAt: "desc" },
     });
   }
 
   /** SUCCEEDED owner-plan payments with payer info (admin revenue table). */
-  async listSucceededWithUser(tx: Tx = prisma) {
-    return tx.xenditPayment.findMany({
+  async listSucceededWithUser() {
+    return prisma.xenditPayment.findMany({
       where: { type: "SUBSCRIPTION", status: "SUCCEEDED" },
       include: {
         user: { select: { id: true, fullName: true, email: true } },
@@ -303,8 +372,8 @@ export class SubscriptionRepository {
   }
 
   /** Revenue chart points since a date (oldest first). */
-  async listSucceededSince(from: Date, tx: Tx = prisma) {
-    return tx.xenditPayment.findMany({
+  async listSucceededSince(from: Date) {
+    return prisma.xenditPayment.findMany({
       where: {
         type: "SUBSCRIPTION",
         status: "SUCCEEDED",
@@ -316,8 +385,8 @@ export class SubscriptionRepository {
   }
 
   /** Total SUCCEEDED owner-plan revenue. */
-  async sumSucceededRevenue(tx: Tx = prisma) {
-    const agg = await tx.xenditPayment.aggregate({
+  async sumSucceededRevenue() {
+    const agg = await prisma.xenditPayment.aggregate({
       where: { type: "SUBSCRIPTION", status: "SUCCEEDED" },
       _sum: { amount: true },
     });
@@ -325,8 +394,8 @@ export class SubscriptionRepository {
   }
 
   /** SUCCEEDED owner-plan revenue since a date (today / week / month). */
-  async sumSucceededRevenueSince(from: Date, tx: Tx = prisma) {
-    const agg = await tx.xenditPayment.aggregate({
+  async sumSucceededRevenueSince(from: Date) {
+    const agg = await prisma.xenditPayment.aggregate({
       where: {
         type: "SUBSCRIPTION",
         status: "SUCCEEDED",
@@ -338,8 +407,8 @@ export class SubscriptionRepository {
   }
 
   /** SUCCEEDED owner-plan revenue between two dates (previous month). */
-  async sumSucceededRevenueBetween(from: Date, to: Date, tx: Tx = prisma) {
-    const agg = await tx.xenditPayment.aggregate({
+  async sumSucceededRevenueBetween(from: Date, to: Date) {
+    const agg = await prisma.xenditPayment.aggregate({
       where: {
         type: "SUBSCRIPTION",
         status: "SUCCEEDED",
@@ -351,8 +420,8 @@ export class SubscriptionRepository {
   }
 
   /** Owners with a pending owner-plan payment (no subscription row yet). */
-  async listPendingSubscriptionOwners(ownerIds: string[], tx: Tx = prisma) {
-    return tx.xenditPayment.findMany({
+  async listPendingSubscriptionOwners(ownerIds: string[]) {
+    return prisma.xenditPayment.findMany({
       where: {
         userId: { in: ownerIds },
         status: "PENDING",
@@ -363,7 +432,7 @@ export class SubscriptionRepository {
     });
   }
 
-  async deletePaymentsByUser(userId: string, tx: Tx = prisma) {
-    return tx.xenditPayment.deleteMany({ where: { userId } });
+  async deletePaymentsByUser(userId: string) {
+    return prisma.xenditPayment.deleteMany({ where: { userId } });
   }
 }
