@@ -79,6 +79,12 @@ export const useOwnerMembersStore = create<OwnerMembersState>((set, get) => ({
         return;
       }
     } catch (error) {
+      // Pre-gym onboarding or role transition (USER demote) returns 404/403 — empty, not an error.
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      if (status === 404 || status === 403) {
+        set({ members: [], loading: false });
+        return;
+      }
       console.error("Failed to fetch members:", error);
     }
     set({ loading: false });

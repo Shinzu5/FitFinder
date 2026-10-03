@@ -100,7 +100,9 @@ export class OwnerController {
   public getMembers = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const gym = await GetOwnerGymService(req.userId!);
-      if (!gym) { sendError(res, "No gym found", 404); return; }
+      // Pre-gym onboarding (plan paid, gym not created yet) is an empty list, not an error.
+      // Prevents 404 console spam on /create-gym/done via global useMembersListSync.
+      if (!gym) { sendSuccess(res, [], "No gym yet"); return; }
 
       const members = await ListGymMembersService(gym.id);
       sendSuccess(res, members);
@@ -567,7 +569,8 @@ export class OwnerController {
   public getStaff = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const gym = await GetOwnerGymService(req.userId!);
-      if (!gym) { sendError(res, "No gym found", 404); return; }
+      // Pre-gym onboarding (plan paid, gym not created yet) is an empty list, not an error.
+      if (!gym) { sendSuccess(res, [], "No gym yet"); return; }
 
       const clerks = await ListOwnerStaffService(gym.id);
 
