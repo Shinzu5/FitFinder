@@ -49,7 +49,7 @@ export function ClerkSidebar({ mobileOpen = false, onClose }: ClerkSidebarProps)
       {CLERK_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||
-          (item.href !== "/dashboard/clerk" && pathname.startsWith(item.href));
+          (item.href !== "/dashboard/clerk" && pathname.startsWith(`${item.href}/`));
         const Icon = item.icon;
 
         return (

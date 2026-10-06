@@ -147,9 +147,12 @@ export class GymRepository {
     });
   }
 
-  /** Every gym id owned by this owner (admin delete scope). */
+  /** Every gym id + name owned by this owner (admin delete scope). */
   async findIdsByOwner(ownerId: string) {
-    return prisma.gym.findMany({ where: { ownerId }, select: { id: true } });
+    return prisma.gym.findMany({
+      where: { ownerId },
+      select: { id: true, name: true },
+    });
   }
 
   /** ACTIVE gyms with ownerId (admin dashboard). */

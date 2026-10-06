@@ -10,7 +10,8 @@ export type NotificationType =
   | "MEMBERSHIP_RENEWED"
   | "MEMBERSHIP_REQUEST_NEW"
   | "MEMBERSHIP_RENEWAL_REQUEST"
-  | "PAYMENT_CONFIRMATION";
+  | "PAYMENT_CONFIRMATION"
+  | "GYM_DELETED_BY_ADMIN";
 
 export interface CreateNotificationInput {
   userId: string;

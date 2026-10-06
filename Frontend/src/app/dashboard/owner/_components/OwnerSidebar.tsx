@@ -64,7 +64,7 @@ export function OwnerSidebar({ mobileOpen = false, onClose }: OwnerSidebarProps)
       {OWNER_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||
-          (item.href !== "/dashboard/owner" && pathname.startsWith(item.href));
+          (item.href !== "/dashboard/owner" && pathname.startsWith(`${item.href}/`));
         const Icon = item.icon;
 
         return (

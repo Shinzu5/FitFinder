@@ -10,7 +10,7 @@ function getPageTitle(pathname: string) {
   const match = ADMIN_NAV_ITEMS.find(
     (item) =>
       pathname === item.href ||
-      (item.href !== "/dashboard/admin" && pathname.startsWith(item.href)),
+      (item.href !== "/dashboard/admin" && pathname.startsWith(`${item.href}/`)),
   );
   return match?.label ?? "Overview";
 }

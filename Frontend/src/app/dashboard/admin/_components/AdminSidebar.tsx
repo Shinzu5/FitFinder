@@ -37,7 +37,7 @@ export function AdminSidebar({ mobileOpen = false, onClose }: AdminSidebarProps)
       {ADMIN_NAV_ITEMS.map((item) => {
         const active =
           pathname === item.href ||
-          (item.href !== "/dashboard/admin" && pathname.startsWith(item.href));
+          (item.href !== "/dashboard/admin" && pathname.startsWith(`${item.href}/`));
         const Icon = item.icon;
 
         return (

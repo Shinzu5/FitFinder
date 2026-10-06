@@ -56,7 +56,10 @@ export class NotificationController {
   public readAllNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const updated = await MarkAllNotificationsReadService(req.userId!);
-      sendSuccess(res, { updated, unreadCount: 0 });
+      // Re-query like readNotification does — never report a hardcoded 0 that a
+      // later unread-count fetch would immediately contradict.
+      const unreadCount = await GetUnreadNotificationCountService(req.userId!);
+      sendSuccess(res, { updated, unreadCount });
     } catch (error) {
       console.error("Mark all notifications read error:", error);
       sendError(res, "Failed to mark notifications as read", 500);

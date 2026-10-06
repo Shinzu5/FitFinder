@@ -2,6 +2,7 @@ import { GymRepository } from "@/repositories/gym.repository";
 import { MembershipRepository } from "@/repositories/membership.repository";
 import { UserRepository } from "@/repositories/user.repository";
 import { KickUserSessionService as kickUserSession } from "@/services/admin";
+import { CreateNotificationService as createNotification } from "@/services/notification/create-notification-service";
 import {
   EmitAdminGymsUpdatedService as emitAdminGymsUpdated,
   EmitAdminUsersUpdatedService as emitAdminUsersUpdated,
@@ -41,10 +42,14 @@ export async function DeleteGymService(opts: {
   const isAdminDelete = opts.actorRole === "ADMIN";
 
   // Resolve gym scope before the transaction so we can kick sessions first
+  // (names are captured here because rows are gone after the cascade).
   const gymsToRemove = isAdminDelete
     ? await gymRepository.findIdsByOwner(ownerId)
-    : [{ id: gym.id }];
+    : [{ id: gym.id, name: gym.name }];
   const gymIds = gymsToRemove.map((g) => g.id);
+  const gymNames = gymsToRemove
+    .map((g) => ("name" in g && typeof g.name === "string" ? g.name : ""))
+    .filter(Boolean);
 
   const [clerks, memberships] = await Promise.all([
     userRepository.findClerkIdsByGymIds(gymIds),
@@ -71,6 +76,36 @@ export async function DeleteGymService(opts: {
 
   for (const userId of memberUserIds) {
     emitMembershipUpdated(userId);
+  }
+
+  // Admin deleted the gym — persist a notification so the owner sees it in
+  // the NotificationBell even after demote + redirect. Never fail the delete
+  // when the notification write fails.
+  if (isAdminDelete && opts.actorId !== ownerId) {
+    const quoted =
+      gymNames.length > 0
+        ? gymNames.map((n) => `"${n}"`).join(", ")
+        : "your gym";
+    const body =
+      gymNames.length > 1
+        ? `Your gyms ${quoted} were deleted by an admin. You can create a new gym once you have an active owner plan.`
+        : `Your gym ${quoted} was deleted by an admin. You can create a new gym once you have an active owner plan.`;
+    try {
+      await createNotification({
+        userId: ownerId,
+        type: "GYM_DELETED_BY_ADMIN",
+        title: "Gym deleted by admin",
+        body,
+        data: {
+          gymIds,
+          gymNames,
+          reason: "admin_deleted_gym",
+          deletedBy: opts.actorId,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to notify owner of admin gym delete:", error);
+    }
   }
 
   // Owner UI must drop every cached clerk/plan/coach/etc. immediately

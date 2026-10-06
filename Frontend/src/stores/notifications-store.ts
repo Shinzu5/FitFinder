@@ -21,11 +21,13 @@ interface NotificationsState {
   unreadCount: number;
   loading: boolean;
   markingAll: boolean;
+  markAllError: string | null;
   open: boolean;
   fetchNotifications: () => Promise<void>;
   fetchUnreadCount: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  clearMarkAllError: () => void;
   setOpen: (open: boolean) => void;
   prependFromSocket: (notification: AppNotification, unreadCount: number) => void;
   setUnreadCount: (unreadCount: number) => void;
@@ -55,6 +57,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   unreadCount: 0,
   loading: false,
   markingAll: false,
+  markAllError: null,
   open: false,
 
   fetchNotifications: async () => {
@@ -125,7 +128,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     if (get().markingAll) return;
     // Invalidate any in-flight list fetch so it can't restore stale unread state.
     fetchGen++;
-    set({ markingAll: true });
+    set({ markingAll: true, markAllError: null });
     set((state) => ({
       unreadCount: 0,
       notifications: state.notifications.map((n) => ({
@@ -136,20 +139,33 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     }));
     try {
       const { data } = await api.post("/notifications/read-all");
+      if (data?.success === false) {
+        throw new Error(data?.message || "Failed to mark notifications as read");
+      }
       const unreadCount = Number(data?.data?.unreadCount);
       set({
         unreadCount: Number.isNaN(unreadCount) ? 0 : unreadCount,
-        markingAll: false,
       });
-      // No background refetch here: server response is authoritative.
+      if (!Number.isNaN(unreadCount) && unreadCount > 0) {
+        // New notification(s) landed mid-request — pull the fresh list so the
+        // badge and dots agree instead of looking like "it didn't work".
+        void get().fetchNotifications();
+      }
+      // No background refetch otherwise: server response is authoritative.
       // A refetch could resurrect the badge with a stale in-flight count.
     } catch (error) {
       console.error("Mark all read failed:", error);
-      set({ markingAll: false });
+      set({
+        markAllError: "Couldn't mark notifications as read. Please try again.",
+      });
       void get().fetchUnreadCount();
       void get().fetchNotifications();
+    } finally {
+      set({ markingAll: false });
     }
   },
+
+  clearMarkAllError: () => set({ markAllError: null }),
 
   setOpen: (open) => {
     set({ open });
@@ -191,6 +207,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       unreadCount: 0,
       loading: false,
       markingAll: false,
+      markAllError: null,
       open: false,
     }),
 }));

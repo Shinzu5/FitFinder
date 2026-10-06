@@ -8,7 +8,7 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 function getPageTitle(pathname: string) {
   const match = OWNER_NAV_ITEMS.find(
-    (item) => pathname === item.href || (item.href !== "/dashboard/owner" && pathname.startsWith(item.href)),
+    (item) => pathname === item.href || (item.href !== "/dashboard/owner" && pathname.startsWith(`${item.href}/`)),
   );
   return match?.label ?? "Overview";
 }

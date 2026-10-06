@@ -28,6 +28,7 @@ export function NotificationBell({
     unreadCount,
     loading,
     markingAll,
+    markAllError,
     fetchNotifications,
     markRead,
     markAllRead,
@@ -79,6 +80,12 @@ export function NotificationBell({
               </button>
             ) : null}
           </div>
+
+          {markAllError ? (
+            <p className="border-b border-white/10 px-3 py-2 text-xs text-red-400">
+              {markAllError}
+            </p>
+          ) : null}
 
           <div className="max-h-80 overflow-y-auto">
             {loading && notifications.length === 0 ? (
