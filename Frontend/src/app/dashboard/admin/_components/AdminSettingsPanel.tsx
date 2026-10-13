@@ -8,9 +8,7 @@ import { useAdminSettingsStore } from "@/stores/admin-settings-store";
 export function AdminSettingsPanel() {
   const platformName = useAdminSettingsStore((state) => state.platformName);
   const supportEmail = useAdminSettingsStore((state) => state.supportEmail);
-  const maintenanceMode = useAdminSettingsStore((state) => state.maintenanceMode);
   const saveGeneralSettings = useAdminSettingsStore((state) => state.saveGeneralSettings);
-  const toggleMaintenanceMode = useAdminSettingsStore((state) => state.toggleMaintenanceMode);
 
   const [name, setName] = useState(platformName);
   const [email, setEmail] = useState(supportEmail);
@@ -72,31 +70,6 @@ export function AdminSettingsPanel() {
             ) : null}
           </div>
         </form>
-      </section>
-
-      <section className="rounded-2xl border border-zinc-800/70 bg-[#0e0e10] p-6">
-        <h2 className="text-lg font-bold text-red-400">Danger Zone</h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          Maintenance mode disables access for all users except administrators.
-        </p>
-
-        <button
-          type="button"
-          onClick={toggleMaintenanceMode}
-          className={`mt-5 rounded-xl border px-5 py-2.5 text-sm font-semibold transition ${
-            maintenanceMode
-              ? "border-red-500/60 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-              : "border-red-500/50 text-red-400 hover:bg-red-500/10"
-          }`}
-        >
-          {maintenanceMode ? "Disable Maintenance Mode" : "Enable Maintenance Mode"}
-        </button>
-
-        {maintenanceMode ? (
-          <p className="mt-3 text-xs font-medium text-red-400/90">
-            Maintenance mode is currently active.
-          </p>
-        ) : null}
       </section>
     </div>
   );
