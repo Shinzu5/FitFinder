@@ -176,7 +176,15 @@ export const useUserAiStore = create<UserAiState>()(
         });
 
         try {
-          const { data } = await api.post("/user/ai-chat", { message: trimmed });
+          // Send recent client history so short follow-ups stay in context
+          // even when the server restarted (its memory is in-process only).
+          const historyPayload = get()
+            .conversations[activeId!].messages.slice(-16)
+            .map((m) => ({ role: m.sender, text: m.text }));
+          const { data } = await api.post("/user/ai-chat", {
+            message: trimmed,
+            history: historyPayload,
+          });
           if (data.success && data.data?.reply) {
             const reply: AiChatMessage = {
               id: `ai-assistant-${Date.now()}`,

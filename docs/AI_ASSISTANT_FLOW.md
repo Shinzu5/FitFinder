@@ -20,7 +20,9 @@ generateAiResponse(message)  ← ai.service.ts
     │     if off-topic → polite refusal string (no Gemini call)
     │
     ├─ 3) Gemini (GoogleGenerativeAI)
-    │     model: env.GEMINI_MODEL
+    │     model: env.GEMINI_MODEL (default gemini-flash-lite-latest;
+    │     retries transient 429/500/503, then falls back to
+    │     gemini-flash-latest → gemini-3-flash-preview)
     │     systemInstruction: FitFinder fitness assistant prompt
     │     temperature / max tokens from env
     │

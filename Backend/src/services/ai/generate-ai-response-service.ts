@@ -4,7 +4,10 @@ import {
   outOfScopeMessage,
 } from "@/services/ai/languageDetector";
 import { validatePrompt } from "@/services/ai/promptValidator";
-import { generateWithGemini } from "@/services/ai/geminiClient";
+import {
+  generateWithGemini,
+  isOverloadedGeminiError,
+} from "@/services/ai/geminiClient";
 import type { ChatTurn, GeminiTurn } from "@/types/ai";
 import { AiChatHistory } from "@/services/ai/ai-history-state";
 
@@ -106,6 +109,13 @@ export async function GenerateAiResponseService(
     return reply;
   } catch (error) {
     console.error("Gemini API Error:", error);
+    if (isOverloadedGeminiError(error)) {
+      return lang === "fil"
+        ? "Mataas ang demand sa AI ngayon. Subukan ulit pagkalipas ng ilang segundo."
+        : lang === "ceb"
+          ? "Taas ang demand sa AI karon. Sulayi pag-usab pagkalipas sa pipila ka segundo."
+          : "The AI is busy right now (high demand). Please try again in a few seconds.";
+    }
     return lang === "fil"
       ? "May problema sa koneksyon. Subukan ulit mamaya."
       : lang === "ceb"

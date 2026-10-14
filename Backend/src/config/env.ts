@@ -36,7 +36,7 @@ export const ENV = {
   ALLOWED_ORIGINS: allowedOrigins,
   BACKEND_URL: process.env.BACKEND_URL || `http://localhost:${process.env.PORT || "5000"}`,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-flash-latest",
+  GEMINI_MODEL: process.env.GEMINI_MODEL || "gemini-flash-lite-latest",
   AI_TEMPERATURE: parseFloat(process.env.AI_TEMPERATURE || "0.7"),
   AI_MAX_TOKENS: parseInt(process.env.AI_MAX_TOKENS || "1024", 10),
   XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || "",

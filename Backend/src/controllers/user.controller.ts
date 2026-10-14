@@ -233,8 +233,14 @@ export class UserController {
     try {
       const { message, history } = req.body;
 
-      if (!message || typeof message !== "string") {
-        sendError(res, "Invalid message", 400);
+      if (typeof message !== "string" || !message.trim()) {
+        sendError(res, "Message is required", 400);
+        return;
+      }
+
+      // Generous abuse guard only — normal questions are far shorter.
+      if (message.trim().length > 2000) {
+        sendError(res, "Message is too long (max 2000 characters)", 400);
         return;
       }
 
