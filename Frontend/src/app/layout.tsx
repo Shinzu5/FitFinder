@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   title: "Fit Finder — The Operating System for Gyms",
   description:
     "A complete multi-tenant SaaS platform for gym owners, coaches, and members.",
+  icons: {
+    icon: "/LOGO.png",
+  },
 };
 
 export default function RootLayout({

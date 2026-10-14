@@ -13,9 +13,9 @@ function getClient(): GoogleGenerativeAI | null {
   return client;
 }
 
-/** Fallbacks for when the configured model is retired (404). Overload /
+/** Fallbacks when the configured model is retired (404). Overload /
  * rate-limit errors (429/503) fail fast instead of chaining slow retries. */
-const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3-flash-preview"];
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
 
 function statusOf(error: unknown): number | undefined {
   const status = (error as { status?: unknown })?.status;

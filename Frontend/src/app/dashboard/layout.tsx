@@ -46,16 +46,11 @@ const NAV_ITEMS = [
 
 const CREATE_GYM_PREFIX = "/dashboard/user/create-gym";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { user, role, logout, isAuthenticated, hasHydrated, syncSessionFromServer } =
-    useAuthStore();
-  const fetchOwnedGymStatus = useCreateGymStore((state) => state.fetchOwnedGymStatus);
-  const [ready, setReady] = useState(false);
-  const gatedRoleRef = useRef<string | null>(null);
-  const sessionSyncedRef = useRef(false);
-
+/**
+ * Live sockets + realtime list syncs. Rendered only after the startup token
+ * refresh so nothing fires with a stale access token (the 401 console burst).
+ */
+function DashboardLiveSync() {
   useDirectMessageSocket();
   useNotificationsSocket();
   useOwnerRepurchaseSync();
@@ -63,19 +58,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useMemberGymContentSync();
   useSalesSync();
   useAttendanceSync();
+  useAccountDeletedSync();
+  return null;
+}
 
-  // Reconcile persisted localStorage role with Neon after hydrate / login
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { user, role, logout, isAuthenticated, hasHydrated, refreshSession, syncSessionFromServer } =
+    useAuthStore();
+  const fetchOwnedGymStatus = useCreateGymStore((state) => state.fetchOwnedGymStatus);
+  const [ready, setReady] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const gatedRoleRef = useRef<string | null>(null);
+  const sessionSyncedRef = useRef(false);
+
+  // Startup session: one proactive refresh on dashboard entry so the
+  // access-gate + all child fetches fire with a fresh token instead of
+  // each bursting a 401-then-retry. Never blocks on failure — stale-token
+  // callers still self-heal via the api.ts interceptor.
   useEffect(() => {
     if (!hasHydrated) return;
     if (!isAuthenticated) {
       sessionSyncedRef.current = false;
+      setSessionReady(false);
       return;
     }
     if (sessionSyncedRef.current) return;
     sessionSyncedRef.current = true;
-    void syncSessionFromServer();
-  }, [hasHydrated, isAuthenticated, syncSessionFromServer]);
-  useAccountDeletedSync();
+    void (async () => {
+      await refreshSession();
+      await syncSessionFromServer();
+      setSessionReady(true);
+    })();
+  }, [hasHydrated, isAuthenticated, refreshSession, syncSessionFromServer]);
 
   useEffect(() => {
     if (useAuthStore.persist.hasHydrated()) {
@@ -84,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   useEffect(() => {
-    if (!hasHydrated) return;
+    if (!hasHydrated || !sessionReady) return;
 
     let cancelled = false;
 
@@ -218,7 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => {
       cancelled = true;
     };
-  }, [hasHydrated, isAuthenticated, pathname, role, router, fetchOwnedGymStatus]);
+  }, [hasHydrated, sessionReady, isAuthenticated, pathname, role, router, fetchOwnedGymStatus]);
 
   // Rare ownership check — not every 2s (that caused Neon 500s + tab lag)
   useEffect(() => {
@@ -261,7 +277,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Clerks: never rewrite role to Gymer. Hard removal uses ACCOUNT_DELETED / socket logout.
   // Soft dashboard 404/5xx/network blips must not change the Neon role in localStorage.
 
-  if (!hasHydrated || !ready || !user || !role) {
+  if (!hasHydrated || !sessionReady || !ready || !user || !role) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-white">
         <div className="w-full max-w-sm space-y-3 rounded-2xl border border-white/10 bg-white/5 p-8">
@@ -274,19 +290,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (pathname.startsWith(CREATE_GYM_PREFIX)) {
-    return <>{children}</>;
+    return (
+      <>
+        <DashboardLiveSync />
+        {children}
+      </>
+    );
   }
 
   if (role === "USER") {
-    return <UserShell pathname={pathname}>{children}</UserShell>;
+    return (
+      <>
+        <DashboardLiveSync />
+        <UserShell pathname={pathname}>{children}</UserShell>
+      </>
+    );
   }
 
   if (role === "OWNER" || role === "CLERK" || role === "ADMIN") {
-    return <>{children}</>;
+    return (
+      <>
+        <DashboardLiveSync />
+        {children}
+      </>
+    );
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
+      <DashboardLiveSync />
       <header className="border-b border-white/10 px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <p className="font-semibold text-[#FFD700]">FitFinder · {role}</p>

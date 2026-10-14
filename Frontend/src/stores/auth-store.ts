@@ -2,7 +2,9 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import axios from "axios";
 import api, { setMemoryAccessToken } from "@/lib/api";
+import { resolveApiBaseUrl } from "@/lib/api-base";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { type UserRole, roleToDashboardPath } from "@/lib/roles";
 
@@ -47,6 +49,13 @@ interface AuthState {
   demoteToUser: () => void;
   /** Overwrite local user/role from Neon via GET /auth/me (source of truth). */
   syncSessionFromServer: () => Promise<UserRole | null>;
+  /**
+   * Proactive POST /auth/refresh using the httpOnly cookie. Call once on
+   * dashboard entry before child fetches fire, so they use a fresh access
+   * token instead of each bursting a 401-then-retry. Returns false when the
+   * refresh cookie is gone (logged out) — callers must not block on it.
+   */
+  refreshSession: () => Promise<boolean>;
   setHasHydrated: (value: boolean) => void;
   updateProfileAvatar: (avatarUrl: string) => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -322,6 +331,71 @@ export const useAuthStore = create<AuthState>()(
           }
           // Transient errors: keep existing session, do not rewrite role
           return get().role;
+        }
+      },
+
+      refreshSession: async () => {
+        try {
+          const { data } = await axios.post(
+            `${resolveApiBaseUrl()}/api/auth/refresh`,
+            {},
+            { withCredentials: true, timeout: 10000 },
+          );
+          const newToken = data?.data?.accessToken as string | undefined;
+          const refreshedUser = data?.data?.user;
+          if (!newToken) return false;
+
+          setMemoryAccessToken(newToken);
+
+          if (typeof window !== "undefined") {
+            try {
+              const authStorage = localStorage.getItem("fitfinder-auth-v2");
+              if (authStorage) {
+                const parsed = JSON.parse(authStorage);
+                parsed.state = {
+                  ...parsed.state,
+                  accessToken: newToken,
+                  isAuthenticated: true,
+                  ...(refreshedUser?.role
+                    ? {
+                        user: {
+                          ...(parsed.state?.user || {}),
+                          id: refreshedUser.id,
+                          fullName: refreshedUser.fullName,
+                          email: refreshedUser.email,
+                          role: refreshedUser.role,
+                          avatarUrl: refreshedUser.avatarUrl || undefined,
+                        },
+                        role: refreshedUser.role,
+                      }
+                    : {}),
+                };
+                localStorage.setItem("fitfinder-auth-v2", JSON.stringify(parsed));
+              }
+            } catch {
+              // Corrupt storage — in-memory + zustand state below still apply
+            }
+          }
+
+          if (refreshedUser?.role) {
+            set({
+              accessToken: newToken,
+              isAuthenticated: true,
+              user: {
+                id: refreshedUser.id,
+                fullName: refreshedUser.fullName,
+                email: refreshedUser.email,
+                role: refreshedUser.role as UserRole,
+                avatarUrl: refreshedUser.avatarUrl || undefined,
+              },
+              role: refreshedUser.role as UserRole,
+            });
+          } else {
+            set({ accessToken: newToken, isAuthenticated: true });
+          }
+          return true;
+        } catch {
+          return false;
         }
       },
 
