@@ -538,7 +538,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-sm text-zinc-500">
                 <li><Link href="/login" className="transition hover:text-white">Log in</Link></li>
                 <li><Link href="/signup" className="transition hover:text-white">Sign up</Link></li>
-                <li><a href="mailto:support@fitfinder.com" className="transition hover:text-white">Contact</a></li>
+                <li><a href="https://mail.google.com/mail/?view=cm&fs=1&to=finderfit16@gmail.com" target="_blank" rel="noopener noreferrer" className="transition hover:text-white">Contact</a></li>
               </ul>
             </div>
             <div>
@@ -550,6 +550,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-zinc-800 pt-8 text-sm text-zinc-600 sm:flex-row">
+            <p>finderfit@gmail.com</p>
             <p>&copy; 2026 Fit Finder. All rights reserved.</p>
             <p>Built by the team of Fit Finder</p>
           </div>
