@@ -35,6 +35,7 @@ interface UserAiState {
   activeConversationId: string | null;
   initializedFor: string | null;
   messages?: AiChatMessage[]; // For migration only
+  sending: boolean;
 
   initialize: (firstName: string) => void;
   createConversation: (firstName: string) => string;
@@ -49,6 +50,7 @@ export const useUserAiStore = create<UserAiState>()(
       conversations: {},
       activeConversationId: null,
       initializedFor: null,
+      sending: false,
 
       initialize: (firstName) => {
         const name = firstName.trim() || "there";
@@ -138,14 +140,16 @@ export const useUserAiStore = create<UserAiState>()(
       },
 
       sendMessage: async (text, firstName) => {
-        const trimmed = text.trim();
+        const trimmed = text.trim().slice(0, 2000);
         if (!trimmed) return;
 
         let activeId = get().activeConversationId;
-        
+
         if (!activeId || !get().conversations[activeId]) {
           activeId = get().createConversation(firstName);
         }
+
+        set({ sending: true });
 
         const userMessage: AiChatMessage = {
           id: `ai-user-${Date.now()}`,
@@ -178,13 +182,19 @@ export const useUserAiStore = create<UserAiState>()(
         try {
           // Send recent client history so short follow-ups stay in context
           // even when the server restarted (its memory is in-process only).
+          // Kept short (last 8, truncated): long history + long questions
+          // is the main cause of slow replies on production.
           const historyPayload = get()
-            .conversations[activeId!].messages.slice(-16)
-            .map((m) => ({ role: m.sender, text: m.text }));
-          const { data } = await api.post("/user/ai-chat", {
-            message: trimmed,
-            history: historyPayload,
-          });
+            .conversations[activeId!].messages.slice(-8)
+            .map((m) => ({ role: m.sender, text: m.text.slice(0, 800) }));
+          const { data } = await api.post(
+            "/user/ai-chat",
+            {
+              message: trimmed,
+              history: historyPayload,
+            },
+            { timeout: 20000 },
+          );
           if (data.success && data.data?.reply) {
             const reply: AiChatMessage = {
               id: `ai-assistant-${Date.now()}`,
@@ -195,6 +205,7 @@ export const useUserAiStore = create<UserAiState>()(
             set((state) => {
               const conv = state.conversations[activeId!];
               return {
+                sending: false,
                 conversations: {
                   ...state.conversations,
                   [activeId!]: {
@@ -207,8 +218,34 @@ export const useUserAiStore = create<UserAiState>()(
             });
             return;
           }
+          set({ sending: false });
         } catch (error) {
           console.error("AI chat error:", error);
+          const code = (error as { code?: string })?.code;
+          if (code === "ECONNABORTED") {
+            const reply: AiChatMessage = {
+              id: `ai-assistant-${Date.now()}`,
+              sender: "assistant",
+              text: "That took too long — the AI is busy right now. Please try again with a shorter question in a few seconds.",
+              createdAt: Date.now(),
+            };
+            set((state) => {
+              const conv = state.conversations[activeId!];
+              if (!conv) return { sending: false };
+              return {
+                sending: false,
+                conversations: {
+                  ...state.conversations,
+                  [activeId!]: {
+                    ...conv,
+                    messages: [...conv.messages, reply],
+                    updatedAt: Date.now()
+                  }
+                }
+              };
+            });
+            return;
+          }
         }
 
         // Fallback
@@ -238,6 +275,12 @@ export const useUserAiStore = create<UserAiState>()(
     {
       name: "fitfinder-user-ai",
       storage: createJSONStorage(() => localStorage),
+      // `sending` is transient UI state — never persist it, or a reload
+      // mid-request would restore a stuck loading indicator.
+      partialize: (state) => {
+        const { sending: _sending, ...rest } = state;
+        return rest;
+      },
     },
   ),
 );

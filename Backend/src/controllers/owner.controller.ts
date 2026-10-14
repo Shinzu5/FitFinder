@@ -171,6 +171,7 @@ export class OwnerController {
         name: req.body.name,
         price: req.body.price,
         durationDays: req.body.durationDays,
+        description: req.body.description,
       });
 
       sendCreated(res, plan, "Plan created");

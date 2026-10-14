@@ -14,15 +14,17 @@ interface PlanFormValues {
   name: string;
   price: string;
   durationDays: string;
+  description: string;
 }
 
-const EMPTY_FORM: PlanFormValues = { name: "", price: "", durationDays: "" };
+const EMPTY_FORM: PlanFormValues = { name: "", price: "", durationDays: "", description: "" };
 
 function planToForm(plan: MembershipPlan): PlanFormValues {
   return {
     name: plan.name,
     price: String(plan.price),
     durationDays: String(plan.durationDays),
+    description: plan.description ?? "",
   };
 }
 
@@ -97,6 +99,16 @@ function NewPlanCard({
             placeholder="30"
           />
         </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        <Label htmlFor="newPlanDescription">Description</Label>
+        <Input
+          id="newPlanDescription"
+          value={form.description}
+          onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+          placeholder="Up to 50 members"
+          maxLength={120}
+        />
       </div>
       {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
       <div className="mt-4 flex items-center justify-end gap-3">
@@ -180,6 +192,12 @@ function PlanCard({
               placeholder="Duration (days)"
             />
           </div>
+          <Input
+            value={form.description}
+            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+            placeholder="Description (e.g. Up to 50 members)"
+            maxLength={120}
+          />
         </div>
         {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
         <div className="mt-4 flex items-center justify-end gap-3">
@@ -204,6 +222,9 @@ function PlanCard({
   return (
     <article className="flex flex-col rounded-2xl border border-white/10 bg-[#141414] p-5">
       <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
+      {plan.description ? (
+        <p className="mt-1 text-sm text-zinc-400">{plan.description}</p>
+      ) : null}
       <p className="mt-2 text-2xl font-bold text-white">{formatPlanPrice(plan.price)}</p>
       <p className="mt-1 text-sm text-zinc-500">{plan.durationDays} days access</p>
       <p className="mt-4 flex items-center gap-2 text-sm text-zinc-400">
@@ -256,6 +277,7 @@ export function MembershipPlansPanel() {
         name: values.name.trim(),
         price: Number(values.price),
         durationDays: Number(values.durationDays),
+        description: values.description.trim(),
       },
     };
   }

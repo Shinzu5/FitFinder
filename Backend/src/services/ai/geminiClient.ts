@@ -13,12 +13,9 @@ function getClient(): GoogleGenerativeAI | null {
   return client;
 }
 
-/** Fallbacks for when the configured model is overloaded (503) or retired (404). */
+/** Fallbacks for when the configured model is retired (404). Overload /
+ * rate-limit errors (429/503) fail fast instead of chaining slow retries. */
 const FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3-flash-preview"];
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function statusOf(error: unknown): number | undefined {
   const status = (error as { status?: unknown })?.status;
@@ -50,8 +47,8 @@ export function toGeminiContents(turns: GeminiTurn[]): Content[] {
 /**
  * Call Gemini with a short system prompt + limited history.
  * Returns null when the API key is missing.
- * Retries transient (429/500/503) errors and falls back to alternate
- * models when the configured one is overloaded or retired.
+ * Single attempt per model with fail-fast on overload (429/503): falls back
+ * to an alternate model only when the configured one is retired (404).
  * Throws the last error when every model fails.
  */
 export async function generateWithGemini(opts: {
@@ -66,16 +63,22 @@ export async function generateWithGemini(opts: {
     ? `${SHORT_SYSTEM}\n${opts.systemExtra}`
     : SHORT_SYSTEM;
 
-  // Keep only recent turns to reduce tokens
-  const recent = opts.history.slice(-8);
+  // Keep only recent turns to reduce tokens (long questions + long history
+  // is the main cause of slow replies on production)
+  const recent = opts.history.slice(-6).map((t) => ({
+    ...t,
+    text: t.text.slice(0, 800),
+  }));
   const contents = toGeminiContents([
     ...recent,
-    { role: "user", text: opts.userMessage },
+    { role: "user", text: opts.userMessage.slice(0, 2000) },
   ]);
 
   const generationConfig = {
     temperature: env.AI_TEMPERATURE,
-    maxOutputTokens: Math.min(env.AI_MAX_TOKENS, 768),
+    // Cap output: long essays are the other half of slow replies.
+    // The system prompt already asks for concise answers.
+    maxOutputTokens: Math.min(env.AI_MAX_TOKENS, 400),
   };
 
   const models = [
@@ -85,33 +88,25 @@ export async function generateWithGemini(opts: {
 
   let lastError: unknown = null;
   for (const modelName of models) {
-    // Primary model gets 2 attempts (transient 503s are common on *-latest
-    // aliases); fallbacks get 1 attempt each to bound total latency.
-    const maxAttempts = modelName === models[0] ? 2 : 1;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction,
-        });
-        const result = await model.generateContent({
-          contents,
-          generationConfig,
-        });
-        const text = result.response.text()?.trim();
-        return text || "I couldn't generate a reply. Please try again.";
-      } catch (error) {
-        lastError = error;
-        console.error(
-          `Gemini API Error (model=${modelName} attempt=${attempt}/${maxAttempts}):`,
-          error,
-        );
-        if (isRetryableGeminiError(error) && attempt < maxAttempts) {
-          await sleep(800 * attempt);
-          continue;
-        }
-        break;
-      }
+    // Single attempt per model — fail fast. Chaining retries across 3 models
+    // turned one slow call into a ~22s hang on production (see ai-chat 21.78s).
+    // Only fall through on 404 (retired model name); overload/rate-limit
+    // (429/503/500) returns the "busy, try again" message immediately.
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction,
+      });
+      const result = await model.generateContent({
+        contents,
+        generationConfig,
+      });
+      const text = result.response.text()?.trim();
+      return text || "I couldn't generate a reply. Please try again.";
+    } catch (error) {
+      lastError = error;
+      console.error(`Gemini API Error (model=${modelName} attempt=1/1):`, error);
+      if (statusOf(error) !== 404) break;
     }
   }
 

@@ -259,6 +259,7 @@ model MembershipPlan {
   name              String
   price             Float
   durationDays      Int
+  description       String          @default("")
   activeSubscribers Int             @default(0)
   /** false = soft-deleted; hidden from new purchases, existing memberships keep access */
   isActive          Boolean         @default(true)

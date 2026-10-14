@@ -9,12 +9,14 @@ export async function CreateMembershipPlanService(input: {
   name: any;
   price: any;
   durationDays: any;
+  description?: any;
 }) {
   const plan = await membershipRepository.createPlanRow({
     gymId: input.gymId,
     name: input.name,
     price: input.price,
     durationDays: input.durationDays,
+    description: typeof input.description === "string" ? input.description.trim() : "",
   });
 
   void emitMembershipPlansUpdated(input.gymId);

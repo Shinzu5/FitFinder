@@ -157,7 +157,6 @@ export function ClerkApprovalsPanel() {
                   <th className="px-5 py-4">Plan</th>
                   <th className="px-5 py-4">Type</th>
                   <th className="px-5 py-4">Method</th>
-                  <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Reviewed</th>
                 </tr>
               </thead>
@@ -171,21 +170,6 @@ export function ClerkApprovalsPanel() {
                     </td>
                     <td className="px-5 py-4 text-zinc-400">
                       {request.paymentMethod || "Walk-in"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                          request.status === "approved"
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                            : "border-red-500/30 bg-red-500/10 text-red-400"
-                        }`}
-                      >
-                        {request.status === "approved"
-                          ? request.consumedAt
-                            ? "Active / Done"
-                            : "Approved"
-                          : "Rejected"}
-                      </span>
                     </td>
                     <td className="px-5 py-4 text-zinc-500">
                       {request.reviewedAt ? formatApprovalTime(request.reviewedAt) : "—"}

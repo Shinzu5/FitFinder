@@ -119,8 +119,9 @@ const ROLES = [
 const PRICING = [
   {
     name: "Starter",
-    price: "Free",
-    period: "",
+    price: "₱200",
+    period: "for 15 days",
+    description: "1 gym · 15-day access · get started fast",
     popular: false,
     features: [
       "Up to 50 members",
@@ -131,9 +132,10 @@ const PRICING = [
   },
   {
     name: "Pro",
-    price: "₱49",
-    period: "/mo",
-    popular: true,
+    price: "₱350",
+    period: "for 30 days",
+    description: "1 gym · 30-day access · full features",
+    popular: false,
     features: [
       "Unlimited members",
       "AI fitness assistant",
@@ -144,9 +146,10 @@ const PRICING = [
   },
   {
     name: "Elite",
-    price: "₱149",
-    period: "/mo",
-    popular: false,
+    price: "₱500",
+    period: "for 60 days",
+    description: "1 gym · 60-day access · best value",
+    popular: true,
     features: [
       "Everything in Pro",
       "Multi-location support",
@@ -477,6 +480,9 @@ export default function LandingPage() {
                   </span>
                 )}
                 <h3 className="text-lg font-semibold text-zinc-300">{plan.name}</h3>
+                {"description" in plan && (plan as { description?: string }).description && (
+                  <p className="mt-1 text-sm text-zinc-400">{(plan as { description?: string }).description}</p>
+                )}
                 <div className="mt-4 flex items-baseline gap-1">
                   <span className="text-4xl font-bold">{plan.price}</span>
                   {plan.period && (
@@ -524,7 +530,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-sm text-zinc-500">
                 <li><a href="#features" className="transition hover:text-white">Features</a></li>
                 <li><a href="#pricing" className="transition hover:text-white">Pricing</a></li>
-                <li><a href="#solutions" className="transition hover:text-white">API</a></li>
+                <li><a href="#solutions" className="transition hover:text-white">AI</a></li>
               </ul>
             </div>
             <div>

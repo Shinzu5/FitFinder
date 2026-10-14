@@ -67,7 +67,8 @@ export function UserAiAssistantPanel() {
     createConversation,
     switchConversation,
     deleteConversation,
-    sendMessage
+    sendMessage,
+    sending,
   } = useUserAiStore();
 
   const [draft, setDraft] = useState("");
@@ -84,11 +85,11 @@ export function UserAiAssistantPanel() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, sending]);
 
   function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft.trim()) return;
+    if (!draft.trim() || sending) return;
     sendMessage(draft, firstName);
     setDraft("");
   }
@@ -206,6 +207,16 @@ export function UserAiAssistantPanel() {
               ),
             )
           )}
+          {sending && (
+            <div className="flex items-start gap-3" aria-label="AI is typing">
+              <AiAvatar size="sm" />
+              <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-md border border-[#FACC15]/25 bg-[#1a1810] px-4 py-4">
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[#FACC15]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[#FACC15] [animation-delay:150ms]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-[#FACC15] [animation-delay:300ms]" />
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -217,11 +228,17 @@ export function UserAiAssistantPanel() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Ask about workouts, nutrition, recovery..."
+            maxLength={1000}
             className="flex-1 rounded-xl border border-zinc-800/80 bg-[#131315] px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-[#FACC15]/40 focus:ring-1 focus:ring-[#FACC15]/40"
           />
+          {draft.length > 700 && (
+            <span className="shrink-0 text-[11px] tabular-nums text-zinc-600">
+              {draft.length}/1000
+            </span>
+          )}
           <button
             type="submit"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || sending}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#FACC15] text-black transition hover:bg-[#e6c200] disabled:opacity-40"
             aria-label="Send message"
           >

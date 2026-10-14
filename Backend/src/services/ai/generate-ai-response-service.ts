@@ -11,7 +11,8 @@ import {
 import type { ChatTurn, GeminiTurn } from "@/types/ai";
 import { AiChatHistory } from "@/services/ai/ai-history-state";
 
-const MAX_TURNS = 16;
+// Keep server memory short: long history + long questions = slow replies.
+const MAX_TURNS = 10;
 
 function getHistory(userId?: string): ChatTurn[] {
   if (!userId) return [];

@@ -24,6 +24,9 @@ export async function UpdateMembershipPlanService(input: {
     name: input.body.name,
     price: input.body.price,
     durationDays: input.body.durationDays,
+    ...(typeof input.body.description === "string"
+      ? { description: input.body.description.trim() }
+      : {}),
   });
 
   void emitMembershipPlansUpdated(input.gymId);

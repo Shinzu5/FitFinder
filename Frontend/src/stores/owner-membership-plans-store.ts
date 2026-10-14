@@ -8,6 +8,7 @@ export interface MembershipPlan {
   name: string;
   price: number;
   durationDays: number;
+  description: string;
   activeSubscribers: number;
 }
 
@@ -54,6 +55,7 @@ export const useOwnerMembershipPlansStore = create<OwnerMembershipPlansState>((s
               name: data.data.name,
               price: data.data.price,
               durationDays: data.data.durationDays,
+              description: typeof data.data.description === "string" ? data.data.description : "",
               activeSubscribers: 0,
             },
           ],
@@ -76,6 +78,7 @@ export const useOwnerMembershipPlansStore = create<OwnerMembershipPlansState>((s
                   name: data.data.name,
                   price: data.data.price,
                   durationDays: data.data.durationDays,
+                  description: typeof data.data.description === "string" ? data.data.description : plan.description,
                 }
               : plan,
           ),
