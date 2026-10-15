@@ -13,8 +13,6 @@ export function RegisterMemberPanel() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
   const [planId, setPlanId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -39,8 +37,8 @@ export function RegisterMemberPanel() {
     e.preventDefault();
     setError(null);
 
-    if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
-      setError("First name, last name, and phone number are required.");
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First name and last name are required.");
       return;
     }
 
@@ -53,8 +51,6 @@ export function RegisterMemberPanel() {
     const member = await registerMember({
       firstName,
       lastName,
-      phone,
-      email: email || undefined,
       planId,
     });
     setSubmitting(false);
@@ -67,8 +63,6 @@ export function RegisterMemberPanel() {
     setSuccess(true);
     setFirstName("");
     setLastName("");
-    setPhone("");
-    setEmail("");
     setPlanId(plans[0]?.id || "");
 
     window.setTimeout(() => {
@@ -123,29 +117,6 @@ export function RegisterMemberPanel() {
               id="lastName"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none focus:border-[#FACC15]/40"
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="phone" className="text-sm font-medium text-zinc-300">
-              Phone Number
-            </label>
-            <input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none focus:border-[#FACC15]/40"
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-zinc-300">
-              Email (Optional)
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-zinc-800 bg-[#131315] px-4 py-3 text-sm text-white outline-none focus:border-[#FACC15]/40"
             />
           </div>

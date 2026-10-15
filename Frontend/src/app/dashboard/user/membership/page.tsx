@@ -41,6 +41,8 @@ export default function MembershipPage() {
   const fetchUserStatus = useWalkInApprovalsStore((state) => state.fetchUserStatus);
   const completeOnboarding = useWalkInApprovalsStore((state) => state.completeOnboarding);
   const [completing, setCompleting] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     void fetchMembership();
@@ -249,10 +251,17 @@ export default function MembershipPage() {
   const approvedOtherJoin =
     openJoinRequest?.status === "approved" ? openJoinRequest : null;
 
-  function handleCancel() {
-    void leaveGym().then(() => {
-      router.push("/dashboard/user");
-    });
+  function handleConfirmCancel() {
+    if (cancelling) return;
+    setCancelling(true);
+    void leaveGym()
+      .then(() => {
+        setShowCancelModal(false);
+        router.push("/dashboard/user");
+      })
+      .finally(() => {
+        setCancelling(false);
+      });
   }
 
   return (
@@ -527,12 +536,53 @@ export default function MembershipPage() {
 
         <button
           type="button"
-          onClick={handleCancel}
+          onClick={() => setShowCancelModal(true)}
           className="mt-5 rounded-xl border border-red-500/50 px-5 py-3 text-sm font-bold text-red-400 transition hover:bg-red-500/10"
         >
           Cancel My Membership
         </button>
       </section>
+
+      {showCancelModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={() => {
+              if (!cancelling) setShowCancelModal(false);
+            }}
+            aria-label="Close"
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-red-500/30 bg-[#141414] p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15 text-red-400">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Cancel this membership?</h2>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+              Cancelling a membership is non-refundable and permanent. You&apos;ll be
+              returned to the Home page and must join a gym again to access features.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={() => setShowCancelModal(false)}
+                className="rounded-lg border border-[#FFD700]/50 px-5 py-2.5 text-sm font-medium text-[#FFD700] transition hover:bg-[#FFD700]/10 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={handleConfirmCancel}
+                className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-60"
+              >
+                {cancelling ? "Cancelling…" : "OK, Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

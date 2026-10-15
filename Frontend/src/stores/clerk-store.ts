@@ -114,7 +114,7 @@ interface RecordPaymentInput {
 interface RegisterMemberInput {
   firstName: string;
   lastName: string;
-  phone: string;
+  phone?: string;
   email?: string;
   planId: string;
 }
@@ -380,7 +380,7 @@ export const useClerkStore = create<ClerkState>((set, get) => ({
       const { data } = await api.post("/clerk/members", {
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
-        phone: input.phone.trim(),
+        phone: input.phone?.trim() || undefined,
         email: input.email?.trim() || undefined,
         planId: input.planId,
       });
