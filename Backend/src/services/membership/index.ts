@@ -15,6 +15,7 @@ export { ActivateFromApprovalService } from "@/services/membership/activate-from
 export { NotifyMembershipRequestSubmittedService } from "@/services/membership/notify-membership-request-submitted-service";
 export { NotifyMembershipApprovedService } from "@/services/membership/notify-membership-approved-service";
 export { NotifyMembershipRejectedService } from "@/services/membership/notify-membership-rejected-service";
+export { NotifyMembershipRemovedService } from "@/services/membership/notify-membership-removed-service";
 export { NotifyMembershipExpiredService } from "@/services/membership/notify-membership-expired-service";
 export { JoinGymService } from "@/services/membership/join-gym-service";
 export { GetMembershipService } from "@/services/membership/get-membership-service";
